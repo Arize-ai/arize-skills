@@ -1,0 +1,87 @@
+# Arize Skills
+
+Agent skills for [Arize](https://arize.com) — datasets, experiments, and traces via the `ax` CLI.
+
+Works with Cursor, Claude Code, Codex, Windsurf, and [40+ other agents](https://github.com/nicepkg/agent-skills).
+
+## Quick Start
+
+### Option 1: npx (recommended)
+
+```bash
+npx skills add Arize-ai/arize-skills --skill '*' --yes
+```
+
+This auto-detects your agent (Cursor, Claude Code, Codex, etc.) and symlinks skills into place.
+
+### Option 2: git clone
+
+```bash
+git clone https://github.com/Arize-ai/arize-skills.git
+cd arize-skills
+./install.sh
+```
+
+The installer creates symlinks, detects installed agents, and optionally installs the `ax` CLI.
+
+## Prerequisites
+
+### Arize CLI (`ax`)
+
+The skills use the `ax` CLI to interact with the Arize API. Install it if you don't have it:
+
+```bash
+# Preferred (isolated environment)
+uv tool install arize-ax-cli
+# or
+pipx install arize-ax-cli
+# Fallback
+pip install arize-ax-cli
+```
+
+### API Key
+
+Set up authentication with a profile:
+
+```bash
+ax profiles create
+```
+
+Or set the `ARIZE_API_KEY` environment variable directly.
+
+## Available Skills
+
+| Skill | Description |
+|-------|-------------|
+| [arize-trace](skills/arize-trace/SKILL.md) | Download, browse, and filter traces and spans. Debug LLM application issues. |
+| [arize-dataset](skills/arize-dataset/SKILL.md) | Create, manage, and download datasets and examples. |
+| [arize-experiment](skills/arize-experiment/SKILL.md) | Run and analyze experiments against datasets. |
+
+## install.sh Flags
+
+| Flag | Description |
+|------|-------------|
+| `--global` | Install to `~/.<agent>/skills/` instead of project-level |
+| `--project <dir>` | Target a specific project directory |
+| `--copy` | Copy files instead of symlinking |
+| `--force` | Overwrite existing skills |
+| `--skip-cli` | Don't install `ax` CLI even if missing |
+| `--agent <name>` | Manually specify agent (cursor, claude, codex) — repeatable |
+| `--yes` | Skip confirmation prompts |
+| `--uninstall` | Remove previously installed skill symlinks |
+
+## Updating
+
+- **npx path:** `npx skills update`
+- **git clone path:** `cd arize-skills && git pull` (symlinks update automatically)
+
+## Links
+
+- [Arize Documentation](https://docs.arize.com)
+- [Arize REST API Reference](https://docs.arize.com/arize/api-reference/rest-api)
+- [ax CLI (arize-ax-cli)](https://github.com/Arize-ai/arize-ax-cli)
+- [OpenInference Semantic Conventions](https://github.com/Arize-ai/openinference)
+
+## License
+
+Apache 2.0
