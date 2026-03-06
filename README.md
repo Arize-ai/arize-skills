@@ -56,6 +56,7 @@ Or set the `ARIZE_API_KEY` environment variable directly.
 | [arize-trace](skills/arize-trace/SKILL.md) | Download, browse, and filter traces and spans. Debug LLM application issues. |
 | [arize-dataset](skills/arize-dataset/SKILL.md) | Create, manage, and download datasets and examples. |
 | [arize-experiment](skills/arize-experiment/SKILL.md) | Run and analyze experiments against datasets. |
+| [arize-prompt-optimization](skills/arize-prompt-optimization/SKILL.md) | Optimize prompts using trace data, experiments, and meta-prompting. |
 
 ## install.sh Flags
 

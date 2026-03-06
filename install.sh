@@ -185,10 +185,10 @@ fi
 install_ax_cli() {
   if command -v uv &>/dev/null; then
     echo "Installing ax CLI via uv..."
-    uv tool install arize-ax-cli
+    uv tool install --force arize-ax-cli
   elif command -v pipx &>/dev/null; then
     echo "Installing ax CLI via pipx..."
-    pipx install arize-ax-cli
+    pipx install --force arize-ax-cli
   elif command -v pip &>/dev/null; then
     echo "Installing ax CLI via pip..."
     pip install arize-ax-cli 2>/dev/null || pip install --user arize-ax-cli
