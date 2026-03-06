@@ -31,21 +31,41 @@ uv tool install arize-ax-cli   # preferred
 pipx install arize-ax-cli      # alternative
 ```
 
-### Configure profile
+### API key (required)
 
-If no profile exists (check: `ax profiles list`) **and** `ARIZE_API_KEY` is set, create one non-interactively (`ax profiles create` is interactive and cannot be driven by an agent):
+Resolve in this order, stop at first success:
+
+1. `ax profiles show --expand 2>&1` -- if it prints auth details, you're good.
+2. `ARIZE_API_KEY` env var is set.
+3. If missing, **AskQuestion**: "I need your Arize API key. Find it at https://app.arize.com/admin > API Keys."
+
+Once resolved, write to config so it persists:
 
 ```bash
-mkdir -p ~/.arize && cat > ~/.arize/config.toml << 'EOF'
+mkdir -p ~/.arize && cat > ~/.arize/config.toml << EOF
 [profile]
 name = "default"
 
 [auth]
-api_key = "${ARIZE_API_KEY}"
+api_key = "$ARIZE_API_KEY"
 EOF
 ```
 
-If `ARIZE_API_KEY` is not set, ask the user for it.
+### Space ID and Project
+
+Both are needed for most commands. Resolve each:
+
+1. User provides it in the conversation -- use directly via `--space-id` / `--project` flags.
+2. Env var is set (`ARIZE_SPACE_ID`, `ARIZE_DEFAULT_PROJECT`) -- use silently.
+3. If missing, **AskQuestion** once. Tell the user:
+   - Space ID is in the Arize URL: `/spaces/{SPACE_ID}/...`
+   - Project is the project name as shown in the Arize UI.
+   - For convenience, recommend setting env vars so they don't get asked again:
+     `export ARIZE_SPACE_ID="U3BhY2U6..."` and `export ARIZE_DEFAULT_PROJECT="my-project"`
+
+Prefer asking the user over searching or iterating through projects and API keys.
+If you get a `401 Unauthorized`, tell the user their API key may not have access to
+that space and ask them to verify.
 
 ## List Datasets: `ax datasets list`
 
@@ -307,7 +327,8 @@ Examples are free-form JSON objects. There is no fixed schema -- columns are wha
 | Problem | Solution |
 |---------|----------|
 | `ax: command not found` | Check `~/.local/bin/ax`; if missing: `uv tool install arize-ax-cli` (needs `required_permissions: ["all"]`) |
-| `No profile found` | Create `~/.arize/config.toml` with `api_key = "${ARIZE_API_KEY}"` (see Prerequisites) |
+| `401 Unauthorized` | API key may not have access to this space. Verify the key and space ID are correct. Keys are scoped per space -- get the right one from https://app.arize.com/admin > API Keys. |
+| `No profile found` | Run `ax profiles show --expand` to check; set `ARIZE_API_KEY` env var or write `~/.arize/config.toml` |
 | `Dataset not found` | Verify dataset ID with `ax datasets list` |
 | `File format error` | Supported: CSV, JSON, JSONL, Parquet |
 | `platform-managed column` | Remove `id`, `created_at`, `updated_at` from create/append payloads |

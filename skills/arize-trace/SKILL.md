@@ -1,6 +1,6 @@
 ---
 name: arize-trace
-description: "INVOKE THIS SKILL when downloading, browsing, or filtering Arize traces and spans. Covers downloading traces by ID, sessions by ID, browsing spans with filters, and debugging LLM application issues using the ax CLI."
+description: "INVOKE THIS SKILL when downloading or exporting Arize traces and spans. Covers exporting traces by ID, sessions by ID, and debugging LLM application issues using the ax CLI."
 ---
 
 # Arize Trace Skill
@@ -11,8 +11,7 @@ description: "INVOKE THIS SKILL when downloading, browsing, or filtering Arize t
 - **Span** = a single operation (LLM call, tool call, retriever, chain, agent)
 - **Session** = a group of traces sharing `attributes.session.id` (e.g., a multi-turn conversation)
 
-`ax traces list` returns root spans only (auto-injects `parent_id = null`).
-`ax spans list` returns all spans.
+Use `ax spans export` to download trace data. This is the only supported command for retrieving spans.
 
 ## Prerequisites
 
@@ -31,54 +30,62 @@ uv tool install arize-ax-cli   # preferred
 pipx install arize-ax-cli      # alternative
 ```
 
-### Configure profile
+### API key (required)
 
-If no profile exists (check: `ax profiles list`) **and** `ARIZE_API_KEY` is set, create one non-interactively (`ax profiles create` is interactive and cannot be driven by an agent):
+Resolve in this order, stop at first success:
+
+1. `ax profiles show --expand 2>&1` -- if it prints auth details, you're good.
+2. `ARIZE_API_KEY` env var is set.
+3. If missing, **AskQuestion**: "I need your Arize API key. Find it at https://app.arize.com/admin > API Keys."
+
+Once resolved, write to config so it persists:
 
 ```bash
-mkdir -p ~/.arize && cat > ~/.arize/config.toml << 'EOF'
+mkdir -p ~/.arize && cat > ~/.arize/config.toml << EOF
 [profile]
 name = "default"
 
 [auth]
-api_key = "${ARIZE_API_KEY}"
+api_key = "$ARIZE_API_KEY"
 EOF
 ```
 
-If `ARIZE_API_KEY` is not set, ask the user for it.
+### Space ID and Project
 
-### Default Project
+Both are needed for every command. Resolve each:
 
-Before running any command, check for a default project:
+1. User provides it in the conversation -- use directly via `--space-id` / `--project` flags.
+2. Env var is set (`ARIZE_SPACE_ID`, `ARIZE_DEFAULT_PROJECT`) -- use silently.
+3. If missing, **AskQuestion** once. Tell the user:
+   - Space ID is in the Arize URL: `/spaces/{SPACE_ID}/...`
+   - Project is the project name as shown in the Arize UI.
+   - For convenience, recommend setting env vars so they don't get asked again:
+     `export ARIZE_SPACE_ID="U3BhY2U6..."` and `export ARIZE_DEFAULT_PROJECT="my-project"`
 
-```bash
-echo $ARIZE_DEFAULT_PROJECT
-```
-
-If `ARIZE_DEFAULT_PROJECT` is set, use its value as the project for **all** commands in this session. Do NOT ask the user for a project ID -- just use it. Continue using this default until the user explicitly provides a different project.
-
-If `ARIZE_DEFAULT_PROJECT` is not set and no project is provided, ask the user for one.
+Prefer asking the user over searching or iterating through projects and API keys.
+Use the values the user gives you. If you get a `401 Unauthorized`, tell the user
+their API key may not have access to that space and ask them to verify.
 
 ## Export Spans: `ax spans export`
 
-The primary command for downloading trace data to a file.
+The command for downloading trace data to a file.
 
 ### By trace ID
 
 ```bash
-ax spans export --trace-id TRACE_ID --project PROJECT_ID
+ax spans export --trace-id TRACE_ID --project PROJECT --space-id SPACE_ID
 ```
 
 ### By span ID
 
 ```bash
-ax spans export --span-id SPAN_ID --project PROJECT_ID
+ax spans export --span-id SPAN_ID --project PROJECT --space-id SPACE_ID
 ```
 
 ### By session ID
 
 ```bash
-ax spans export --session-id SESSION_ID --project PROJECT_ID
+ax spans export --session-id SESSION_ID --project PROJECT --space-id SPACE_ID
 ```
 
 ### Flags
@@ -88,7 +95,8 @@ ax spans export --session-id SESSION_ID --project PROJECT_ID
 | `--trace-id` | string | mutex | Filter: `context.trace_id = 'X'` |
 | `--span-id` | string | mutex | Filter: `context.span_id = 'X'` |
 | `--session-id` | string | mutex | Filter: `attributes.session.id = 'X'` |
-| `--project` | string | yes (or `$ARIZE_DEFAULT_PROJECT`) | Project ID |
+| `--project` | string | yes (or `$ARIZE_DEFAULT_PROJECT`) | Project name or ID |
+| `--space-id` | string | yes (when using project name) | Space ID |
 | `--days` | int | no | Lookback window (default: 30) |
 | `--start-time` | string | no | Override start (ISO 8601) |
 | `--end-time` | string | no | Override end (ISO 8601) |
@@ -99,125 +107,24 @@ Exactly one of `--trace-id`, `--span-id`, `--session-id` is required.
 
 Output is a JSON array of span objects. File naming: `{type}_{id}_{timestamp}/spans.json`.
 
-**NOTE:** If `ax spans export` is not available (older `arize-ax-cli` version), fall back to `ax spans list` with `--filter`:
-
-```bash
-ax spans list PROJECT_ID --filter "context.trace_id = 'TRACE_ID'" --limit 50 -o json
-```
-
-## Browse: `ax traces list`
-
-Browse root spans (one row per trace). Output goes to stdout.
-
-```bash
-ax traces list PROJECT_ID --limit 15
-ax traces list PROJECT_ID --filter "status_code = 'ERROR'" --limit 10
-ax traces list PROJECT_ID --start-time 2026-03-01T00:00:00Z --limit 20
-```
-
-## Browse: `ax spans list`
-
-Browse all spans with filters. Output goes to stdout.
-
-```bash
-ax spans list PROJECT_ID --limit 15
-ax spans list PROJECT_ID --filter "name = 'ChatCompletion' AND latency_ms > 5000"
-ax spans list PROJECT_ID --filter "status_code = 'ERROR'" -o json
-```
-
-### Shared flags for both browse commands
-
-| Flag | Type | Default | Description |
-|------|------|---------|-------------|
-| `PROJECT_ID` | string | required (or `$ARIZE_DEFAULT_PROJECT`) | Positional argument |
-| `--start-time` | string | 1 week ago | ISO 8601 |
-| `--end-time` | string | now | ISO 8601 |
-| `--filter` | string | none | SQL-like filter expression |
-| `--limit` | int | 15 | Max results |
-| `--cursor` | string | none | Pagination cursor |
-| `-o, --output` | string | table | Output format: table, json, csv, parquet, or file path |
-
-## Filter Syntax Reference
-
-SQL-like expressions passed to `--filter`.
-
-### Common filterable columns
-
-| Column | Type | Description | Example Values |
-|--------|------|-------------|----------------|
-| `name` | string | Span name | `'ChatCompletion'`, `'retrieve_docs'` |
-| `status_code` | string | Status | `'OK'`, `'ERROR'`, `'UNSET'` |
-| `latency_ms` | number | Duration in ms | `100`, `5000` |
-| `parent_id` | string | Parent span ID | null for root spans |
-| `context.trace_id` | string | Trace ID | |
-| `context.span_id` | string | Span ID | |
-| `attributes.session.id` | string | Session ID | |
-| `attributes.openinference.span.kind` | string | Span kind | `'LLM'`, `'CHAIN'`, `'TOOL'`, `'AGENT'`, `'RETRIEVER'`, `'RERANKER'`, `'EMBEDDING'`, `'GUARDRAIL'`, `'EVALUATOR'` |
-| `attributes.llm.model_name` | string | LLM model | `'gpt-4o'`, `'claude-3'` |
-| `attributes.input.value` | string | Span input | |
-| `attributes.output.value` | string | Span output | |
-| `attributes.error.type` | string | Error type | `'ValueError'`, `'TimeoutError'` |
-| `attributes.error.message` | string | Error message | |
-| `event.attributes` | string | Error tracebacks | Use CONTAINS (not exact match) |
-
-### Operators
-
-`=`, `!=`, `<`, `<=`, `>`, `>=`, `AND`, `OR`, `IN`, `CONTAINS`, `LIKE`, `IS NULL`, `IS NOT NULL`
-
-### Examples
-
-```
-status_code = 'ERROR'
-latency_ms > 5000
-name = 'ChatCompletion' AND status_code = 'ERROR'
-attributes.llm.model_name = 'gpt-4o'
-attributes.openinference.span.kind IN ('LLM', 'AGENT')
-attributes.error.type LIKE '%Transport%'
-event.attributes CONTAINS 'TimeoutError'
-```
-
-### Tips
-
-- Prefer `IN` over multiple `OR` conditions: `name IN ('a', 'b', 'c')` not `name = 'a' OR name = 'b' OR name = 'c'`
-- Start broad with `LIKE`, then switch to `=` or `IN` once you know exact values
-- Use `CONTAINS` for `event.attributes` (error tracebacks) -- exact match is unreliable on complex text
-- **IS NOT NULL gotcha**: Filters match at the trace level. A trace with one error span returns ALL spans from that trace. Add `AND attributes.error.type IS NOT NULL` if you only want spans that actually have the column.
-- Always wrap string values in single quotes
-
 ## Workflows
 
 ### Debug a failing trace
 
-1. `ax traces list PROJECT --filter "status_code = 'ERROR'" --limit 5`
-2. Pick a trace_id from the results
-3. `ax spans export --trace-id TRACE_ID --project PROJECT`
-4. Read the output file, look for spans with `status_code: ERROR`
-5. Check `attributes.error.type` and `attributes.error.message` on error spans
+1. `ax spans export --trace-id TRACE_ID --project PROJECT --space-id SPACE_ID`
+2. Read the output file, look for spans with `status_code: ERROR`
+3. Check `attributes.error.type` and `attributes.error.message` on error spans
 
 ### Download a conversation session
 
-1. `ax spans export --session-id SESSION_ID --project PROJECT`
+1. `ax spans export --session-id SESSION_ID --project PROJECT --space-id SPACE_ID`
 2. Spans are ordered by `start_time`, grouped by `context.trace_id`
 3. If you only have a trace_id, export that trace first, then look for `attributes.session.id` in the output to get the session ID
-
-### Investigate slow LLM calls
-
-1. `ax spans list PROJECT --filter "attributes.openinference.span.kind = 'LLM' AND latency_ms > 10000" --limit 20`
-2. Examine `attributes.llm.model_name`, token counts, input sizes
-3. For a specific slow trace: `ax spans export --trace-id TRACE_ID --project PROJECT`
-
-### Iterative filter building
-
-1. Start broad: `ax spans list PROJECT --filter "attributes.error.type LIKE '%Transport%'" --limit 10`
-2. Examine results to discover exact values
-3. Narrow down: `ax spans list PROJECT --filter "attributes.error.type IN ('TransportServerError', 'TransportQueryError')" --limit 20`
-4. Export: `ax spans export --trace-id TRACE_ID --project PROJECT` for a specific result
 
 ### Export for offline analysis
 
 ```bash
-ax spans export --trace-id TRACE_ID --project PROJECT --stdout | jq '.[]'
-ax spans list PROJECT --filter "..." -o json > spans.json
+ax spans export --trace-id TRACE_ID --project PROJECT --space-id SPACE_ID --stdout | jq '.[]'
 ```
 
 ## Span Column Reference (OpenInference Semantic Conventions)
@@ -350,8 +257,8 @@ ax spans list PROJECT --filter "..." -o json > spans.json
 | Problem | Solution |
 |---------|----------|
 | `ax: command not found` | Check `~/.local/bin/ax`; if missing: `uv tool install arize-ax-cli` (needs `required_permissions: ["all"]`) |
-| `No profile found` | Create `~/.arize/config.toml` with `api_key = "${ARIZE_API_KEY}"` (see Prerequisites) |
-| `No spans found` | Expand `--days` (default 30), verify project ID |
+| `401 Unauthorized` | API key may not have access to this space. Verify the key and space ID are correct. Keys are scoped per space -- get the right one from https://app.arize.com/admin > API Keys. |
+| `No profile found` | Run `ax profiles show --expand` to check; set `ARIZE_API_KEY` env var or write `~/.arize/config.toml` |
+| `No spans found` | Expand `--days` (default 30), verify project name and space ID |
 | `Filter error` | Check column name spelling, wrap string values in single quotes |
 | `Timeout on large export` | Use `--days 7` to narrow the time range |
-| `ax spans export` not found | Requires `arize-ax-cli` from branch `jlopatecki/ax-cli-export`. Fall back to `ax spans list --filter` |
