@@ -11,8 +11,10 @@ FORCE=false
 SKIP_CLI=false
 YES=false
 UNINSTALL=false
+LIST=false
 PROJECT_DIR=""
 MANUAL_AGENTS=()
+SELECTED_SKILLS=()
 
 usage() {
   cat <<'USAGE'
@@ -20,8 +22,9 @@ Arize Skills Installer
 
 Usage: ./install.sh --project <dir> [flags]
        ./install.sh --global [flags]
+       ./install.sh --list
 
-One of --project or --global is required.
+One of --project or --global is required (except with --list).
 
 Flags:
   --project <dir>   Install into a specific project directory (required unless --global)
@@ -30,16 +33,22 @@ Flags:
   --force           Overwrite existing skills with same names
   --skip-cli        Don't install ax CLI even if missing
   --agent <name>    Manually specify agent (cursor, claude, codex) — repeatable
+  --skill <name>    Only install/uninstall specific skills — repeatable
   --yes             Skip confirmation prompts
   --uninstall       Remove previously installed skill symlinks
+  --list            List all available skills and exit
   --help            Show this help
 
 Examples:
-  ./install.sh --project ~/my-app                  # Install into a project
-  ./install.sh --project . --agent cursor --yes     # Current dir, Cursor only
-  ./install.sh --global                             # Install globally
-  ./install.sh --project ~/my-app --copy            # Copy instead of symlink
-  ./install.sh --project ~/my-app --uninstall       # Remove installed symlinks
+  ./install.sh --list                                          # Show available skills
+  ./install.sh --project ~/my-app                              # Install all skills
+  ./install.sh --project ~/my-app --skill arize-trace          # Install one skill
+  ./install.sh --project . --skill arize-trace --skill arize-dataset  # Install two skills
+  ./install.sh --project . --agent cursor --yes                # Current dir, Cursor only
+  ./install.sh --global                                        # Install globally
+  ./install.sh --project ~/my-app --copy                       # Copy instead of symlink
+  ./install.sh --project ~/my-app --uninstall                  # Remove all installed symlinks
+  ./install.sh --project ~/my-app --uninstall --skill arize-trace  # Remove one skill
 USAGE
   exit 0
 }
@@ -52,12 +61,42 @@ while [[ $# -gt 0 ]]; do
     --force)      FORCE=true; shift ;;
     --skip-cli)   SKIP_CLI=true; shift ;;
     --agent)      MANUAL_AGENTS+=("$2"); shift 2 ;;
+    --skill)      SELECTED_SKILLS+=("$2"); shift 2 ;;
     --yes)        YES=true; shift ;;
     --uninstall)  UNINSTALL=true; shift ;;
+    --list)       LIST=true; shift ;;
     --help|-h)    usage ;;
     *)            echo "Unknown flag: $1"; usage ;;
   esac
 done
+
+# --- List mode ---
+
+if [[ "$LIST" == true ]]; then
+  echo "Available skills:"
+  for skill in "$SKILLS_SRC"/*/; do
+    [[ -d "$skill" ]] || continue
+    echo "  $(basename "$skill")"
+  done
+  exit 0
+fi
+
+# --- Validate --skill names ---
+
+if [[ ${#SELECTED_SKILLS[@]} -gt 0 ]]; then
+  for name in "${SELECTED_SKILLS[@]}"; do
+    if [[ ! -d "$SKILLS_SRC/$name" ]]; then
+      echo "Error: unknown skill '$name'"
+      echo ""
+      echo "Available skills:"
+      for skill in "$SKILLS_SRC"/*/; do
+        [[ -d "$skill" ]] || continue
+        echo "  $(basename "$skill")"
+      done
+      exit 1
+    fi
+  done
+fi
 
 # --- Agent detection ---
 
@@ -157,11 +196,25 @@ uninstall_skill() {
   fi
 }
 
+# Build list of skills to process
+SKILL_DIRS=()
+if [[ ${#SELECTED_SKILLS[@]} -gt 0 ]]; then
+  for name in "${SELECTED_SKILLS[@]}"; do
+    SKILL_DIRS+=("$SKILLS_SRC/$name")
+  done
+else
+  for skill in "$SKILLS_SRC"/*/; do
+    [[ -d "$skill" ]] || continue
+    SKILL_DIRS+=("$skill")
+  done
+fi
+
 for agent in "${AGENTS[@]}"; do
   skills_dir="$(agent_skills_dir "$agent" "$BASE")"
   mkdir -p "$skills_dir"
+  echo "Agent: $agent ($skills_dir)"
 
-  for skill in "$SKILLS_SRC"/*/; do
+  for skill in "${SKILL_DIRS[@]}"; do
     [[ -d "$skill" ]] || continue
     target="$skills_dir/$(basename "$skill")"
 
