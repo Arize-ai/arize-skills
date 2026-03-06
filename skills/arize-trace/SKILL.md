@@ -16,23 +16,48 @@ description: "INVOKE THIS SKILL when downloading, browsing, or filtering Arize t
 
 ## Prerequisites
 
-If `ax` is not installed (check: `command -v ax`), install it:
+### Install ax
+
+Check for `ax` on PATH, then fall back to the common `uv tool` install location:
 
 ```bash
-# Preferred (isolated environment)
-uv tool install arize-ax-cli
-# or
-pipx install arize-ax-cli
-# Fallback
-pip install arize-ax-cli
+command -v ax || test -x ~/.local/bin/ax && export PATH="$HOME/.local/bin:$PATH"
 ```
 
-If no profile exists (check: `ax profiles list`):
+If neither exists, install it (**requires `required_permissions: ["all"]`** in Cursor sandbox):
 
 ```bash
-ax profiles create
-# Or set ARIZE_API_KEY environment variable
+uv tool install arize-ax-cli   # preferred
+pipx install arize-ax-cli      # alternative
 ```
+
+### Configure profile
+
+If no profile exists (check: `ax profiles list`) **and** `ARIZE_API_KEY` is set, create one non-interactively (`ax profiles create` is interactive and cannot be driven by an agent):
+
+```bash
+mkdir -p ~/.arize && cat > ~/.arize/config.toml << 'EOF'
+[profile]
+name = "default"
+
+[auth]
+api_key = "${ARIZE_API_KEY}"
+EOF
+```
+
+If `ARIZE_API_KEY` is not set, ask the user for it.
+
+### Default Project
+
+Before running any command, check for a default project:
+
+```bash
+echo $ARIZE_DEFAULT_PROJECT
+```
+
+If `ARIZE_DEFAULT_PROJECT` is set, use its value as the project for **all** commands in this session. Do NOT ask the user for a project ID -- just use it. Continue using this default until the user explicitly provides a different project.
+
+If `ARIZE_DEFAULT_PROJECT` is not set and no project is provided, ask the user for one.
 
 ## Export Spans: `ax spans export`
 
@@ -41,22 +66,19 @@ The primary command for downloading trace data to a file.
 ### By trace ID
 
 ```bash
-ax spans export --trace-id abc123 --project PROJECT_ID
-# -> trace_abc123_20260305_141500/spans.json
+ax spans export --trace-id TRACE_ID --project PROJECT_ID
 ```
 
 ### By span ID
 
 ```bash
-ax spans export --span-id xyz789 --project PROJECT_ID
-# -> span_xyz789_20260305_141500/spans.json
+ax spans export --span-id SPAN_ID --project PROJECT_ID
 ```
 
 ### By session ID
 
 ```bash
-ax spans export --session-id sess_001 --project PROJECT_ID
-# -> session_sess001_20260305_141500/spans.json
+ax spans export --session-id SESSION_ID --project PROJECT_ID
 ```
 
 ### Flags
@@ -66,7 +88,7 @@ ax spans export --session-id sess_001 --project PROJECT_ID
 | `--trace-id` | string | mutex | Filter: `context.trace_id = 'X'` |
 | `--span-id` | string | mutex | Filter: `context.span_id = 'X'` |
 | `--session-id` | string | mutex | Filter: `attributes.session.id = 'X'` |
-| `--project` | string | yes | Project ID |
+| `--project` | string | yes (or `$ARIZE_DEFAULT_PROJECT`) | Project ID |
 | `--days` | int | no | Lookback window (default: 30) |
 | `--start-time` | string | no | Override start (ISO 8601) |
 | `--end-time` | string | no | Override end (ISO 8601) |
@@ -75,14 +97,12 @@ ax spans export --session-id sess_001 --project PROJECT_ID
 
 Exactly one of `--trace-id`, `--span-id`, `--session-id` is required.
 
-Output is a JSON array of span objects. File naming uses the convention `{type}_{id}_{timestamp}/spans.json`.
+Output is a JSON array of span objects. File naming: `{type}_{id}_{timestamp}/spans.json`.
 
-## Inspect: `ax spans get`
-
-Quick metadata lookup for a project's spans -- prints summary to stdout.
+**NOTE:** If `ax spans export` is not available (older `arize-ax-cli` version), fall back to `ax spans list` with `--filter`:
 
 ```bash
-ax spans get PROJECT_ID
+ax spans list PROJECT_ID --filter "context.trace_id = 'TRACE_ID'" --limit 50 -o json
 ```
 
 ## Browse: `ax traces list`
@@ -109,7 +129,7 @@ ax spans list PROJECT_ID --filter "status_code = 'ERROR'" -o json
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
-| `PROJECT_ID` | string | required | Positional argument |
+| `PROJECT_ID` | string | required (or `$ARIZE_DEFAULT_PROJECT`) | Positional argument |
 | `--start-time` | string | 1 week ago | ISO 8601 |
 | `--end-time` | string | now | ISO 8601 |
 | `--filter` | string | none | SQL-like filter expression |
@@ -329,8 +349,9 @@ ax spans list PROJECT --filter "..." -o json > spans.json
 
 | Problem | Solution |
 |---------|----------|
-| `ax: command not found` | Install: `pipx install arize-ax-cli` |
-| `No profile found` | Run `ax profiles create` or set `ARIZE_API_KEY` |
+| `ax: command not found` | Check `~/.local/bin/ax`; if missing: `uv tool install arize-ax-cli` (needs `required_permissions: ["all"]`) |
+| `No profile found` | Create `~/.arize/config.toml` with `api_key = "${ARIZE_API_KEY}"` (see Prerequisites) |
 | `No spans found` | Expand `--days` (default 30), verify project ID |
 | `Filter error` | Check column name spelling, wrap string values in single quotes |
 | `Timeout on large export` | Use `--days 7` to narrow the time range |
+| `ax spans export` not found | Requires `arize-ax-cli` from branch `jlopatecki/ax-cli-export`. Fall back to `ax spans list --filter` |

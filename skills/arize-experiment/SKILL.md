@@ -16,23 +16,36 @@ The typical flow: export a dataset → process each example → collect outputs 
 
 ## Prerequisites
 
-If `ax` is not installed (check: `command -v ax`), install it:
+### Install ax
+
+Check for `ax` on PATH, then fall back to the common `uv tool` install location:
 
 ```bash
-# Preferred (isolated environment)
-uv tool install arize-ax-cli
-# or
-pipx install arize-ax-cli
-# Fallback
-pip install arize-ax-cli
+command -v ax || test -x ~/.local/bin/ax && export PATH="$HOME/.local/bin:$PATH"
 ```
 
-If no profile exists (check: `ax profiles list`):
+If neither exists, install it (**requires `required_permissions: ["all"]`** in Cursor sandbox):
 
 ```bash
-ax profiles create
-# Or set ARIZE_API_KEY environment variable
+uv tool install arize-ax-cli   # preferred
+pipx install arize-ax-cli      # alternative
 ```
+
+### Configure profile
+
+If no profile exists (check: `ax profiles list`) **and** `ARIZE_API_KEY` is set, create one non-interactively (`ax profiles create` is interactive and cannot be driven by an agent):
+
+```bash
+mkdir -p ~/.arize && cat > ~/.arize/config.toml << 'EOF'
+[profile]
+name = "default"
+
+[auth]
+api_key = "${ARIZE_API_KEY}"
+EOF
+```
+
+If `ARIZE_API_KEY` is not set, ask the user for it.
 
 ## List Experiments: `ax experiments list`
 
@@ -272,8 +285,8 @@ ax experiments export EXPERIMENT_ID --stdout | jq -r '.[] | [.example_id, .outpu
 
 | Problem | Solution |
 |---------|----------|
-| `ax: command not found` | Install: `pipx install arize-ax-cli` |
-| `No profile found` | Run `ax profiles create` or set `ARIZE_API_KEY` |
+| `ax: command not found` | Check `~/.local/bin/ax`; if missing: `uv tool install arize-ax-cli` (needs `required_permissions: ["all"]`) |
+| `No profile found` | Create `~/.arize/config.toml` with `api_key = "${ARIZE_API_KEY}"` (see Prerequisites) |
 | `Experiment not found` | Verify experiment ID with `ax experiments list` |
 | `Invalid runs file` | Each run must have `example_id` and `output` fields |
 | `example_id mismatch` | Ensure `example_id` values match IDs from the dataset (export dataset to verify) |

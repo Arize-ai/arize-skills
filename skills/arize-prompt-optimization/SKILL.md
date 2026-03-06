@@ -46,19 +46,48 @@ These columns carry the feedback data used for optimization:
 
 ## Prerequisites
 
-If `ax` is not installed (check: `command -v ax`), install it:
+### Install ax
+
+Check for `ax` on PATH, then fall back to the common `uv tool` install location:
+
+```bash
+command -v ax || test -x ~/.local/bin/ax && export PATH="$HOME/.local/bin:$PATH"
+```
+
+If neither exists, install it (**requires `required_permissions: ["all"]`** in Cursor sandbox):
 
 ```bash
 uv tool install arize-ax-cli   # preferred
 pipx install arize-ax-cli      # alternative
-pip install arize-ax-cli        # fallback
 ```
 
-If no profile exists (check: `ax profiles list`):
+### Configure profile
+
+If no profile exists (check: `ax profiles list`) **and** `ARIZE_API_KEY` is set, create one non-interactively (`ax profiles create` is interactive and cannot be driven by an agent):
 
 ```bash
-ax profiles create
+mkdir -p ~/.arize && cat > ~/.arize/config.toml << 'EOF'
+[profile]
+name = "default"
+
+[auth]
+api_key = "${ARIZE_API_KEY}"
+EOF
 ```
+
+If `ARIZE_API_KEY` is not set, ask the user for it.
+
+### Default Project
+
+Before running any command, check for a default project:
+
+```bash
+echo $ARIZE_DEFAULT_PROJECT
+```
+
+If `ARIZE_DEFAULT_PROJECT` is set, use its value as the project for **all** commands in this session. Do NOT ask the user for a project ID -- just use it. Continue using this default until the user explicitly provides a different project.
+
+If `ARIZE_DEFAULT_PROJECT` is not set and no project is provided, ask the user for one.
 
 ## Phase 1: Extract the Current Prompt
 
@@ -444,8 +473,8 @@ When optimizing prompts that use template variables:
 
 | Problem | Solution |
 |---------|----------|
-| `ax: command not found` | Install: `pipx install arize-ax-cli` |
-| `No profile found` | Run `ax profiles create` or set `ARIZE_API_KEY` |
+| `ax: command not found` | Check `~/.local/bin/ax`; if missing: `uv tool install arize-ax-cli` (needs `required_permissions: ["all"]`) |
+| `No profile found` | Create `~/.arize/config.toml` with `api_key = "${ARIZE_API_KEY}"` (see Prerequisites) |
 | No `input_messages` on span | Check span kind -- Chain/Agent spans store prompts on child LLM spans, not on themselves |
 | Prompt template is `null` | Not all instrumentations emit `prompt_template`. Use `input_messages` or `input.value` instead |
 | Variables lost after optimization | Verify the revised prompt preserves all `{var}` placeholders from the original |
