@@ -18,11 +18,14 @@ usage() {
   cat <<'USAGE'
 Arize Skills Installer
 
-Usage: ./install.sh [flags]
+Usage: ./install.sh --project <dir> [flags]
+       ./install.sh --global [flags]
+
+One of --project or --global is required.
 
 Flags:
+  --project <dir>   Install into a specific project directory (required unless --global)
   --global          Install to ~/.<agent>/skills/ instead of project-level
-  --project <dir>   Target a specific project directory (default: parent of clone)
   --copy            Copy files instead of symlinking
   --force           Overwrite existing skills with same names
   --skip-cli        Don't install ax CLI even if missing
@@ -32,11 +35,11 @@ Flags:
   --help            Show this help
 
 Examples:
-  ./install.sh                          # Auto-detect agents, project-level
-  ./install.sh --global                 # Install globally
-  ./install.sh --agent cursor --yes     # Cursor only, no prompts
-  ./install.sh --copy                   # Copy instead of symlink
-  ./install.sh --uninstall              # Remove installed symlinks
+  ./install.sh --project ~/my-app                  # Install into a project
+  ./install.sh --project . --agent cursor --yes     # Current dir, Cursor only
+  ./install.sh --global                             # Install globally
+  ./install.sh --project ~/my-app --copy            # Copy instead of symlink
+  ./install.sh --project ~/my-app --uninstall       # Remove installed symlinks
 USAGE
   exit 0
 }
@@ -77,32 +80,18 @@ detect_agents() {
   if [[ -d "$base/.codex" ]];  then AGENTS+=("codex"); fi
 }
 
+if [[ "$GLOBAL" != true && -z "$PROJECT_DIR" ]]; then
+  echo "Error: --project <dir> is required (or use --global for global install)."
+  echo ""
+  usage
+fi
+
 if [[ ${#MANUAL_AGENTS[@]} -gt 0 ]]; then
   AGENTS=("${MANUAL_AGENTS[@]}")
 elif [[ "$GLOBAL" == true ]]; then
   detect_agents "$HOME"
 else
-  if [[ -n "$PROJECT_DIR" ]]; then
-    TARGET="$PROJECT_DIR"
-  else
-    TARGET="$(dirname "$SCRIPT_DIR")"
-  fi
-  detect_agents "$TARGET"
-
-  if [[ ${#AGENTS[@]} -eq 0 ]]; then
-    detect_agents "$HOME"
-    if [[ ${#AGENTS[@]} -gt 0 ]]; then
-      echo "No agent directories found in project. Found globally: ${AGENTS[*]}"
-      if [[ "$YES" != true ]]; then
-        read -rp "Install globally instead? [Y/n] " answer
-        if [[ "$answer" =~ ^[Nn] ]]; then
-          echo "Aborted. Use --agent <name> to specify manually."
-          exit 1
-        fi
-      fi
-      GLOBAL=true
-    fi
-  fi
+  detect_agents "$PROJECT_DIR"
 fi
 
 if [[ ${#AGENTS[@]} -eq 0 ]]; then
@@ -116,7 +105,7 @@ fi
 if [[ "$GLOBAL" == true ]]; then
   BASE="$HOME"
 else
-  BASE="${PROJECT_DIR:-$(dirname "$SCRIPT_DIR")}"
+  BASE="$PROJECT_DIR"
 fi
 
 echo "Arize Skills Installer"

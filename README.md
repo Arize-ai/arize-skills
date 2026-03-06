@@ -19,10 +19,10 @@ This auto-detects your agent (Cursor, Claude Code, Codex, etc.) and symlinks ski
 ```bash
 git clone https://github.com/Arize-ai/arize-skills.git
 cd arize-skills
-./install.sh
+./install.sh --project ~/my-project
 ```
 
-The installer creates symlinks, detects installed agents, and optionally installs the `ax` CLI.
+The `--project` flag tells the installer where to symlink skills. It detects installed agents and optionally installs the `ax` CLI. Use `--global` instead to install to `~/.<agent>/skills/`.
 
 ## Prerequisites
 
@@ -61,8 +61,8 @@ Or set the `ARIZE_API_KEY` environment variable directly.
 
 | Flag | Description |
 |------|-------------|
-| `--global` | Install to `~/.<agent>/skills/` instead of project-level |
-| `--project <dir>` | Target a specific project directory |
+| `--project <dir>` | **Required.** Target project directory for skill symlinks |
+| `--global` | Install to `~/.<agent>/skills/` instead (alternative to `--project`) |
 | `--copy` | Copy files instead of symlinking |
 | `--force` | Overwrite existing skills |
 | `--skip-cli` | Don't install `ax` CLI even if missing |
