@@ -13,7 +13,12 @@ description: "INVOKE THIS SKILL when downloading or exporting Arize traces and s
 
 Use `ax spans export` to download trace data. This is the only supported command for retrieving spans.
 
-**Default output directory:** Always use `--output-dir .arize-tmp-traces` on every `ax spans export` call. This directory is already in `.gitignore`.
+**Default output directory:** Always use `--output-dir .arize-tmp-traces` on every `ax spans export` call. Before the first export, ensure the directory exists and is gitignored:
+
+```bash
+mkdir -p .arize-tmp-traces
+grep -qxF '.arize-tmp-traces/' .gitignore 2>/dev/null || echo '.arize-tmp-traces/' >> .gitignore
+```
 
 ## Prerequisites
 
@@ -117,7 +122,7 @@ ax spans export --session-id SESSION_ID --project PROJECT_NAME --space-id SPACE_
 | `--days` | int | no | Lookback window (default: 30) |
 | `--start-time` | string | no | Override start (ISO 8601) |
 | `--end-time` | string | no | Override end (ISO 8601) |
-| `--output-dir` | string | no | Output directory (default: `.arize-tmp-traces`, already gitignored) |
+| `--output-dir` | string | no | Output directory (default: `.arize-tmp-traces`; ensure it is gitignored — see above) |
 | `--stdout` | bool | no | Print JSON to stdout instead of file |
 
 Exactly one of `--trace-id`, `--span-id`, `--session-id` is required.
