@@ -55,45 +55,52 @@ api_key = "$ARIZE_API_KEY"
 EOF
 ```
 
+**Space ID** -- required when using a project name (not a base64 project ID) with `--project`:
+
+1. `$ARIZE_SPACE_ID` env var -- use it silently if set.
+2. Space ID mentioned in the user's message.
+3. Source from workspace `.env` files:
+   ```bash
+   for f in scripts/playground-tests/.env .cursor/skills/alyx-traces/.env .agents/skills/arize-cli/.env; do
+     [ -f "$f" ] && grep -q ARIZE_SPACE_ID "$f" && source "$f" && export ARIZE_SPACE_ID && break
+   done
+   ```
+4. If still missing, **AskQuestion**: "I need your Arize Space ID (find it at https://app.arize.com/admin > Space Settings, or in any Arize URL: `/spaces/{SPACE_ID}/...`)."
+
+Pass it via `--space-id SPACE_ID` on every `ax` command that uses `--project` with a name.
+
 **Project** -- resolve in this order:
 
 1. `$ARIZE_DEFAULT_PROJECT` env var -- use it silently if set.
 2. Project name/ID mentioned in the user's message.
 3. Otherwise run `ax projects list -o json --limit 30` and **AskQuestion** with the project names as selectable options.
 
+**IMPORTANT:** When using `--project` with a human-readable project name (e.g., `copilot-prod`), you **must** also pass `--space-id`. When using a base64-encoded project ID (e.g., `TW9kZWw6...`), `--space-id` is not needed.
+
 ## Export Spans: `ax spans export`
 
-The only command for downloading trace data.
-
-### Choosing `--stdout` vs file export
-
-- **Use `--stdout`** when you expect ~10 or fewer spans and want to quickly inspect them inline. This prints JSON directly to the terminal.
-- **Use file export (the default)** for anything larger. Writing to the file system avoids bloating the context window and makes it easy to read, search, or re-process the data later.
-
-When in doubt, omit `--stdout` and let the export write to a file -- you can always read the file afterward.
+The primary command for downloading trace data to a file.
 
 ### By trace ID
 
 ```bash
+# Using project name (requires --space-id)
+ax spans export --trace-id TRACE_ID --project PROJECT_NAME --space-id SPACE_ID
+
+# Using base64 project ID (no --space-id needed)
 ax spans export --trace-id TRACE_ID --project PROJECT_ID
 ```
 
 ### By span ID
 
 ```bash
-ax spans export --span-id SPAN_ID --project PROJECT_ID
+ax spans export --span-id SPAN_ID --project PROJECT_NAME --space-id SPACE_ID
 ```
 
 ### By session ID
 
 ```bash
-ax spans export --session-id SESSION_ID --project PROJECT_ID
-```
-
-### Print to stdout (small results only)
-
-```bash
-ax spans export --trace-id TRACE_ID --project PROJECT_ID --stdout
+ax spans export --session-id SESSION_ID --project PROJECT_NAME --space-id SPACE_ID
 ```
 
 ### Flags
@@ -103,35 +110,108 @@ ax spans export --trace-id TRACE_ID --project PROJECT_ID --stdout
 | `--trace-id` | string | mutex | Filter: `context.trace_id = 'X'` |
 | `--span-id` | string | mutex | Filter: `context.span_id = 'X'` |
 | `--session-id` | string | mutex | Filter: `attributes.session.id = 'X'` |
-| `--project` | string | yes (or `$ARIZE_DEFAULT_PROJECT`) | Project ID |
+| `--project` | string | yes (or `$ARIZE_DEFAULT_PROJECT`) | Project name or base64 ID |
+| `--space-id` | string | yes (when `--project` is a name) | Space ID; required to resolve project names |
 | `--days` | int | no | Lookback window (default: 30) |
 | `--start-time` | string | no | Override start (ISO 8601) |
 | `--end-time` | string | no | Override end (ISO 8601) |
 | `--output-dir` | string | no | Output directory (default: `.`) |
-| `--stdout` | bool | no | Print JSON to stdout instead of saving to file. Only use for small results (~10 spans or fewer). |
+| `--stdout` | bool | no | Print JSON to stdout instead of file |
 
 Exactly one of `--trace-id`, `--span-id`, `--session-id` is required.
 
 Output is a JSON array of span objects. File naming: `{type}_{id}_{timestamp}/spans.json`.
 
+## Browse Traces: `ax traces list`
+
+Browse root spans (one row per trace). Output goes to stdout.
+
+```bash
+ax traces list PROJECT_NAME --space-id SPACE_ID --limit 15
+ax traces list PROJECT_NAME --space-id SPACE_ID --filter "status_code = 'ERROR'" --limit 10
+ax traces list PROJECT_NAME --space-id SPACE_ID --start-time 2026-03-01T00:00:00Z --limit 20
+```
+
+### Flags
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `PROJECT` | string | required (or `$ARIZE_DEFAULT_PROJECT`) | Positional argument (name or base64 ID) |
+| `--space-id` | string | none | Space ID; required when PROJECT is a name |
+| `--start-time` | string | 1 week ago | ISO 8601 |
+| `--end-time` | string | now | ISO 8601 |
+| `--filter` | string | none | SQL-like filter expression |
+| `--limit` | int | 15 | Max results |
+| `--cursor` | string | none | Pagination cursor |
+| `-o, --output` | string | table | Output format: table, json, or csv |
+
+## Filter Syntax Reference
+
+SQL-like expressions passed to `--filter`.
+
+### Common filterable columns
+
+| Column | Type | Description | Example Values |
+|--------|------|-------------|----------------|
+| `name` | string | Span name | `'ChatCompletion'`, `'retrieve_docs'` |
+| `status_code` | string | Status | `'OK'`, `'ERROR'`, `'UNSET'` |
+| `latency_ms` | number | Duration in ms | `100`, `5000` |
+| `parent_id` | string | Parent span ID | null for root spans |
+| `context.trace_id` | string | Trace ID | |
+| `context.span_id` | string | Span ID | |
+| `attributes.session.id` | string | Session ID | |
+| `attributes.openinference.span.kind` | string | Span kind | `'LLM'`, `'CHAIN'`, `'TOOL'`, `'AGENT'`, `'RETRIEVER'`, `'RERANKER'`, `'EMBEDDING'`, `'GUARDRAIL'`, `'EVALUATOR'` |
+| `attributes.llm.model_name` | string | LLM model | `'gpt-4o'`, `'claude-3'` |
+| `attributes.input.value` | string | Span input | |
+| `attributes.output.value` | string | Span output | |
+| `attributes.error.type` | string | Error type | `'ValueError'`, `'TimeoutError'` |
+| `attributes.error.message` | string | Error message | |
+| `event.attributes` | string | Error tracebacks | Use CONTAINS (not exact match) |
+
+### Operators
+
+`=`, `!=`, `<`, `<=`, `>`, `>=`, `AND`, `OR`, `IN`, `CONTAINS`, `LIKE`, `IS NULL`, `IS NOT NULL`
+
+### Examples
+
+```
+status_code = 'ERROR'
+latency_ms > 5000
+name = 'ChatCompletion' AND status_code = 'ERROR'
+attributes.llm.model_name = 'gpt-4o'
+attributes.openinference.span.kind IN ('LLM', 'AGENT')
+attributes.error.type LIKE '%Transport%'
+event.attributes CONTAINS 'TimeoutError'
+```
+
+### Tips
+
+- Prefer `IN` over multiple `OR` conditions: `name IN ('a', 'b', 'c')` not `name = 'a' OR name = 'b' OR name = 'c'`
+- Start broad with `LIKE`, then switch to `=` or `IN` once you know exact values
+- Use `CONTAINS` for `event.attributes` (error tracebacks) -- exact match is unreliable on complex text
+- Always wrap string values in single quotes
+
 ## Workflows
-
-### Debug a single span
-
-1. `ax spans export --span-id SPAN_ID --project PROJECT --stdout` (single span, fine for stdout)
-2. Check `status_code`, `attributes.error.type`, and `attributes.error.message`
 
 ### Debug a failing trace
 
-1. `ax spans export --trace-id TRACE_ID --project PROJECT`
-2. Read the output file, look for spans with `status_code: ERROR`
-3. Check `attributes.error.type` and `attributes.error.message` on error spans
+1. `ax traces list PROJECT --space-id SPACE_ID --filter "status_code = 'ERROR'" --limit 5`
+2. Pick a trace_id from the results
+3. `ax spans export --trace-id TRACE_ID --project PROJECT --space-id SPACE_ID`
+4. Read the output file, look for spans with `status_code: ERROR`
+5. Check `attributes.error.type` and `attributes.error.message` on error spans
 
 ### Download a conversation session
 
-1. `ax spans export --session-id SESSION_ID --project PROJECT`
-2. Read the output file -- spans are ordered by `start_time`, grouped by `context.trace_id`
+1. `ax spans export --session-id SESSION_ID --project PROJECT --space-id SPACE_ID`
+2. Spans are ordered by `start_time`, grouped by `context.trace_id`
 3. If you only have a trace_id, export that trace first, then look for `attributes.session.id` in the output to get the session ID
+
+### Export for offline analysis
+
+```bash
+ax spans export --trace-id TRACE_ID --project PROJECT --space-id SPACE_ID --stdout | jq '.[]'
+```
 
 ## Span Column Reference (OpenInference Semantic Conventions)
 
@@ -264,5 +344,7 @@ Output is a JSON array of span objects. File naming: `{type}_{id}_{timestamp}/sp
 |---------|----------|
 | `ax: command not found` | Check `~/.local/bin/ax`; if missing: `uv tool install arize-ax-cli` (needs `required_permissions: ["all"]`) |
 | `No profile found` | Follow "Resolve credentials" in Prerequisites to auto-discover or prompt for the API key |
+| `401 Unauthorized` with valid API key | You are likely using `--project` with a name (e.g., `copilot-prod`) without `--space-id`. Add `--space-id SPACE_ID` or use the base64 project ID instead |
 | `No spans found` | Expand `--days` (default 30), verify project ID |
+| `Filter error` | Check column name spelling, wrap string values in single quotes |
 | `Timeout on large export` | Use `--days 7` to narrow the time range |
