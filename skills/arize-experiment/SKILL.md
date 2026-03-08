@@ -31,15 +31,20 @@ uv tool install arize-ax-cli   # preferred
 pipx install arize-ax-cli      # alternative
 ```
 
-### API key (required)
+### Resolve credentials and project
 
-Resolve in this order, stop at first success:
+**Credentials** -- resolve in this order, stop at the first success:
 
-1. `ax profiles show --expand 2>&1` -- if it prints auth details, you're good.
-2. `ARIZE_API_KEY` env var is set.
-3. If missing, **AskQuestion**: "I need your Arize API key. Find it at https://app.arize.com/admin > API Keys."
+1. `ax profiles show --expand 2>&1` -- if it prints auth details without error, you're good.
+2. Source a workspace `.env` that has the key, then retry:
+   ```bash
+   for f in scripts/playground-tests/.env .cursor/skills/alyx-traces/.env .agents/skills/arize-cli/.env; do
+     [ -f "$f" ] && grep -q ARIZE_API_KEY "$f" && source "$f" && export ARIZE_API_KEY && break
+   done
+   ```
+3. If still missing, **AskQuestion**: "I need your Arize API key (find it at https://app.arize.com/admin > API Keys)."
 
-Once resolved, write to config so it persists:
+Once resolved, write the literal value to config so it works in any shell:
 
 ```bash
 mkdir -p ~/.arize && cat > ~/.arize/config.toml << EOF
@@ -51,21 +56,11 @@ api_key = "$ARIZE_API_KEY"
 EOF
 ```
 
-### Space ID and Project
+**Project** -- resolve in this order:
 
-Both are needed for most commands. Resolve each:
-
-1. User provides it in the conversation -- use directly via `--space-id` / `--project` flags.
-2. Env var is set (`ARIZE_SPACE_ID`, `ARIZE_DEFAULT_PROJECT`) -- use silently.
-3. If missing, **AskQuestion** once. Tell the user:
-   - Space ID is in the Arize URL: `/spaces/{SPACE_ID}/...`
-   - Project is the project name as shown in the Arize UI.
-   - For convenience, recommend setting env vars so they don't get asked again:
-     `export ARIZE_SPACE_ID="U3BhY2U6..."` and `export ARIZE_DEFAULT_PROJECT="my-project"`
-
-Prefer asking the user over searching or iterating through projects and API keys.
-If you get a `401 Unauthorized`, tell the user their API key may not have access to
-that space and ask them to verify.
+1. `$ARIZE_DEFAULT_PROJECT` env var -- use it silently if set.
+2. Project name/ID mentioned in the user's message.
+3. Otherwise run `ax projects list -o json --limit 30` and **AskQuestion** with the project names as selectable options.
 
 ## List Experiments: `ax experiments list`
 
@@ -85,7 +80,7 @@ ax experiments list -o json
 | `--dataset-id` | string | none | Filter by dataset |
 | `--limit, -n` | int | 15 | Max results (1-100) |
 | `--cursor` | string | none | Pagination cursor from previous response |
-| `-o, --output` | string | table | Output format: table, json, csv, parquet, or file path |
+| `-o, --output` | string | table | Output format: table, json, or csv. **Always use `-o json`** when saving to a file. Do NOT use parquet -- it fails on nullable columns. |
 | `-p, --profile` | string | default | Configuration profile |
 
 ## Get Experiment: `ax experiments get`
@@ -306,8 +301,7 @@ ax experiments export EXPERIMENT_ID --stdout | jq -r '.[] | [.example_id, .outpu
 | Problem | Solution |
 |---------|----------|
 | `ax: command not found` | Check `~/.local/bin/ax`; if missing: `uv tool install arize-ax-cli` (needs `required_permissions: ["all"]`) |
-| `401 Unauthorized` | API key may not have access to this space. Verify the key and space ID are correct. Keys are scoped per space -- get the right one from https://app.arize.com/admin > API Keys. |
-| `No profile found` | Run `ax profiles show --expand` to check; set `ARIZE_API_KEY` env var or write `~/.arize/config.toml` |
+| `No profile found` | Follow "Resolve credentials" in Prerequisites to auto-discover or prompt for the API key |
 | `Experiment not found` | Verify experiment ID with `ax experiments list` |
 | `Invalid runs file` | Each run must have `example_id` and `output` fields |
 | `example_id mismatch` | Ensure `example_id` values match IDs from the dataset (export dataset to verify) |

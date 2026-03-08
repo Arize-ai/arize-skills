@@ -85,7 +85,7 @@ ax datasets list -o json
 | `--space-id` | string | from profile | Filter by space |
 | `--limit, -n` | int | 15 | Max results (1-100) |
 | `--cursor` | string | none | Pagination cursor from previous response |
-| `-o, --output` | string | table | Output format: table, json, csv, parquet, or file path |
+| `-o, --output` | string | table | Output format: table, json, or csv. **Always use `-o json`** when saving to a file. Do NOT use parquet -- it fails on nullable columns. |
 | `-p, --profile` | string | default | Configuration profile |
 
 ## Get Dataset: `ax datasets get`

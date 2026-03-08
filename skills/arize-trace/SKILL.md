@@ -30,15 +30,20 @@ uv tool install arize-ax-cli   # preferred
 pipx install arize-ax-cli      # alternative
 ```
 
-### API key (required)
+### Resolve credentials and project
 
-Resolve in this order, stop at first success:
+**Credentials** -- resolve in this order, stop at the first success:
 
-1. `ax profiles show --expand 2>&1` -- if it prints auth details, you're good.
-2. `ARIZE_API_KEY` env var is set.
-3. If missing, **AskQuestion**: "I need your Arize API key. Find it at https://app.arize.com/admin > API Keys."
+1. `ax profiles show --expand 2>&1` -- if it prints auth details without error, you're good.
+2. Source a workspace `.env` that has the key, then retry:
+   ```bash
+   for f in scripts/playground-tests/.env .cursor/skills/alyx-traces/.env .agents/skills/arize-cli/.env; do
+     [ -f "$f" ] && grep -q ARIZE_API_KEY "$f" && source "$f" && export ARIZE_API_KEY && break
+   done
+   ```
+3. If still missing, **AskQuestion**: "I need your Arize API key (find it at https://app.arize.com/admin > API Keys)."
 
-Once resolved, write to config so it persists:
+Once resolved, write the literal value to config so it works in any shell:
 
 ```bash
 mkdir -p ~/.arize && cat > ~/.arize/config.toml << EOF
@@ -50,42 +55,32 @@ api_key = "$ARIZE_API_KEY"
 EOF
 ```
 
-### Space ID and Project
+**Project** -- resolve in this order:
 
-Both are needed for every command. Resolve each:
-
-1. User provides it in the conversation -- use directly via `--space-id` / `--project` flags.
-2. Env var is set (`ARIZE_SPACE_ID`, `ARIZE_DEFAULT_PROJECT`) -- use silently.
-3. If missing, **AskQuestion** once. Tell the user:
-   - Space ID is in the Arize URL: `/spaces/{SPACE_ID}/...`
-   - Project is the project name as shown in the Arize UI.
-   - For convenience, recommend setting env vars so they don't get asked again:
-     `export ARIZE_SPACE_ID="U3BhY2U6..."` and `export ARIZE_DEFAULT_PROJECT="my-project"`
-
-Prefer asking the user over searching or iterating through projects and API keys.
-Use the values the user gives you. If you get a `401 Unauthorized`, tell the user
-their API key may not have access to that space and ask them to verify.
+1. `$ARIZE_DEFAULT_PROJECT` env var -- use it silently if set.
+2. Project name/ID mentioned in the user's message.
+3. Otherwise run `ax projects list -o json --limit 30` and **AskQuestion** with the project names as selectable options.
 
 ## Export Spans: `ax spans export`
 
-The command for downloading trace data to a file.
+The primary command for downloading trace data to a file.
 
 ### By trace ID
 
 ```bash
-ax spans export --trace-id TRACE_ID --project PROJECT --space-id SPACE_ID
+ax spans export --trace-id TRACE_ID --project PROJECT_ID
 ```
 
 ### By span ID
 
 ```bash
-ax spans export --span-id SPAN_ID --project PROJECT --space-id SPACE_ID
+ax spans export --span-id SPAN_ID --project PROJECT_ID
 ```
 
 ### By session ID
 
 ```bash
-ax spans export --session-id SESSION_ID --project PROJECT --space-id SPACE_ID
+ax spans export --session-id SESSION_ID --project PROJECT_ID
 ```
 
 ### Flags
@@ -95,8 +90,7 @@ ax spans export --session-id SESSION_ID --project PROJECT --space-id SPACE_ID
 | `--trace-id` | string | mutex | Filter: `context.trace_id = 'X'` |
 | `--span-id` | string | mutex | Filter: `context.span_id = 'X'` |
 | `--session-id` | string | mutex | Filter: `attributes.session.id = 'X'` |
-| `--project` | string | yes (or `$ARIZE_DEFAULT_PROJECT`) | Project name or ID |
-| `--space-id` | string | yes (when using project name) | Space ID |
+| `--project` | string | yes (or `$ARIZE_DEFAULT_PROJECT`) | Project ID |
 | `--days` | int | no | Lookback window (default: 30) |
 | `--start-time` | string | no | Override start (ISO 8601) |
 | `--end-time` | string | no | Override end (ISO 8601) |
@@ -107,24 +101,94 @@ Exactly one of `--trace-id`, `--span-id`, `--session-id` is required.
 
 Output is a JSON array of span objects. File naming: `{type}_{id}_{timestamp}/spans.json`.
 
+## Browse Traces: `ax traces list`
+
+Browse root spans (one row per trace). Output goes to stdout.
+
+```bash
+ax traces list PROJECT_ID --limit 15
+ax traces list PROJECT_ID --filter "status_code = 'ERROR'" --limit 10
+ax traces list PROJECT_ID --start-time 2026-03-01T00:00:00Z --limit 20
+```
+
+### Flags
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `PROJECT_ID` | string | required (or `$ARIZE_DEFAULT_PROJECT`) | Positional argument |
+| `--start-time` | string | 1 week ago | ISO 8601 |
+| `--end-time` | string | now | ISO 8601 |
+| `--filter` | string | none | SQL-like filter expression |
+| `--limit` | int | 15 | Max results |
+| `--cursor` | string | none | Pagination cursor |
+| `-o, --output` | string | table | Output format: table, json, or csv |
+
+## Filter Syntax Reference
+
+SQL-like expressions passed to `--filter`.
+
+### Common filterable columns
+
+| Column | Type | Description | Example Values |
+|--------|------|-------------|----------------|
+| `name` | string | Span name | `'ChatCompletion'`, `'retrieve_docs'` |
+| `status_code` | string | Status | `'OK'`, `'ERROR'`, `'UNSET'` |
+| `latency_ms` | number | Duration in ms | `100`, `5000` |
+| `parent_id` | string | Parent span ID | null for root spans |
+| `context.trace_id` | string | Trace ID | |
+| `context.span_id` | string | Span ID | |
+| `attributes.session.id` | string | Session ID | |
+| `attributes.openinference.span.kind` | string | Span kind | `'LLM'`, `'CHAIN'`, `'TOOL'`, `'AGENT'`, `'RETRIEVER'`, `'RERANKER'`, `'EMBEDDING'`, `'GUARDRAIL'`, `'EVALUATOR'` |
+| `attributes.llm.model_name` | string | LLM model | `'gpt-4o'`, `'claude-3'` |
+| `attributes.input.value` | string | Span input | |
+| `attributes.output.value` | string | Span output | |
+| `attributes.error.type` | string | Error type | `'ValueError'`, `'TimeoutError'` |
+| `attributes.error.message` | string | Error message | |
+| `event.attributes` | string | Error tracebacks | Use CONTAINS (not exact match) |
+
+### Operators
+
+`=`, `!=`, `<`, `<=`, `>`, `>=`, `AND`, `OR`, `IN`, `CONTAINS`, `LIKE`, `IS NULL`, `IS NOT NULL`
+
+### Examples
+
+```
+status_code = 'ERROR'
+latency_ms > 5000
+name = 'ChatCompletion' AND status_code = 'ERROR'
+attributes.llm.model_name = 'gpt-4o'
+attributes.openinference.span.kind IN ('LLM', 'AGENT')
+attributes.error.type LIKE '%Transport%'
+event.attributes CONTAINS 'TimeoutError'
+```
+
+### Tips
+
+- Prefer `IN` over multiple `OR` conditions: `name IN ('a', 'b', 'c')` not `name = 'a' OR name = 'b' OR name = 'c'`
+- Start broad with `LIKE`, then switch to `=` or `IN` once you know exact values
+- Use `CONTAINS` for `event.attributes` (error tracebacks) -- exact match is unreliable on complex text
+- Always wrap string values in single quotes
+
 ## Workflows
 
 ### Debug a failing trace
 
-1. `ax spans export --trace-id TRACE_ID --project PROJECT --space-id SPACE_ID`
-2. Read the output file, look for spans with `status_code: ERROR`
-3. Check `attributes.error.type` and `attributes.error.message` on error spans
+1. `ax traces list PROJECT --filter "status_code = 'ERROR'" --limit 5`
+2. Pick a trace_id from the results
+3. `ax spans export --trace-id TRACE_ID --project PROJECT`
+4. Read the output file, look for spans with `status_code: ERROR`
+5. Check `attributes.error.type` and `attributes.error.message` on error spans
 
 ### Download a conversation session
 
-1. `ax spans export --session-id SESSION_ID --project PROJECT --space-id SPACE_ID`
+1. `ax spans export --session-id SESSION_ID --project PROJECT`
 2. Spans are ordered by `start_time`, grouped by `context.trace_id`
 3. If you only have a trace_id, export that trace first, then look for `attributes.session.id` in the output to get the session ID
 
 ### Export for offline analysis
 
 ```bash
-ax spans export --trace-id TRACE_ID --project PROJECT --space-id SPACE_ID --stdout | jq '.[]'
+ax spans export --trace-id TRACE_ID --project PROJECT --stdout | jq '.[]'
 ```
 
 ## Span Column Reference (OpenInference Semantic Conventions)
@@ -257,8 +321,7 @@ ax spans export --trace-id TRACE_ID --project PROJECT --space-id SPACE_ID --stdo
 | Problem | Solution |
 |---------|----------|
 | `ax: command not found` | Check `~/.local/bin/ax`; if missing: `uv tool install arize-ax-cli` (needs `required_permissions: ["all"]`) |
-| `401 Unauthorized` | API key may not have access to this space. Verify the key and space ID are correct. Keys are scoped per space -- get the right one from https://app.arize.com/admin > API Keys. |
-| `No profile found` | Run `ax profiles show --expand` to check; set `ARIZE_API_KEY` env var or write `~/.arize/config.toml` |
-| `No spans found` | Expand `--days` (default 30), verify project name and space ID |
+| `No profile found` | Follow "Resolve credentials" in Prerequisites to auto-discover or prompt for the API key |
+| `No spans found` | Expand `--days` (default 30), verify project ID |
 | `Filter error` | Check column name spelling, wrap string values in single quotes |
 | `Timeout on large export` | Use `--days 7` to narrow the time range |
