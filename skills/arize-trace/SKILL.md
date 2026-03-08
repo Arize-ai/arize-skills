@@ -65,6 +65,13 @@ EOF
 
 The only command for downloading trace data.
 
+### Choosing `--stdout` vs file export
+
+- **Use `--stdout`** when you expect ~10 or fewer spans and want to quickly inspect them inline. This prints JSON directly to the terminal.
+- **Use file export (the default)** for anything larger. Writing to the file system avoids bloating the context window and makes it easy to read, search, or re-process the data later.
+
+When in doubt, omit `--stdout` and let the export write to a file -- you can always read the file afterward.
+
 ### By trace ID
 
 ```bash
@@ -83,7 +90,7 @@ ax spans export --span-id SPAN_ID --project PROJECT_ID
 ax spans export --session-id SESSION_ID --project PROJECT_ID
 ```
 
-### Print to stdout instead of file
+### Print to stdout (small results only)
 
 ```bash
 ax spans export --trace-id TRACE_ID --project PROJECT_ID --stdout
@@ -101,13 +108,18 @@ ax spans export --trace-id TRACE_ID --project PROJECT_ID --stdout
 | `--start-time` | string | no | Override start (ISO 8601) |
 | `--end-time` | string | no | Override end (ISO 8601) |
 | `--output-dir` | string | no | Output directory (default: `.`) |
-| `--stdout` | bool | no | Print JSON to stdout instead of saving to file |
+| `--stdout` | bool | no | Print JSON to stdout instead of saving to file. Only use for small results (~10 spans or fewer). |
 
 Exactly one of `--trace-id`, `--span-id`, `--session-id` is required.
 
 Output is a JSON array of span objects. File naming: `{type}_{id}_{timestamp}/spans.json`.
 
 ## Workflows
+
+### Debug a single span
+
+1. `ax spans export --span-id SPAN_ID --project PROJECT --stdout` (single span, fine for stdout)
+2. Check `status_code`, `attributes.error.type`, and `attributes.error.message`
 
 ### Debug a failing trace
 
@@ -118,14 +130,8 @@ Output is a JSON array of span objects. File naming: `{type}_{id}_{timestamp}/sp
 ### Download a conversation session
 
 1. `ax spans export --session-id SESSION_ID --project PROJECT`
-2. Spans are ordered by `start_time`, grouped by `context.trace_id`
+2. Read the output file -- spans are ordered by `start_time`, grouped by `context.trace_id`
 3. If you only have a trace_id, export that trace first, then look for `attributes.session.id` in the output to get the session ID
-
-### Export for offline analysis
-
-```bash
-ax spans export --trace-id TRACE_ID --project PROJECT --stdout | jq '.[]'
-```
 
 ## Span Column Reference (OpenInference Semantic Conventions)
 
