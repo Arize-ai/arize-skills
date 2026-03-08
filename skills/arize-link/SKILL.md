@@ -56,15 +56,37 @@ Opens the session view for a conversation/interaction flow.
 
 ## Time Range
 
-- **startA**: 90 days ago as epoch milliseconds. Calculate: `(now - 90 days) * 1000`
-- **endA**: Current time as epoch milliseconds. Calculate: `now * 1000`
+**CRITICAL**: `startA` and `endA` are **required** query parameters. Without them, the Arize UI defaults to the last 7 days and will show a "Your model doesn't have any recent data" error if the trace/span falls outside that window.
 
-If the user provides specific timestamps, use those instead.
+- **startA**: Start of the time window as epoch milliseconds
+- **endA**: End of the time window as epoch milliseconds
+
+### How to Determine the Time Range
+
+Use these sources in priority order:
+
+1. **User-provided URL**: If the user shared an Arize URL, extract `startA` and `endA` from it and reuse them. This is the most reliable approach since it preserves the user's original time window.
+
+2. **Exported span data**: If you have span data (e.g., from `ax spans export`), use the span's `start_time` field to calculate a range that covers the data:
+   ```bash
+   # Convert span start_time to epoch ms, then pad ±1 day
+   python3 -c "
+   from datetime import datetime, timedelta
+   t = datetime.fromisoformat('2026-03-07T05:39:15.822147Z'.replace('Z','+00:00'))
+   start = int((t - timedelta(days=1)).timestamp() * 1000)
+   end = int((t + timedelta(days=1)).timestamp() * 1000)
+   print(f'startA={start}&endA={end}')
+   "
+   ```
+
+3. **Default fallback**: Use the last 90 days. Calculate:
+   - `startA`: `(now - 90 days)` as epoch milliseconds
+   - `endA`: current time as epoch milliseconds
 
 ## Instructions
 
-1. Gather the required IDs from the user or from available context.
-2. Calculate `startA` and `endA` epoch milliseconds (default: last 90 days).
+1. Gather the required IDs from the user or from available context (URLs, exported trace data, conversation history).
+2. Determine `startA` and `endA` epoch milliseconds using the priority order above.
 3. Substitute values into the appropriate URL template above.
 4. Present the URL as a clickable markdown link.
 

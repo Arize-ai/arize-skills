@@ -1,6 +1,6 @@
 ---
 name: arize-trace
-description: "INVOKE THIS SKILL when downloading or exporting Arize traces and spans. Covers exporting traces by ID, sessions by ID, and debugging LLM application issues using the ax CLI."
+description: "INVOKE THIS SKILL when downloading or exporting Arize traces and spans. Covers general span export with filters, export by trace/span/session ID, and debugging LLM application issues using the ax CLI."
 ---
 
 # Arize Trace Skill
@@ -79,46 +79,63 @@ Pass it via `--space-id SPACE_ID` on every `ax` command that uses `--project` wi
 
 ## Export Spans: `ax spans export`
 
-The primary command for downloading trace data to a file.
+The primary command for downloading trace data to a file. No ID flag is required -- you can export all spans in a time window, apply a `--filter`, or narrow to a specific trace/span/session ID.
 
-### By trace ID
+### General export (no ID required)
 
 ```bash
-# Using project name (requires --space-id)
-ax spans export --trace-id TRACE_ID --project PROJECT_NAME --space-id SPACE_ID
+# Export all spans from the last 30 days (default)
+ax spans export PROJECT_NAME --space-id SPACE_ID
+
+# Export last 7 days
+ax spans export PROJECT_NAME --space-id SPACE_ID --days 7
+
+# Export with a filter expression
+ax spans export PROJECT_NAME --space-id SPACE_ID --filter "status_code = 'ERROR'" --days 7
+
+# Export slow LLM spans
+ax spans export PROJECT_NAME --space-id SPACE_ID \
+  --filter "latency_ms > 5000 AND attributes.openinference.span.kind = 'LLM'"
 
 # Using base64 project ID (no --space-id needed)
-ax spans export --trace-id TRACE_ID --project PROJECT_ID
+ax spans export PROJECT_ID --filter "status_code = 'ERROR'"
 ```
 
-### By span ID
+### By trace, span, or session ID
 
 ```bash
-ax spans export --span-id SPAN_ID --project PROJECT_NAME --space-id SPACE_ID
+ax spans export PROJECT_NAME --trace-id TRACE_ID --space-id SPACE_ID
+ax spans export PROJECT_NAME --span-id SPAN_ID --space-id SPACE_ID
+ax spans export PROJECT_NAME --session-id SESSION_ID --space-id SPACE_ID
 ```
 
-### By session ID
+At most one of `--trace-id`, `--span-id`, `--session-id` may be provided. They are mutually exclusive but all optional.
+
+### Combined: ID + filter
 
 ```bash
-ax spans export --session-id SESSION_ID --project PROJECT_NAME --space-id SPACE_ID
+# Export only error spans within a specific trace
+ax spans export PROJECT_NAME --trace-id TRACE_ID --filter "status_code = 'ERROR'" --space-id SPACE_ID
 ```
 
 ### Flags
 
 | Flag | Type | Required | Description |
 |------|------|----------|-------------|
-| `--trace-id` | string | mutex | Filter: `context.trace_id = 'X'` |
-| `--span-id` | string | mutex | Filter: `context.span_id = 'X'` |
-| `--session-id` | string | mutex | Filter: `attributes.session.id = 'X'` |
-| `--project` | string | yes (or `$ARIZE_DEFAULT_PROJECT`) | Project name or base64 ID |
-| `--space-id` | string | yes (when `--project` is a name) | Space ID; required to resolve project names |
+| `PROJECT` | string | yes (or `$ARIZE_DEFAULT_PROJECT`) | Positional argument: project name or base64 ID |
+| `--filter` | string | no | SQL-like filter expression (see Filter Syntax Reference below) |
+| `--trace-id` | string | no (mutex) | Filter by trace ID; mutually exclusive with `--span-id` / `--session-id` |
+| `--span-id` | string | no (mutex) | Filter by span ID; mutually exclusive with `--trace-id` / `--session-id` |
+| `--session-id` | string | no (mutex) | Filter by session ID; mutually exclusive with `--trace-id` / `--span-id` |
+| `--space-id` | string | yes (when project is a name) | Space ID; required to resolve project names |
+| `--limit` | int | no | Maximum spans to export (default: 100) |
 | `--days` | int | no | Lookback window (default: 30) |
 | `--start-time` | string | no | Override start (ISO 8601) |
 | `--end-time` | string | no | Override end (ISO 8601) |
 | `--output-dir` | string | no | Output directory (default: `.`) |
 | `--stdout` | bool | no | Print JSON to stdout instead of file |
 
-Exactly one of `--trace-id`, `--span-id`, `--session-id` is required.
+All ID flags are optional and mutually exclusive. If none is provided, all spans matching `--filter` (or all spans in the time window) are returned.
 
 Output is a JSON array of span objects. File naming: `{type}_{id}_{timestamp}/spans.json`.
 
@@ -210,7 +227,11 @@ event.attributes CONTAINS 'TimeoutError'
 ### Export for offline analysis
 
 ```bash
-ax spans export --trace-id TRACE_ID --project PROJECT --space-id SPACE_ID --stdout | jq '.[]'
+# Export all error spans to stdout
+ax spans export PROJECT --space-id SPACE_ID --filter "status_code = 'ERROR'" --stdout | jq '.[]'
+
+# Export a specific trace to stdout
+ax spans export PROJECT --trace-id TRACE_ID --space-id SPACE_ID --stdout | jq '.[]'
 ```
 
 ## Span Column Reference (OpenInference Semantic Conventions)
