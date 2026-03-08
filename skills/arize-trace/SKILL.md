@@ -63,7 +63,7 @@ EOF
 
 ## Export Spans: `ax spans export`
 
-The primary command for downloading trace data to a file.
+The only command for downloading trace data.
 
 ### By trace ID
 
@@ -83,6 +83,12 @@ ax spans export --span-id SPAN_ID --project PROJECT_ID
 ax spans export --session-id SESSION_ID --project PROJECT_ID
 ```
 
+### Print to stdout instead of file
+
+```bash
+ax spans export --trace-id TRACE_ID --project PROJECT_ID --stdout
+```
+
 ### Flags
 
 | Flag | Type | Required | Description |
@@ -95,89 +101,19 @@ ax spans export --session-id SESSION_ID --project PROJECT_ID
 | `--start-time` | string | no | Override start (ISO 8601) |
 | `--end-time` | string | no | Override end (ISO 8601) |
 | `--output-dir` | string | no | Output directory (default: `.`) |
-| `--stdout` | bool | no | Print JSON to stdout instead of file |
+| `--stdout` | bool | no | Print JSON to stdout instead of saving to file |
 
 Exactly one of `--trace-id`, `--span-id`, `--session-id` is required.
 
 Output is a JSON array of span objects. File naming: `{type}_{id}_{timestamp}/spans.json`.
 
-## Browse Traces: `ax traces list`
-
-Browse root spans (one row per trace). Output goes to stdout.
-
-```bash
-ax traces list PROJECT_ID --limit 15
-ax traces list PROJECT_ID --filter "status_code = 'ERROR'" --limit 10
-ax traces list PROJECT_ID --start-time 2026-03-01T00:00:00Z --limit 20
-```
-
-### Flags
-
-| Flag | Type | Default | Description |
-|------|------|---------|-------------|
-| `PROJECT_ID` | string | required (or `$ARIZE_DEFAULT_PROJECT`) | Positional argument |
-| `--start-time` | string | 1 week ago | ISO 8601 |
-| `--end-time` | string | now | ISO 8601 |
-| `--filter` | string | none | SQL-like filter expression |
-| `--limit` | int | 15 | Max results |
-| `--cursor` | string | none | Pagination cursor |
-| `-o, --output` | string | table | Output format: table, json, or csv |
-
-## Filter Syntax Reference
-
-SQL-like expressions passed to `--filter`.
-
-### Common filterable columns
-
-| Column | Type | Description | Example Values |
-|--------|------|-------------|----------------|
-| `name` | string | Span name | `'ChatCompletion'`, `'retrieve_docs'` |
-| `status_code` | string | Status | `'OK'`, `'ERROR'`, `'UNSET'` |
-| `latency_ms` | number | Duration in ms | `100`, `5000` |
-| `parent_id` | string | Parent span ID | null for root spans |
-| `context.trace_id` | string | Trace ID | |
-| `context.span_id` | string | Span ID | |
-| `attributes.session.id` | string | Session ID | |
-| `attributes.openinference.span.kind` | string | Span kind | `'LLM'`, `'CHAIN'`, `'TOOL'`, `'AGENT'`, `'RETRIEVER'`, `'RERANKER'`, `'EMBEDDING'`, `'GUARDRAIL'`, `'EVALUATOR'` |
-| `attributes.llm.model_name` | string | LLM model | `'gpt-4o'`, `'claude-3'` |
-| `attributes.input.value` | string | Span input | |
-| `attributes.output.value` | string | Span output | |
-| `attributes.error.type` | string | Error type | `'ValueError'`, `'TimeoutError'` |
-| `attributes.error.message` | string | Error message | |
-| `event.attributes` | string | Error tracebacks | Use CONTAINS (not exact match) |
-
-### Operators
-
-`=`, `!=`, `<`, `<=`, `>`, `>=`, `AND`, `OR`, `IN`, `CONTAINS`, `LIKE`, `IS NULL`, `IS NOT NULL`
-
-### Examples
-
-```
-status_code = 'ERROR'
-latency_ms > 5000
-name = 'ChatCompletion' AND status_code = 'ERROR'
-attributes.llm.model_name = 'gpt-4o'
-attributes.openinference.span.kind IN ('LLM', 'AGENT')
-attributes.error.type LIKE '%Transport%'
-event.attributes CONTAINS 'TimeoutError'
-```
-
-### Tips
-
-- Prefer `IN` over multiple `OR` conditions: `name IN ('a', 'b', 'c')` not `name = 'a' OR name = 'b' OR name = 'c'`
-- Start broad with `LIKE`, then switch to `=` or `IN` once you know exact values
-- Use `CONTAINS` for `event.attributes` (error tracebacks) -- exact match is unreliable on complex text
-- Always wrap string values in single quotes
-
 ## Workflows
 
 ### Debug a failing trace
 
-1. `ax traces list PROJECT --filter "status_code = 'ERROR'" --limit 5`
-2. Pick a trace_id from the results
-3. `ax spans export --trace-id TRACE_ID --project PROJECT`
-4. Read the output file, look for spans with `status_code: ERROR`
-5. Check `attributes.error.type` and `attributes.error.message` on error spans
+1. `ax spans export --trace-id TRACE_ID --project PROJECT`
+2. Read the output file, look for spans with `status_code: ERROR`
+3. Check `attributes.error.type` and `attributes.error.message` on error spans
 
 ### Download a conversation session
 
@@ -323,5 +259,4 @@ ax spans export --trace-id TRACE_ID --project PROJECT --stdout | jq '.[]'
 | `ax: command not found` | Check `~/.local/bin/ax`; if missing: `uv tool install arize-ax-cli` (needs `required_permissions: ["all"]`) |
 | `No profile found` | Follow "Resolve credentials" in Prerequisites to auto-discover or prompt for the API key |
 | `No spans found` | Expand `--days` (default 30), verify project ID |
-| `Filter error` | Check column name spelling, wrap string values in single quotes |
 | `Timeout on large export` | Use `--days 7` to narrow the time range |
