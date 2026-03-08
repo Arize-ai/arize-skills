@@ -233,6 +233,19 @@ if [[ "$UNINSTALL" == true ]]; then
   exit 0
 fi
 
+# --- Output directory setup ---
+
+if [[ "$GLOBAL" != true && -n "$PROJECT_DIR" ]]; then
+  mkdir -p "$PROJECT_DIR/.arize-tmp-traces"
+  if [[ -f "$PROJECT_DIR/.gitignore" ]]; then
+    grep -qxF '.arize-tmp-traces/' "$PROJECT_DIR/.gitignore" 2>/dev/null \
+      || echo '.arize-tmp-traces/' >> "$PROJECT_DIR/.gitignore"
+  else
+    echo '.arize-tmp-traces/' > "$PROJECT_DIR/.gitignore"
+  fi
+  echo "Output directory: $PROJECT_DIR/.arize-tmp-traces/ (added to .gitignore)"
+fi
+
 # --- CLI installation ---
 
 install_ax_cli() {

@@ -62,6 +62,17 @@ EOF
 2. Project name/ID mentioned in the user's message.
 3. Otherwise run `ax projects list -o json --limit 30` and **AskQuestion** with the project names as selectable options.
 
+### Output directory
+
+All export commands should write to `.arize-tmp-traces/` to keep output inside the workspace (avoids Cursor sandbox permission issues) and out of git:
+
+```bash
+mkdir -p .arize-tmp-traces
+grep -qxF '.arize-tmp-traces/' .gitignore 2>/dev/null || echo '.arize-tmp-traces/' >> .gitignore
+```
+
+Always pass `--output-dir .arize-tmp-traces` on every `ax experiments export` command.
+
 ## List Experiments: `ax experiments list`
 
 Browse experiments, optionally filtered by dataset. Output goes to stdout.
@@ -117,10 +128,9 @@ ax experiments get EXPERIMENT_ID -o json
 Download all runs to a file. Uses Arrow Flight for efficient bulk transfer.
 
 ```bash
-ax experiments export EXPERIMENT_ID
-# -> experiment_abc123_20260305_141500/runs.json
+ax experiments export EXPERIMENT_ID --output-dir .arize-tmp-traces
+# -> .arize-tmp-traces/experiment_abc123_20260305_141500/runs.json
 
-ax experiments export EXPERIMENT_ID --output-dir ./results
 ax experiments export EXPERIMENT_ID --stdout
 ax experiments export EXPERIMENT_ID --stdout | jq '.[0]'
 ```
@@ -130,7 +140,7 @@ ax experiments export EXPERIMENT_ID --stdout | jq '.[0]'
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
 | `EXPERIMENT_ID` | string | required | Positional argument |
-| `--output-dir` | string | `.` | Output directory |
+| `--output-dir` | string | `.` | Output directory (always pass `.arize-tmp-traces`) |
 | `--stdout` | bool | false | Print JSON to stdout instead of file |
 | `-p, --profile` | string | default | Configuration profile |
 
@@ -238,7 +248,7 @@ At least one of `label`, `score`, or `explanation` should be present per evaluat
    ```
 2. Export the dataset examples:
    ```bash
-   ax datasets export DATASET_ID
+   ax datasets export DATASET_ID --output-dir .arize-tmp-traces
    ```
 3. Process each example through your system, collecting outputs and evaluations
 4. Build a runs file (JSON array) with `example_id`, `output`, and optional `evaluations`:
@@ -258,27 +268,27 @@ At least one of `label`, `score`, or `explanation` should be present per evaluat
 
 1. Export both experiments:
    ```bash
-   ax experiments export EXPERIMENT_ID_A --stdout > a.json
-   ax experiments export EXPERIMENT_ID_B --stdout > b.json
+   ax experiments export EXPERIMENT_ID_A --stdout > .arize-tmp-traces/a.json
+   ax experiments export EXPERIMENT_ID_B --stdout > .arize-tmp-traces/b.json
    ```
 2. Compare evaluation scores by `example_id`:
    ```bash
    # Average correctness score for experiment A
-   jq '[.[] | .evaluations.correctness.score] | add / length' a.json
+   jq '[.[] | .evaluations.correctness.score] | add / length' .arize-tmp-traces/a.json
 
    # Same for experiment B
-   jq '[.[] | .evaluations.correctness.score] | add / length' b.json
+   jq '[.[] | .evaluations.correctness.score] | add / length' .arize-tmp-traces/b.json
    ```
 3. Find examples where results differ:
    ```bash
-   jq -s '.[0] as $a | .[1][] | {example_id, b_score: .evaluations.correctness.score, a_score: ($a[] | select(.example_id == .example_id) | .evaluations.correctness.score)}' a.json b.json
+   jq -s '.[0] as $a | .[1][] | {example_id, b_score: .evaluations.correctness.score, a_score: ($a[] | select(.example_id == .example_id) | .evaluations.correctness.score)}' .arize-tmp-traces/a.json .arize-tmp-traces/b.json
    ```
 
 ### Download experiment results for analysis
 
 1. `ax experiments list --dataset-id DATASET_ID` -- find experiments
-2. `ax experiments export EXPERIMENT_ID` -- download to file
-3. Parse: `jq '.[] | {example_id, score: .evaluations.correctness.score}' experiment_*/runs.json`
+2. `ax experiments export EXPERIMENT_ID --output-dir .arize-tmp-traces` -- download to file
+3. Parse: `jq '.[] | {example_id, score: .evaluations.correctness.score}' .arize-tmp-traces/experiment_*/runs.json`
 
 ### Pipe export to other tools
 

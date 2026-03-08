@@ -67,6 +67,17 @@ Prefer asking the user over searching or iterating through projects and API keys
 If you get a `401 Unauthorized`, tell the user their API key may not have access to
 that space and ask them to verify.
 
+### Output directory
+
+All export commands should write to `.arize-tmp-traces/` to keep output inside the workspace (avoids Cursor sandbox permission issues) and out of git:
+
+```bash
+mkdir -p .arize-tmp-traces
+grep -qxF '.arize-tmp-traces/' .gitignore 2>/dev/null || echo '.arize-tmp-traces/' >> .gitignore
+```
+
+Always pass `--output-dir .arize-tmp-traces` on every `ax datasets export` command.
+
 ## List Datasets: `ax datasets list`
 
 Browse datasets in a space. Output goes to stdout.
@@ -121,11 +132,10 @@ ax datasets get DATASET_ID -o json
 Download all examples to a file. Uses Arrow Flight for efficient bulk transfer.
 
 ```bash
-ax datasets export DATASET_ID
-# -> dataset_abc123_20260305_141500/examples.json
+ax datasets export DATASET_ID --output-dir .arize-tmp-traces
+# -> .arize-tmp-traces/dataset_abc123_20260305_141500/examples.json
 
-ax datasets export DATASET_ID --version-id VERSION_ID
-ax datasets export DATASET_ID --output-dir ./data
+ax datasets export DATASET_ID --version-id VERSION_ID --output-dir .arize-tmp-traces
 ax datasets export DATASET_ID --stdout
 ax datasets export DATASET_ID --stdout | jq '.[0]'
 ```
@@ -136,7 +146,7 @@ ax datasets export DATASET_ID --stdout | jq '.[0]'
 |------|------|---------|-------------|
 | `DATASET_ID` | string | required | Positional argument |
 | `--version-id` | string | latest | Export a specific dataset version |
-| `--output-dir` | string | `.` | Output directory |
+| `--output-dir` | string | `.` | Output directory (always pass `.arize-tmp-traces`) |
 | `--stdout` | bool | false | Print JSON to stdout instead of file |
 | `-p, --profile` | string | default | Configuration profile |
 
@@ -277,8 +287,8 @@ ax datasets append DATASET_ID --file additional_examples.csv
 ### Download dataset for offline analysis
 
 1. `ax datasets list` -- find the dataset
-2. `ax datasets export DATASET_ID` -- download to file
-3. Parse the JSON: `jq '.[] | .question' dataset_*/examples.json`
+2. `ax datasets export DATASET_ID --output-dir .arize-tmp-traces` -- download to file
+3. Parse the JSON: `jq '.[] | .question' .arize-tmp-traces/dataset_*/examples.json`
 
 ### Export a specific version
 
@@ -287,12 +297,12 @@ ax datasets append DATASET_ID --file additional_examples.csv
 ax datasets get DATASET_ID -o json | jq '.versions'
 
 # Export that version
-ax datasets export DATASET_ID --version-id VERSION_ID
+ax datasets export DATASET_ID --version-id VERSION_ID --output-dir .arize-tmp-traces
 ```
 
 ### Iterate on a dataset
 
-1. Export current version: `ax datasets export DATASET_ID`
+1. Export current version: `ax datasets export DATASET_ID --output-dir .arize-tmp-traces`
 2. Modify the examples locally
 3. Append new rows: `ax datasets append DATASET_ID --file new_rows.csv`
 4. Or create a fresh version: `ax datasets create --name "eval-set-v2" --space-id SPACE_ID --file updated_data.json`
