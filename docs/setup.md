@@ -67,3 +67,24 @@ ax profiles create
 export ARIZE_API_KEY=...
 ```
 
+## 4) Forced onboarding validation (required for testing)
+
+Use this block to force a strict pass/fail gate. If it fails, stop and fix setup before proceeding.
+
+```bash
+if ! command -v ax >/dev/null 2>&1; then
+  echo "NEEDS_SETUP: ax not found on PATH"
+  echo "Run docs setup steps and retry."
+  exit 1
+fi
+
+if ! ax --version >/dev/null 2>&1; then
+  echo "NEEDS_SETUP: ax exists but is not runnable (TLS/path/auth/tooling issue likely)"
+  echo "Fix PATH/SSL/tooling, then rerun docs setup steps and test again."
+  exit 1
+fi
+
+echo "READY_TO_PROCEED"
+```
+
+You can treat any output other than `READY_TO_PROCEED` as a hard failure for normal user flow tests.

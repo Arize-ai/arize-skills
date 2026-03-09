@@ -36,6 +36,8 @@ else
 fi
 ```
 
+For automated/agent validation, use the strict form in `docs/setup.md#4-forced-onboarding-validation` which exits non-zero when setup is incomplete.
+
 ## Prerequisites
 
 For initial environment setup (`ax` installation, PATH, TLS, and API key profile checks), follow:
