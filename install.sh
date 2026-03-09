@@ -40,15 +40,15 @@ Flags:
   --help            Show this help
 
 Examples:
-  ./install.sh --list                                          # Show available skills
-  ./install.sh --project ~/my-app                              # Install all skills
-  ./install.sh --project ~/my-app --skill arize-trace          # Install one skill
-  ./install.sh --project . --skill arize-trace --skill arize-dataset  # Install two skills
-  ./install.sh --project . --agent cursor --yes                # Current dir, Cursor only
-  ./install.sh --global                                        # Install globally
-  ./install.sh --project ~/my-app --copy                       # Copy instead of symlink
-  ./install.sh --project ~/my-app --uninstall                  # Remove all installed symlinks
-  ./install.sh --project ~/my-app --uninstall --skill arize-trace  # Remove one skill
+  ./install.sh --list                                                           # Show available skills
+  ./install.sh --project ~/my-app --agent claude                                # Install all skills
+  ./install.sh --project ~/my-app --agent claude --skill arize-trace            # Install one skill
+  ./install.sh --project . --agent claude --skill arize-trace --skill arize-dataset  # Install two skills
+  ./install.sh --project . --agent cursor --yes                                 # Current dir, Cursor only
+  ./install.sh --global                                                          # Install globally (auto-detects agents)
+  ./install.sh --project ~/my-app --agent claude --copy                         # Copy instead of symlink
+  ./install.sh --project ~/my-app --agent claude --uninstall                    # Remove all installed symlinks
+  ./install.sh --project ~/my-app --agent claude --uninstall --skill arize-trace  # Remove one skill
 USAGE
   exit 0
 }
