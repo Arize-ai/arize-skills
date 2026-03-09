@@ -119,6 +119,29 @@ detect_agents() {
   if [[ -d "$base/.codex" ]];  then AGENTS+=("codex"); fi
 }
 
+pick_ssl_cert_file() {
+  local candidate
+
+  if [[ -n "${SSL_CERT_FILE:-}" && -f "$SSL_CERT_FILE" ]]; then
+    echo "$SSL_CERT_FILE"
+    return 0
+  fi
+
+  for candidate in \
+    /etc/ssl/cert.pem \
+    /etc/pki/tls/certs/ca-bundle.crt \
+    /etc/ssl/certs/ca-certificates.crt \
+    /etc/ssl/certs/ca-bundle.crt \
+    /usr/local/share/ca-certificates/ca-bundle.crt; do
+    if [[ -f "$candidate" ]]; then
+      echo "$candidate"
+      return 0
+    fi
+  done
+
+  return 1
+}
+
 find_ax_binary() {
   local pattern
   local candidate
@@ -326,16 +349,18 @@ else
 fi
 
 if [[ -n "$AX_BIN" ]]; then
-  if "$AX_BIN" --version &>/dev/null; then
-    echo "ax CLI check: $("$AX_BIN" --version 2>/dev/null || echo \"unknown\")"
-  elif SSL_CERT_FILE="${SSL_CERT_FILE:-/etc/ssl/cert.pem}" "$AX_BIN" --version &>/dev/null; then
-    echo "ax CLI check: $("$AX_BIN" --version 2>/dev/null || echo \"unknown\")"
-    if [[ -z "${SSL_CERT_FILE:-}" ]]; then
-      echo "Note: this environment needs SSL_CERT_FILE set to your system cert bundle."
-    else
-      echo "Note: this environment needs SSL_CERT_FILE set to the default fallback."
-      echo "  export SSL_CERT_FILE=${SSL_CERT_FILE}"
-    fi
+  ax_cli_version=""
+  if ax_cli_version="$("$AX_BIN" --version 2>/dev/null)"; then
+    echo "ax CLI check: ${ax_cli_version}"
+  elif [[ -n "${SSL_CERT_FILE:-}" ]] && ax_cli_version="$(SSL_CERT_FILE="$SSL_CERT_FILE" "$AX_BIN" --version 2>/dev/null)"; then
+    echo "ax CLI check: ${ax_cli_version}"
+    echo "Note: this environment needs SSL_CERT_FILE set."
+    echo "  export SSL_CERT_FILE=$SSL_CERT_FILE"
+    echo "If you still get TLS failures, use that line in every shell session."
+  elif ax_ssl_file="$(pick_ssl_cert_file || true)" && ax_cli_version="$(SSL_CERT_FILE="$ax_ssl_file" "$AX_BIN" --version 2>/dev/null)"; then
+    echo "ax CLI check: ${ax_cli_version}"
+    echo "Note: this environment needs SSL_CERT_FILE set to your cert bundle:"
+    echo "  export SSL_CERT_FILE=$ax_ssl_file"
     echo "If you still get TLS failures, use that line in every shell session."
   else
     echo "Warning: ax CLI is installed at $AX_BIN but not runnable."

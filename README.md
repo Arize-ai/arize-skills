@@ -66,11 +66,19 @@ export PATH="$HOME/.local/bin:$PATH"
 ```bash
 if [[ -f /etc/ssl/cert.pem ]]; then
   export SSL_CERT_FILE=/etc/ssl/cert.pem
+elif [[ -f /etc/pki/tls/certs/ca-bundle.crt ]]; then
+  export SSL_CERT_FILE=/etc/pki/tls/certs/ca-bundle.crt
 fi
 ax --version
 ```
 
 If this fixes it, add the same export to your shell startup file (or your platform-specific cert bundle path).
+
+On Windows (PowerShell), set it with your system cert bundle path:
+
+```powershell
+$env:SSL_CERT_FILE = 'C:\\Path\\To\\Your\\CertBundle.crt'
+```
 
 ### CLI command style
 

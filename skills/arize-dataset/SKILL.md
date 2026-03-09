@@ -24,6 +24,10 @@ Run a **single** shell call to check everything at once (use `required_permissio
 export PATH="$HOME/.local/bin:$PATH"
 if [[ -z "${SSL_CERT_FILE:-}" && -f /etc/ssl/cert.pem ]]; then
   export SSL_CERT_FILE=/etc/ssl/cert.pem
+elif [[ -z "${SSL_CERT_FILE:-}" && -f /etc/pki/tls/certs/ca-bundle.crt ]]; then
+  export SSL_CERT_FILE=/etc/pki/tls/certs/ca-bundle.crt
+elif [[ -z "${SSL_CERT_FILE:-}" && -f /etc/ssl/certs/ca-certificates.crt ]]; then
+  export SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt
 fi
 ax --version
 echo "--- env ---"
