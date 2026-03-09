@@ -158,7 +158,46 @@ Arrow Flight connects to `flight.arize.com:443` via gRPC+TLS -- this is a differ
 - ax profile: `flight_host`, `flight_port`, `flight_scheme`
 - Environment variables: `ARIZE_FLIGHT_HOST`, `ARIZE_FLIGHT_PORT`, `ARIZE_FLIGHT_SCHEME`
 
-The `--all` flag is also available on `ax datasets export` and `ax experiments export` with the same behavior (REST by default, Flight with `--all`).
+The `--all` flag is also available on `ax traces export`, `ax datasets export`, and `ax experiments export` with the same behavior (REST by default, Flight with `--all`).
+
+## Export Traces: `ax traces export`
+
+Export full traces -- all spans belonging to traces that match a filter. Uses a two-phase approach:
+
+1. **Phase 1:** Find spans matching `--filter` (up to `--limit` via REST, or all via Flight with `--all`)
+2. **Phase 2:** Extract unique trace IDs, then fetch every span for those traces
+
+```bash
+# Export traces with error spans (REST, up to 500 spans in phase 1)
+ax traces export PROJECT_NAME --space-id SPACE_ID --filter "status_code = 'ERROR'" --stdout
+
+# Export all traces matching a filter via Flight (no limit)
+ax traces export PROJECT_NAME --space-id SPACE_ID --filter "status_code = 'ERROR'" --all
+
+# Export recent traces (no filter, gets first 500 spans then all their traces)
+ax traces export PROJECT_NAME --space-id SPACE_ID --output-dir .arize-tmp-traces
+```
+
+### Flags
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `PROJECT` | string | required | Positional argument (name or base64 ID) |
+| `--filter` | string | none | Filter expression for phase-1 span lookup |
+| `--space-id` | string | none | Space ID; required when PROJECT is a name or when using `--all` |
+| `--limit, -n` | int | 500 | Max spans in phase-1 lookup (REST page max) |
+| `--days` | int | 30 | Lookback window in days |
+| `--start-time` | string | none | Override start (ISO 8601) |
+| `--end-time` | string | none | Override end (ISO 8601) |
+| `--output-dir` | string | `.` | Output directory |
+| `--stdout` | bool | false | Print JSON to stdout instead of file |
+| `--all` | bool | false | Use Arrow Flight for both phases (see spans `--all` docs above) |
+| `-p, --profile` | string | default | Configuration profile |
+
+### How it differs from `ax spans export`
+
+- `ax spans export` exports individual spans matching a filter
+- `ax traces export` exports complete traces -- it finds spans matching the filter, then pulls ALL spans for those traces (including siblings and children that may not match the filter)
 
 ## Browse Traces: `ax traces list`
 
