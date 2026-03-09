@@ -6,7 +6,7 @@ Works with Cursor, Claude Code, Codex, Windsurf, and [40+ other agents](https://
 
 ## Quick Start
 
-### Option 1: npx (recommended)
+### Option 1: npx (typescript vercel agent installer)
 
 ```bash
 npx skills add Arize-ai/arize-skills --skill '*' --yes
