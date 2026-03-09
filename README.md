@@ -24,6 +24,12 @@ cd arize-skills
 
 The `--project` flag tells the installer where to symlink skills. It detects installed agents and optionally installs the `ax` CLI. Use `--global` instead to install to `~/.<agent>/skills/`.
 
+### Option 3: Claude Code plugin
+
+```
+/plugin add https://github.com/Arize-ai/arize-skills
+```
+
 ## Prerequisites
 
 ### Arize CLI (`ax`)
@@ -39,15 +45,40 @@ pipx install arize-ax-cli
 pip install arize-ax-cli
 ```
 
-### API Key
+### Authentication
 
-Set up authentication with a profile:
+**Option A — Environment variables** (CI/CD, quick start):
+```bash
+export ARIZE_API_KEY="your-api-key"       # from https://app.arize.com/admin > API Keys
+export ARIZE_SPACE_ID="U3BhY2U6..."       # base64 space ID from your Arize URL
+```
 
+**Option B — Interactive profile** (persistent):
 ```bash
 ax profiles create
 ```
 
-Or set the `ARIZE_API_KEY` environment variable directly.
+**Option C — Direct TOML file** (scripted/non-interactive):
+```bash
+mkdir -p ~/.arize && cat > ~/.arize/config.toml << 'EOF'
+[profile]
+name = "default"
+
+[auth]
+api_key = "your-api-key"
+
+[output]
+format = "table"
+EOF
+```
+
+> **Note:** `ax profiles create` is interactive-only — no `--api-key` flag exists. For CI/CD or scripted setup, use Option A or C.
+
+### Verify
+
+```bash
+ax --version && ax profiles show 2>&1
+```
 
 ## Available Skills
 
@@ -70,7 +101,9 @@ Or set the `ARIZE_API_KEY` environment variable directly.
 | `--force` | Overwrite existing skills |
 | `--skip-cli` | Don't install `ax` CLI even if missing |
 | `--agent <name>` | Manually specify agent (cursor, claude, codex) — repeatable |
+| `--skill <name>` | Only install specific skills — repeatable (e.g. `--skill arize-trace --skill arize-dataset`) |
 | `--yes` | Skip confirmation prompts |
+| `--list` | List all available skills and exit |
 | `--uninstall` | Remove previously installed skill symlinks |
 
 ## Updating
