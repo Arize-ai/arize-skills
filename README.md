@@ -114,4 +114,4 @@ Or set the `ARIZE_API_KEY` environment variable directly.
 
 ## License
 
-Apache 2.0
+MIT
