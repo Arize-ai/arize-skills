@@ -21,7 +21,14 @@ Three things are needed: `ax` CLI, an API key (env var or profile), and a space 
 Run a **single** shell call to check everything at once (use `required_permissions: ["all"]`):
 
 ```bash
-export PATH="$HOME/.local/bin:$PATH" && ax --version && echo "--- env ---" && echo "ARIZE_API_KEY: ${ARIZE_API_KEY:-(not set)}" && echo "ARIZE_SPACE_ID: ${ARIZE_SPACE_ID:-(not set)}" && echo "--- profiles ---" && ax profiles show 2>&1
+export PATH="$HOME/.local/bin:$PATH"
+export SSL_CERT_FILE="${SSL_CERT_FILE:-/etc/ssl/cert.pem}"
+ax --version
+echo "--- env ---"
+if [[ -n "${ARIZE_API_KEY:+x}" ]]; then echo "ARIZE_API_KEY: set"; else echo "ARIZE_API_KEY: not set"; fi
+if [[ -n "${ARIZE_SPACE_ID:+x}" ]]; then echo "ARIZE_SPACE_ID: set"; else echo "ARIZE_SPACE_ID: not set"; fi
+echo "--- profiles ---"
+ax profiles show 2>&1
 ```
 
 **Read the output and proceed immediately** if either the env var or the profile has an API key. Only ask the user if **both** are missing. Resolve failures:

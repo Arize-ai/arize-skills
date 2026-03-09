@@ -119,6 +119,39 @@ detect_agents() {
   if [[ -d "$base/.codex" ]];  then AGENTS+=("codex"); fi
 }
 
+find_ax_binary() {
+  local pattern
+  local candidate
+
+  if command -v ax &>/dev/null; then
+    echo "$(command -v ax)"
+    return 0
+  fi
+
+  local -a candidates=(
+    "$HOME/.local/bin/ax"
+    "$HOME/.local/pipx/venvs/arize-ax-cli/bin/ax"
+    "$HOME/.local/share/pipx/venvs/arize-ax-cli/bin/ax"
+    "$HOME/Library/Python/*/bin/ax"
+    "/Library/Frameworks/Python.framework/Versions/*/bin/ax"
+    "/usr/local/bin/ax"
+    "/opt/homebrew/bin/ax"
+  )
+
+  shopt -s nullglob
+  for pattern in "${candidates[@]}"; do
+    for candidate in $pattern; do
+      [[ -x "$candidate" ]] && {
+        echo "$candidate"
+        shopt -u nullglob
+        return 0
+      }
+    done
+  done
+  shopt -u nullglob
+  return 1
+}
+
 if [[ "$GLOBAL" != true && -z "$PROJECT_DIR" ]]; then
   echo "Error: --project <dir> is required (or use --global for global install)."
   echo ""
@@ -255,6 +288,9 @@ install_ax_cli() {
   elif command -v pipx &>/dev/null; then
     echo "Installing ax CLI via pipx..."
     pipx install --force arize-ax-cli
+  elif command -v pip3 &>/dev/null; then
+    echo "Installing ax CLI via pip3..."
+    pip3 install --user arize-ax-cli
   elif command -v pip &>/dev/null; then
     echo "Installing ax CLI via pip..."
     pip install arize-ax-cli 2>/dev/null || pip install --user arize-ax-cli
@@ -265,14 +301,55 @@ install_ax_cli() {
   fi
 }
 
+AX_BIN=""
+
 if command -v ax &>/dev/null; then
+  AX_BIN="$(command -v ax)"
   ax_version="$(ax --version 2>/dev/null || echo "unknown")"
   echo "ax CLI: installed ($ax_version)"
 elif [[ "$SKIP_CLI" == true ]]; then
   echo "ax CLI: not found (skipped with --skip-cli)"
   echo "  Install manually: pipx install arize-ax-cli"
 else
-  install_ax_cli && echo "ax CLI: installed" || echo "ax CLI: installation failed (install manually)"
+  if install_ax_cli; then
+    AX_BIN="$(find_ax_binary || true)"
+    if [[ -n "$AX_BIN" ]]; then
+      echo "ax CLI: installed"
+    else
+      echo "ax CLI: installation complete but binary was not found in known locations"
+      echo "  Check your Python environment and PATH"
+    fi
+  else
+    echo "ax CLI: installation failed (install manually)"
+    AX_BIN=""
+  fi
+fi
+
+if [[ -n "$AX_BIN" ]]; then
+  if "$AX_BIN" --version &>/dev/null; then
+    echo "ax CLI check: $("$AX_BIN" --version 2>/dev/null || echo \"unknown\")"
+  elif [[ -f /etc/ssl/cert.pem ]] && SSL_CERT_FILE=/etc/ssl/cert.pem "$AX_BIN" --version &>/dev/null; then
+    echo "ax CLI check: $("$AX_BIN" --version 2>/dev/null || echo \"unknown\")"
+    echo "Note: this environment needs SSL_CERT_FILE set"
+    echo "  export SSL_CERT_FILE=/etc/ssl/cert.pem"
+    echo "If you still get TLS failures, use that line in every shell session."
+  else
+    echo "Warning: ax CLI is installed at $AX_BIN but not runnable."
+    echo "  Run: $AX_BIN --version"
+  fi
+
+  if ! command -v ax &>/dev/null; then
+    echo ""
+    echo "ax was not found on PATH. Add it with:"
+    echo "  export PATH=\"$(dirname "$AX_BIN"):\$PATH\""
+    echo "Example:"
+    if [[ "$SHELL" == */zsh ]]; then
+      echo "  echo 'export PATH=\"$(dirname "$AX_BIN"):\$PATH\"' >> ~/.zshrc"
+    else
+      echo "  echo 'export PATH=\"$(dirname "$AX_BIN"):\$PATH\"' >> ~/.bashrc"
+    fi
+    echo "Then restart your terminal."
+  fi
 fi
 
 echo ""

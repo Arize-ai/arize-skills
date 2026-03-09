@@ -49,6 +49,38 @@ ax profiles create
 
 Or set the `ARIZE_API_KEY` environment variable directly.
 
+## Common CLI setup issues
+
+If `ax` is installed but not usable right away, check:
+
+- `command -v ax` is finding the binary.
+- If installed in a Python environment not on `PATH`, add its directory to your shell profile:
+
+```bash
+export PATH="$HOME/.local/bin:$PATH"
+# or the real binary directory returned by `install.sh`
+```
+
+- TLS certificate failures in `ax` (example: `certificate verify failed`):
+
+```bash
+export SSL_CERT_FILE=/etc/ssl/cert.pem
+ax --version
+```
+
+If this fixes it, add `export SSL_CERT_FILE=/etc/ssl/cert.pem` to your shell startup file.
+
+### CLI command style
+
+Some commands support short flags like `-l`, but not all. For reliability in this repo, use long flags first (for example, `--limit`) unless the target command docs show the short flag.
+
+### JSON output caveat
+
+`ax ... --output json` can include embedded control characters in some payloads. For bulk script parsing, prefer:
+
+- `--output table` for quick human inspection.
+- `--output csv` for simpler machine parsing.
+
 ## Available Skills
 
 | Skill | Description |
