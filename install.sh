@@ -40,15 +40,15 @@ Flags:
   --help            Show this help
 
 Examples:
-  ./install.sh --list                                                           # Show available skills
-  ./install.sh --project ~/my-app --agent claude                                # Install all skills
-  ./install.sh --project ~/my-app --agent claude --skill arize-trace            # Install one skill
-  ./install.sh --project . --agent claude --skill arize-trace --skill arize-dataset  # Install two skills
-  ./install.sh --project . --agent cursor --yes                                 # Current dir, Cursor only
-  ./install.sh --global                                                          # Install globally (auto-detects agents)
-  ./install.sh --project ~/my-app --agent claude --copy                         # Copy instead of symlink
-  ./install.sh --project ~/my-app --agent claude --uninstall                    # Remove all installed symlinks
-  ./install.sh --project ~/my-app --agent claude --uninstall --skill arize-trace  # Remove one skill
+  ./install.sh --list                                          # Show available skills
+  ./install.sh --project ~/my-app                              # Install all skills
+  ./install.sh --project ~/my-app --skill arize-trace          # Install one skill
+  ./install.sh --project . --skill arize-trace --skill arize-dataset  # Install two skills
+  ./install.sh --project . --agent cursor --yes                # Current dir, Cursor only
+  ./install.sh --global                                        # Install globally
+  ./install.sh --project ~/my-app --copy                       # Copy instead of symlink
+  ./install.sh --project ~/my-app --uninstall                  # Remove all installed symlinks
+  ./install.sh --project ~/my-app --uninstall --skill arize-trace  # Remove one skill
 USAGE
   exit 0
 }
@@ -134,9 +134,29 @@ else
 fi
 
 if [[ ${#AGENTS[@]} -eq 0 ]]; then
-  echo "No agents detected (looked for .cursor/, .claude/, .codex/)."
-  echo "Use --agent <name> to specify manually, e.g.: ./install.sh --agent cursor"
-  exit 1
+  if [[ -t 0 && "$YES" != true ]]; then
+    echo "No agents detected (looked for .cursor/, .claude/, .codex/)."
+    echo ""
+    echo "Which agent(s) are you using?"
+    echo "  1) cursor"
+    echo "  2) claude"
+    echo "  3) codex"
+    echo ""
+    read -rp "Enter number(s) separated by spaces [1]: " agent_choices
+    agent_choices="${agent_choices:-1}"
+    for choice in $agent_choices; do
+      case "$choice" in
+        1) AGENTS+=("cursor") ;;
+        2) AGENTS+=("claude") ;;
+        3) AGENTS+=("codex") ;;
+        *) echo "Unknown choice: $choice"; exit 1 ;;
+      esac
+    done
+  else
+    echo "No agents detected (looked for .cursor/, .claude/, .codex/)."
+    echo "Use --agent <name> to specify manually, e.g.: ./install.sh --agent cursor"
+    exit 1
+  fi
 fi
 
 # --- Resolve base directory ---
