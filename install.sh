@@ -147,6 +147,35 @@ is_tls_failure() {
   grep -qiE "certificate verify failed|self[- ]signed|x509|unable to get local issuer|certificate has expired|ssl:|tlsv1|tls.*certificate|ssl certificate" <<<"$message"
 }
 
+print_ax_install_help() {
+  echo "No Python package manager found (checked uv, pipx, pip3, pip)."
+  echo ""
+  if command -v python3 &>/dev/null || command -v python &>/dev/null; then
+    echo "Python is installed, but no installer CLI is available."
+    echo "Install one of these and rerun:"
+    echo "  pipx: python3 -m pip install --user pipx && python3 -m pipx ensurepath"
+    echo "  uv (preferred): curl -LsSf https://astral.sh/uv/install.sh | sh"
+  elif [[ "${OS:-}" == "Windows_NT" || -n "${ComSpec:-}" ]]; then
+    echo "Python is not installed. Install it (recommended: install from python.org) then run:"
+    echo "  pip install --user pipx"
+    echo "  python -m pipx ensurepath"
+    echo "  python -m pip install --user arize-ax-cli"
+  elif [[ "$OSTYPE" == darwin* ]]; then
+    echo "Python is not installed. Install Python first, then:"
+    echo "  brew install python"
+    echo "  python3 -m pip install --user pipx"
+    echo "  python3 -m pipx ensurepath"
+  else
+    echo "Python is not installed. Install Python + pip, then run:"
+    echo "  curl -LsSf https://astral.sh/uv/install.sh | sh"
+    echo "  or"
+    echo "  pipx install arize-ax-cli"
+    echo "  (or) pip install --user arize-ax-cli"
+  fi
+  echo ""
+  echo "Manual install reference: https://github.com/Arize-ai/arize-ax-cli"
+}
+
 run_ax_version_check() {
   local cert_file="$1"
   if [[ -n "$cert_file" ]]; then
@@ -332,8 +361,7 @@ install_ax_cli() {
     echo "Installing ax CLI via pip..."
     pip install arize-ax-cli 2>/dev/null || pip install --user arize-ax-cli
   else
-    echo "Warning: No Python package manager found (tried uv, pipx, pip3, pip)."
-    echo "Install ax manually: https://github.com/Arize-ai/arize-ax-cli"
+    print_ax_install_help
     return 1
   fi
 }
