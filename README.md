@@ -14,7 +14,9 @@ Works with Cursor, Claude Code, Codex, Windsurf, and [40+ other agents](https://
 
 This walks through a two-phase flow: analyze your codebase for LLM providers and frameworks, then add Arize AX tracing with the right instrumentors. No skill installation needed.
 
-**Already have traces?** Install the skills below, then start with `arize-trace` to export and debug spans, or `arize-experiment` to run evals against a dataset.
+**Already have traces?** Give your agent this prompt to install the skills and start debugging:
+
+> Install the Arize skills plugin from https://github.com/Arize-ai/arize-skills, then use the arize-trace skill to export and analyze recent traces from my project. Summarize any errors or latency issues you find.
 
 ## Installation
 
