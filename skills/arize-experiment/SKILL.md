@@ -31,20 +31,15 @@ uv tool install arize-ax-cli   # preferred
 pipx install arize-ax-cli      # alternative
 ```
 
-### Resolve credentials and project
+### API key (required)
 
-**Credentials** -- resolve in this order, stop at the first success:
+Resolve in this order, stop at first success:
 
-1. `ax profiles show --expand 2>&1` -- if it prints auth details without error, you're good.
-2. Source a workspace `.env` that has the key, then retry:
-   ```bash
-   for f in scripts/playground-tests/.env .cursor/skills/alyx-traces/.env .agents/skills/arize-cli/.env; do
-     [ -f "$f" ] && grep -q ARIZE_API_KEY "$f" && source "$f" && export ARIZE_API_KEY && break
-   done
-   ```
-3. If still missing, **AskQuestion**: "I need your Arize API key (find it at https://app.arize.com/admin > API Keys)."
+1. `ax profiles show --expand 2>&1` -- if it prints auth details, you're good.
+2. `ARIZE_API_KEY` env var is set.
+3. If missing, **AskQuestion**: "I need your Arize API key. Find it at https://app.arize.com/admin > API Keys."
 
-Once resolved, write the literal value to config so it works in any shell:
+Once resolved, write to config so it persists:
 
 ```bash
 mkdir -p ~/.arize && cat > ~/.arize/config.toml << EOF
@@ -56,22 +51,21 @@ api_key = "$ARIZE_API_KEY"
 EOF
 ```
 
-**Project** -- resolve in this order:
+### Space ID and Project
 
-1. `$ARIZE_DEFAULT_PROJECT` env var -- use it silently if set.
-2. Project name/ID mentioned in the user's message.
-3. Otherwise run `ax projects list -o json --limit 30` and **AskQuestion** with the project names as selectable options.
+Both are needed for most commands. Resolve each:
 
-### Output directory
+1. User provides it in the conversation -- use directly via `--space-id` / `--project` flags.
+2. Env var is set (`ARIZE_SPACE_ID`, `ARIZE_DEFAULT_PROJECT`) -- use silently.
+3. If missing, **AskQuestion** once. Tell the user:
+   - Space ID is in the Arize URL: `/spaces/{SPACE_ID}/...`
+   - Project is the project name as shown in the Arize UI.
+   - For convenience, recommend setting env vars so they don't get asked again:
+     `export ARIZE_SPACE_ID="U3BhY2U6..."` and `export ARIZE_DEFAULT_PROJECT="my-project"`
 
-All export commands should write to `.arize-tmp-traces/` to keep output inside the workspace (avoids Cursor sandbox permission issues) and out of git:
-
-```bash
-mkdir -p .arize-tmp-traces
-grep -qxF '.arize-tmp-traces/' .gitignore 2>/dev/null || echo '.arize-tmp-traces/' >> .gitignore
-```
-
-Always pass `--output-dir .arize-tmp-traces` on every `ax experiments export` command.
+Prefer asking the user over searching or iterating through projects and API keys.
+If you get a `401 Unauthorized`, tell the user their API key may not have access to
+that space and ask them to verify.
 
 ## List Experiments: `ax experiments list`
 
@@ -91,7 +85,7 @@ ax experiments list -o json
 | `--dataset-id` | string | none | Filter by dataset |
 | `--limit, -n` | int | 15 | Max results (1-100) |
 | `--cursor` | string | none | Pagination cursor from previous response |
-| `-o, --output` | string | table | Output format: table, json, or csv. **Always use `-o json`** when saving to a file. Do NOT use parquet -- it fails on nullable columns. |
+| `-o, --output` | string | table | Output format: table, json, csv, parquet, or file path |
 | `-p, --profile` | string | default | Configuration profile |
 
 ## Get Experiment: `ax experiments get`
@@ -125,12 +119,14 @@ ax experiments get EXPERIMENT_ID -o json
 
 ## Export Experiment: `ax experiments export`
 
-Download all runs to a file. Uses Arrow Flight for efficient bulk transfer.
+Download all runs to a file. By default uses the REST API; pass `--all` to use Arrow Flight for bulk transfer.
 
 ```bash
-ax experiments export EXPERIMENT_ID --output-dir .arize-tmp-traces
-# -> .arize-tmp-traces/experiment_abc123_20260305_141500/runs.json
+ax experiments export EXPERIMENT_ID
+# -> experiment_abc123_20260305_141500/runs.json
 
+ax experiments export EXPERIMENT_ID --all
+ax experiments export EXPERIMENT_ID --output-dir ./results
 ax experiments export EXPERIMENT_ID --stdout
 ax experiments export EXPERIMENT_ID --stdout | jq '.[0]'
 ```
@@ -140,9 +136,17 @@ ax experiments export EXPERIMENT_ID --stdout | jq '.[0]'
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
 | `EXPERIMENT_ID` | string | required | Positional argument |
-| `--output-dir` | string | `.` | Output directory (always pass `.arize-tmp-traces`) |
+| `--all` | bool | false | Use Arrow Flight for bulk export (see below) |
+| `--output-dir` | string | `.` | Output directory |
 | `--stdout` | bool | false | Print JSON to stdout instead of file |
 | `-p, --profile` | string | default | Configuration profile |
+
+### REST vs Flight (`--all`)
+
+- **REST** (default): Lower friction -- no Arrow/Flight dependency, standard HTTPS ports, works through any corporate proxy or firewall. Limited to 500 runs per page.
+- **Flight** (`--all`): Required for experiments with more than 500 runs. Uses gRPC+TLS on a separate host/port (`flight.arize.com:443`) which some corporate networks may block.
+
+**Agent auto-escalation rule:** If a REST export returns exactly 500 runs, the result is likely truncated. Re-run with `--all` to get the full dataset.
 
 Output is a JSON array of run objects:
 
@@ -248,7 +252,7 @@ At least one of `label`, `score`, or `explanation` should be present per evaluat
    ```
 2. Export the dataset examples:
    ```bash
-   ax datasets export DATASET_ID --output-dir .arize-tmp-traces
+   ax datasets export DATASET_ID
    ```
 3. Process each example through your system, collecting outputs and evaluations
 4. Build a runs file (JSON array) with `example_id`, `output`, and optional `evaluations`:
@@ -268,27 +272,27 @@ At least one of `label`, `score`, or `explanation` should be present per evaluat
 
 1. Export both experiments:
    ```bash
-   ax experiments export EXPERIMENT_ID_A --stdout > .arize-tmp-traces/a.json
-   ax experiments export EXPERIMENT_ID_B --stdout > .arize-tmp-traces/b.json
+   ax experiments export EXPERIMENT_ID_A --stdout > a.json
+   ax experiments export EXPERIMENT_ID_B --stdout > b.json
    ```
 2. Compare evaluation scores by `example_id`:
    ```bash
    # Average correctness score for experiment A
-   jq '[.[] | .evaluations.correctness.score] | add / length' .arize-tmp-traces/a.json
+   jq '[.[] | .evaluations.correctness.score] | add / length' a.json
 
    # Same for experiment B
-   jq '[.[] | .evaluations.correctness.score] | add / length' .arize-tmp-traces/b.json
+   jq '[.[] | .evaluations.correctness.score] | add / length' b.json
    ```
 3. Find examples where results differ:
    ```bash
-   jq -s '.[0] as $a | .[1][] | {example_id, b_score: .evaluations.correctness.score, a_score: ($a[] | select(.example_id == .example_id) | .evaluations.correctness.score)}' .arize-tmp-traces/a.json .arize-tmp-traces/b.json
+   jq -s '.[0] as $a | .[1][] | {example_id, b_score: .evaluations.correctness.score, a_score: ($a[] | select(.example_id == .example_id) | .evaluations.correctness.score)}' a.json b.json
    ```
 
 ### Download experiment results for analysis
 
 1. `ax experiments list --dataset-id DATASET_ID` -- find experiments
-2. `ax experiments export EXPERIMENT_ID --output-dir .arize-tmp-traces` -- download to file
-3. Parse: `jq '.[] | {example_id, score: .evaluations.correctness.score}' .arize-tmp-traces/experiment_*/runs.json`
+2. `ax experiments export EXPERIMENT_ID` -- download to file
+3. Parse: `jq '.[] | {example_id, score: .evaluations.correctness.score}' experiment_*/runs.json`
 
 ### Pipe export to other tools
 
@@ -311,7 +315,8 @@ ax experiments export EXPERIMENT_ID --stdout | jq -r '.[] | [.example_id, .outpu
 | Problem | Solution |
 |---------|----------|
 | `ax: command not found` | Check `~/.local/bin/ax`; if missing: `uv tool install arize-ax-cli` (needs `required_permissions: ["all"]`) |
-| `No profile found` | Follow "Resolve credentials" in Prerequisites to auto-discover or prompt for the API key |
+| `401 Unauthorized` | API key may not have access to this space. Verify the key and space ID are correct. Keys are scoped per space -- get the right one from https://app.arize.com/admin > API Keys. |
+| `No profile found` | Run `ax profiles show --expand` to check; set `ARIZE_API_KEY` env var or write `~/.arize/config.toml` |
 | `Experiment not found` | Verify experiment ID with `ax experiments list` |
 | `Invalid runs file` | Each run must have `example_id` and `output` fields |
 | `example_id mismatch` | Ensure `example_id` values match IDs from the dataset (export dataset to verify) |

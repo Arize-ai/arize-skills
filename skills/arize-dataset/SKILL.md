@@ -67,17 +67,6 @@ Prefer asking the user over searching or iterating through projects and API keys
 If you get a `401 Unauthorized`, tell the user their API key may not have access to
 that space and ask them to verify.
 
-### Output directory
-
-All export commands should write to `.arize-tmp-traces/` to keep output inside the workspace (avoids Cursor sandbox permission issues) and out of git:
-
-```bash
-mkdir -p .arize-tmp-traces
-grep -qxF '.arize-tmp-traces/' .gitignore 2>/dev/null || echo '.arize-tmp-traces/' >> .gitignore
-```
-
-Always pass `--output-dir .arize-tmp-traces` on every `ax datasets export` command.
-
 ## List Datasets: `ax datasets list`
 
 Browse datasets in a space. Output goes to stdout.
@@ -96,7 +85,7 @@ ax datasets list -o json
 | `--space-id` | string | from profile | Filter by space |
 | `--limit, -n` | int | 15 | Max results (1-100) |
 | `--cursor` | string | none | Pagination cursor from previous response |
-| `-o, --output` | string | table | Output format: table, json, or csv. **Always use `-o json`** when saving to a file. Do NOT use parquet -- it fails on nullable columns. |
+| `-o, --output` | string | table | Output format: table, json, csv, parquet, or file path |
 | `-p, --profile` | string | default | Configuration profile |
 
 ## Get Dataset: `ax datasets get`
@@ -129,13 +118,15 @@ ax datasets get DATASET_ID -o json
 
 ## Export Dataset: `ax datasets export`
 
-Download all examples to a file. Uses Arrow Flight for efficient bulk transfer.
+Download all examples to a file. By default uses the REST API; pass `--all` to use Arrow Flight for bulk transfer.
 
 ```bash
-ax datasets export DATASET_ID --output-dir .arize-tmp-traces
-# -> .arize-tmp-traces/dataset_abc123_20260305_141500/examples.json
+ax datasets export DATASET_ID
+# -> dataset_abc123_20260305_141500/examples.json
 
-ax datasets export DATASET_ID --version-id VERSION_ID --output-dir .arize-tmp-traces
+ax datasets export DATASET_ID --all
+ax datasets export DATASET_ID --version-id VERSION_ID
+ax datasets export DATASET_ID --output-dir ./data
 ax datasets export DATASET_ID --stdout
 ax datasets export DATASET_ID --stdout | jq '.[0]'
 ```
@@ -146,9 +137,17 @@ ax datasets export DATASET_ID --stdout | jq '.[0]'
 |------|------|---------|-------------|
 | `DATASET_ID` | string | required | Positional argument |
 | `--version-id` | string | latest | Export a specific dataset version |
-| `--output-dir` | string | `.` | Output directory (always pass `.arize-tmp-traces`) |
+| `--all` | bool | false | Use Arrow Flight for bulk export (see below) |
+| `--output-dir` | string | `.` | Output directory |
 | `--stdout` | bool | false | Print JSON to stdout instead of file |
 | `-p, --profile` | string | default | Configuration profile |
+
+### REST vs Flight (`--all`)
+
+- **REST** (default): Lower friction -- no Arrow/Flight dependency, standard HTTPS ports, works through any corporate proxy or firewall. Limited to 500 examples per page.
+- **Flight** (`--all`): Required for datasets with more than 500 examples. Uses gRPC+TLS on a separate host/port (`flight.arize.com:443`) which some corporate networks may block.
+
+**Agent auto-escalation rule:** If a REST export returns exactly 500 examples, the result is likely truncated. Re-run with `--all` to get the full dataset.
 
 Output is a JSON array of example objects. Each example has system fields (`id`, `created_at`, `updated_at`) plus all user-defined fields:
 
@@ -287,8 +286,8 @@ ax datasets append DATASET_ID --file additional_examples.csv
 ### Download dataset for offline analysis
 
 1. `ax datasets list` -- find the dataset
-2. `ax datasets export DATASET_ID --output-dir .arize-tmp-traces` -- download to file
-3. Parse the JSON: `jq '.[] | .question' .arize-tmp-traces/dataset_*/examples.json`
+2. `ax datasets export DATASET_ID` -- download to file
+3. Parse the JSON: `jq '.[] | .question' dataset_*/examples.json`
 
 ### Export a specific version
 
@@ -297,12 +296,12 @@ ax datasets append DATASET_ID --file additional_examples.csv
 ax datasets get DATASET_ID -o json | jq '.versions'
 
 # Export that version
-ax datasets export DATASET_ID --version-id VERSION_ID --output-dir .arize-tmp-traces
+ax datasets export DATASET_ID --version-id VERSION_ID
 ```
 
 ### Iterate on a dataset
 
-1. Export current version: `ax datasets export DATASET_ID --output-dir .arize-tmp-traces`
+1. Export current version: `ax datasets export DATASET_ID`
 2. Modify the examples locally
 3. Append new rows: `ax datasets append DATASET_ID --file new_rows.csv`
 4. Or create a fresh version: `ax datasets create --name "eval-set-v2" --space-id SPACE_ID --file updated_data.json`

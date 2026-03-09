@@ -124,10 +124,41 @@ ax spans export --session-id SESSION_ID --project PROJECT_NAME --space-id SPACE_
 | `--end-time` | string | no | Override end (ISO 8601) |
 | `--output-dir` | string | no | Output directory (default: `.arize-tmp-traces`; ensure it is gitignored — see above) |
 | `--stdout` | bool | no | Print JSON to stdout instead of file |
+| `--all` | bool | no | Use Arrow Flight for bulk export (see below) |
 
 Exactly one of `--trace-id`, `--span-id`, `--session-id` is required.
 
 Output is a JSON array of span objects. File naming: `{type}_{id}_{timestamp}/spans.json`.
+
+### Bulk export with `--all` (Arrow Flight)
+
+By default, `ax spans export` uses the REST API which is limited to 500 spans per page and capped by `--limit`. Pass `--all` to switch to Arrow Flight for streaming bulk export with no span limit.
+
+```bash
+ax spans export PROJECT_NAME --space-id SPACE_ID --filter "status_code = 'ERROR'" --all --output-dir .arize-tmp-traces
+```
+
+**REST vs Flight trade-offs:**
+- **REST** (default): Lower friction -- no Arrow/Flight dependency needed, uses standard HTTPS ports, works through any corporate proxy or firewall. Limited to 500 spans per page.
+- **Flight** (`--all`): Required for bulk export beyond 500 spans. Uses gRPC+TLS on a separate host/port which some corporate networks may block.
+
+**When to use `--all`:**
+- Exporting more than 500 spans
+- Downloading full traces with many child spans
+- Large time-range exports
+
+**Agent auto-escalation rule:** If a REST export returns exactly 500 spans, the result is likely truncated. Re-run the command with `--all` to get the full dataset.
+
+**Requirements for `--all`:**
+- `--space-id` is required (Flight uses `space_id` + `project_name`, not `project_id`)
+- `--limit` is ignored when `--all` is set
+
+**Networking notes for `--all`:**
+Arrow Flight connects to `flight.arize.com:443` via gRPC+TLS -- this is a different host from the REST API (`api.arize.com`). On internal or private networks, the Flight endpoint may use a different host/port. Configure via:
+- ax profile: `flight_host`, `flight_port`, `flight_scheme`
+- Environment variables: `ARIZE_FLIGHT_HOST`, `ARIZE_FLIGHT_PORT`, `ARIZE_FLIGHT_SCHEME`
+
+The `--all` flag is also available on `ax datasets export` and `ax experiments export` with the same behavior (REST by default, Flight with `--all`).
 
 ## Browse Traces: `ax traces list`
 
