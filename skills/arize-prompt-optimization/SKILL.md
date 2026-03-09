@@ -46,59 +46,26 @@ These columns carry the feedback data used for optimization:
 
 ## Prerequisites
 
-### Install ax
+Three things are needed: `ax` CLI, an API key (env var or profile), and a project. A space ID is also needed when using project names.
 
-Check for `ax` on PATH, then fall back to the common `uv tool` install location:
-
-```bash
-command -v ax || test -x ~/.local/bin/ax && export PATH="$HOME/.local/bin:$PATH"
-```
-
-If neither exists, install it (**requires `required_permissions: ["all"]`** in Cursor sandbox):
+Run a **single** shell call to check everything at once (use `required_permissions: ["all"]`):
 
 ```bash
-uv tool install arize-ax-cli   # preferred
-pipx install arize-ax-cli      # alternative
+export PATH="$HOME/.local/bin:$PATH" && ax --version && echo "--- env ---" && echo "ARIZE_API_KEY: ${ARIZE_API_KEY:-(not set)}" && echo "ARIZE_SPACE_ID: ${ARIZE_SPACE_ID:-(not set)}" && echo "ARIZE_DEFAULT_PROJECT: ${ARIZE_DEFAULT_PROJECT:-(not set)}" && echo "--- profiles ---" && ax profiles show 2>&1
 ```
 
-### Configure profile
+**Read the output and proceed immediately** if either the env var or the profile has an API key. Only ask the user if **both** are missing. Resolve failures:
 
-If no profile exists (check: `ax profiles list`) **and** `ARIZE_API_KEY` is set, create one non-interactively (`ax profiles create` is interactive and cannot be driven by an agent):
-
-```bash
-mkdir -p ~/.arize && cat > ~/.arize/config.toml << 'EOF'
-[profile]
-name = "default"
-
-[auth]
-api_key = "${ARIZE_API_KEY}"
-EOF
-```
-
-If `ARIZE_API_KEY` is not set, ask the user for it.
+- `ax --version` fails → install: `uv tool install arize-ax-cli`
+- No API key in env **and** no profile → **AskQuestion**: "Arize API key (https://app.arize.com/admin > API Keys)"
+- Space ID unknown → **AskQuestion**, or run `ax projects list -o json --limit 100` and search for a match
+- Project unclear → ask, or run `ax projects list -o json --limit 100` and present as selectable options
 
 ### Default Project
 
-Before running any command, check for a default project:
-
-```bash
-echo $ARIZE_DEFAULT_PROJECT
-```
-
-If `ARIZE_DEFAULT_PROJECT` is set, use its value as the project for **all** commands in this session. Do NOT ask the user for a project ID -- just use it. Continue using this default until the user explicitly provides a different project.
+If `ARIZE_DEFAULT_PROJECT` is set (visible in the output above), use its value as the project for **all** commands in this session. Do NOT ask the user for a project ID -- just use it. Continue using this default until the user explicitly provides a different project.
 
 If `ARIZE_DEFAULT_PROJECT` is not set and no project is provided, ask the user for one.
-
-### Output directory
-
-All export commands should write to `.arize-tmp-traces/` to keep output inside the workspace (avoids Cursor sandbox permission issues) and out of git:
-
-```bash
-mkdir -p .arize-tmp-traces
-grep -qxF '.arize-tmp-traces/' .gitignore 2>/dev/null || echo '.arize-tmp-traces/' >> .gitignore
-```
-
-Always pass `--output-dir .arize-tmp-traces` on every `ax spans export`, `ax datasets export`, or `ax experiments export` command.
 
 ## Phase 1: Extract the Current Prompt
 
@@ -119,10 +86,10 @@ ax spans list PROJECT_ID --filter "name = 'ChatCompletion'" --limit 10
 
 ```bash
 # Export all spans in a trace
-ax spans export --trace-id TRACE_ID --project PROJECT_ID --output-dir .arize-tmp-traces
+ax spans export --trace-id TRACE_ID --project PROJECT_ID
 
 # Export a single span
-ax spans export --span-id SPAN_ID --project PROJECT_ID --output-dir .arize-tmp-traces
+ax spans export --span-id SPAN_ID --project PROJECT_ID
 ```
 
 ### Extract prompts from exported JSON
@@ -132,16 +99,16 @@ ax spans export --span-id SPAN_ID --project PROJECT_ID --output-dir .arize-tmp-t
 jq '.[0] | {
   messages: .attributes.llm.input_messages,
   model: .attributes.llm.model_name
-}' .arize-tmp-traces/trace_*/spans.json
+}' trace_*/spans.json
 
 # Extract the system prompt specifically
-jq '[.[] | select(.attributes.llm.input_messages.roles[]? == "system")] | .[0].attributes.llm.input_messages' .arize-tmp-traces/trace_*/spans.json
+jq '[.[] | select(.attributes.llm.input_messages.roles[]? == "system")] | .[0].attributes.llm.input_messages' trace_*/spans.json
 
 # Extract prompt template and variables
-jq '.[0].attributes.llm.prompt_template' .arize-tmp-traces/trace_*/spans.json
+jq '.[0].attributes.llm.prompt_template' trace_*/spans.json
 
 # Extract from input.value (fallback for non-structured prompts)
-jq '.[0].attributes.input.value' .arize-tmp-traces/trace_*/spans.json
+jq '.[0].attributes.input.value' trace_*/spans.json
 ```
 
 ### Reconstruct the prompt as messages
@@ -178,19 +145,19 @@ ax spans list PROJECT_ID \
   --limit 20
 
 # Export error traces for detailed inspection
-ax spans export --trace-id TRACE_ID --project PROJECT_ID --output-dir .arize-tmp-traces
+ax spans export --trace-id TRACE_ID --project PROJECT_ID
 ```
 
 ### From datasets and experiments
 
 ```bash
 # Export a dataset (ground truth examples)
-ax datasets export DATASET_ID --output-dir .arize-tmp-traces
-# -> .arize-tmp-traces/dataset_*/examples.json
+ax datasets export DATASET_ID
+# -> dataset_*/examples.json
 
 # Export experiment results (what the LLM produced)
-ax experiments export EXPERIMENT_ID --output-dir .arize-tmp-traces
-# -> .arize-tmp-traces/experiment_*/runs.json
+ax experiments export EXPERIMENT_ID
+# -> experiment_*/runs.json
 ```
 
 ### Merge dataset + experiment for analysis
@@ -199,8 +166,8 @@ Join the two files by `example_id` to see inputs alongside outputs and evaluatio
 
 ```bash
 # Count examples and runs
-jq 'length' .arize-tmp-traces/dataset_*/examples.json
-jq 'length' .arize-tmp-traces/experiment_*/runs.json
+jq 'length' dataset_*/examples.json
+jq 'length' experiment_*/runs.json
 
 # View a single joined record
 jq -s '
@@ -212,10 +179,10 @@ jq -s '
     output: $run.output,
     evaluations: $run.evaluations
   }
-' .arize-tmp-traces/dataset_*/examples.json .arize-tmp-traces/experiment_*/runs.json
+' dataset_*/examples.json experiment_*/runs.json
 
 # Find failed examples (where eval score < threshold)
-jq '[.[] | select(.evaluations.correctness.score < 0.5)]' .arize-tmp-traces/experiment_*/runs.json
+jq '[.[] | select(.evaluations.correctness.score < 0.5)]' experiment_*/runs.json
 ```
 
 ### Identify what to optimize
@@ -325,7 +292,7 @@ jq -s '
       eval_explanation: $run.evaluations.correctness.explanation
     }
   ]
-' .arize-tmp-traces/dataset_*/examples.json .arize-tmp-traces/experiment_*/runs.json
+' dataset_*/examples.json experiment_*/runs.json
 
 # From exported spans: extract input/output pairs with annotations
 jq '[.[] | select(.attributes.openinference.span.kind == "LLM") | {
@@ -333,7 +300,7 @@ jq '[.[] | select(.attributes.openinference.span.kind == "LLM") | {
   output: .attributes.output.value,
   status: .status_code,
   model: .attributes.llm.model_name
-}]' .arize-tmp-traces/trace_*/spans.json
+}]' trace_*/spans.json
 ```
 
 ### Applying the revised prompt
@@ -352,7 +319,7 @@ After the LLM returns the revised messages array:
 ```
 1. Extract prompt    -> Phase 1 (once)
 2. Run experiment    -> ax experiments create ...
-3. Export results    -> ax experiments export EXPERIMENT_ID --output-dir .arize-tmp-traces
+3. Export results    -> ax experiments export EXPERIMENT_ID
 4. Analyze failures  -> jq to find low scores
 5. Run meta-prompt   -> Phase 3 with new failure data
 6. Apply revised prompt
@@ -364,10 +331,10 @@ After the LLM returns the revised messages array:
 ```bash
 # Compare scores across experiments
 # Experiment A (baseline)
-jq '[.[] | .evaluations.correctness.score] | add / length' .arize-tmp-traces/experiment_a/runs.json
+jq '[.[] | .evaluations.correctness.score] | add / length' experiment_a/runs.json
 
 # Experiment B (optimized)
-jq '[.[] | .evaluations.correctness.score] | add / length' .arize-tmp-traces/experiment_b/runs.json
+jq '[.[] | .evaluations.correctness.score] | add / length' experiment_b/runs.json
 
 # Find examples that flipped from fail to pass
 jq -s '
@@ -375,13 +342,13 @@ jq -s '
   [.[1][] | select(.evaluations.correctness.label == "correct") |
     select(.example_id as $id | $fails | any(.example_id == $id))
   ] | length
-' .arize-tmp-traces/experiment_a/runs.json .arize-tmp-traces/experiment_b/runs.json
+' experiment_a/runs.json experiment_b/runs.json
 ```
 
 ### A/B compare two prompts
 
 1. Create two experiments against the same dataset, each using a different prompt version
-2. Export both: `ax experiments export EXP_A --output-dir .arize-tmp-traces` and `ax experiments export EXP_B --output-dir .arize-tmp-traces`
+2. Export both: `ax experiments export EXP_A` and `ax experiments export EXP_B`
 3. Compare average scores, failure rates, and specific example flips
 4. Check for regressions -- examples that passed with prompt A but fail with prompt B
 
@@ -421,7 +388,7 @@ When optimizing prompts that use template variables:
    ```
 2. Export the trace:
    ```bash
-   ax spans export --trace-id TRACE_ID --project PROJECT_ID --output-dir .arize-tmp-traces
+   ax spans export --trace-id TRACE_ID --project PROJECT_ID
    ```
 3. Extract the prompt from the LLM span:
    ```bash
@@ -430,7 +397,7 @@ When optimizing prompts that use template variables:
      template: .attributes.llm.prompt_template,
      output: .attributes.output.value,
      error: .attributes.exception.message
-   }' .arize-tmp-traces/trace_*/spans.json
+   }' trace_*/spans.json
    ```
 4. Identify what failed from the error message or output
 5. Fill in the optimization meta-prompt (Phase 3) with the prompt and error context
@@ -445,8 +412,8 @@ When optimizing prompts that use template variables:
    ```
 2. Export both:
    ```bash
-   ax datasets export DATASET_ID --output-dir .arize-tmp-traces
-   ax experiments export EXPERIMENT_ID --output-dir .arize-tmp-traces
+   ax datasets export DATASET_ID
+   ax experiments export EXPERIMENT_ID
    ```
 3. Prepare the joined data for the meta-prompt
 4. Run the optimization meta-prompt
@@ -474,8 +441,8 @@ When optimizing prompts that use template variables:
    ```
 2. Export and inspect the retriever + LLM spans together:
    ```bash
-   ax spans export --trace-id TRACE_ID --project PROJECT_ID --output-dir .arize-tmp-traces
-   jq '[.[] | {kind: .attributes.openinference.span.kind, name, input: .attributes.input.value, output: .attributes.output.value}]' .arize-tmp-traces/trace_*/spans.json
+   ax spans export --trace-id TRACE_ID --project PROJECT_ID
+   jq '[.[] | {kind: .attributes.openinference.span.kind, name, input: .attributes.input.value, output: .attributes.output.value}]' trace_*/spans.json
    ```
 3. Check if the retrieved context actually contained the answer
 4. Add grounding instructions to the system prompt: "Only use information from the provided context. If the answer is not in the context, say so."
@@ -492,4 +459,4 @@ When optimizing prompts that use template variables:
 | Optimization makes things worse | Check for overfitting -- the meta-prompt may have memorized test data. Ensure few-shot examples are synthetic |
 | No eval/annotation columns | Run evaluations first (via Arize UI or SDK), then re-export |
 | Experiment output column not found | The column name is `{experiment_name}.output` -- check exact experiment name via `ax experiments get` |
-| `jq` errors on span JSON | Ensure you're targeting the correct file path (e.g., `.arize-tmp-traces/trace_*/spans.json`) |
+| `jq` errors on span JSON | Ensure you're targeting the correct file path (e.g., `trace_*/spans.json`) |

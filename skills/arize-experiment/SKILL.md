@@ -16,40 +16,20 @@ The typical flow: export a dataset → process each example → collect outputs 
 
 ## Prerequisites
 
-### Install ax
+Three things are needed: `ax` CLI, an API key (env var or profile), and a space ID. A project name is also needed but usually comes from the user's message.
 
-Check for `ax` on PATH, then fall back to the common `uv tool` install location:
-
-```bash
-command -v ax || test -x ~/.local/bin/ax && export PATH="$HOME/.local/bin:$PATH"
-```
-
-If neither exists, install it (**requires `required_permissions: ["all"]`** in Cursor sandbox):
+Run a **single** shell call to check everything at once (use `required_permissions: ["all"]`):
 
 ```bash
-uv tool install arize-ax-cli   # preferred
-pipx install arize-ax-cli      # alternative
+export PATH="$HOME/.local/bin:$PATH" && ax --version && echo "--- env ---" && echo "ARIZE_API_KEY: ${ARIZE_API_KEY:-(not set)}" && echo "ARIZE_SPACE_ID: ${ARIZE_SPACE_ID:-(not set)}" && echo "--- profiles ---" && ax profiles show 2>&1
 ```
 
-### API key (required)
+**Read the output and proceed immediately** if either the env var or the profile has an API key. Only ask the user if **both** are missing. Resolve failures:
 
-Resolve in this order, stop at first success:
-
-1. `ax profiles show --expand 2>&1` -- if it prints auth details, you're good.
-2. `ARIZE_API_KEY` env var is set.
-3. If missing, **AskQuestion**: "I need your Arize API key. Find it at https://app.arize.com/admin > API Keys."
-
-Once resolved, write to config so it persists:
-
-```bash
-mkdir -p ~/.arize && cat > ~/.arize/config.toml << EOF
-[profile]
-name = "default"
-
-[auth]
-api_key = "$ARIZE_API_KEY"
-EOF
-```
+- `ax --version` fails → install: `uv tool install arize-ax-cli`
+- No API key in env **and** no profile → **AskQuestion**: "Arize API key (https://app.arize.com/admin > API Keys)"
+- Space ID unknown → **AskQuestion**, or run `ax projects list -o json --limit 100` and search for a match
+- Project unclear → ask, or run `ax projects list -o json --limit 100` and present as selectable options
 
 ### Space ID and Project
 

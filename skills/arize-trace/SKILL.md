@@ -13,76 +13,28 @@ description: "INVOKE THIS SKILL when downloading or exporting Arize traces and s
 
 Use `ax spans export` to download trace data. This is the only supported command for retrieving spans.
 
-**Default output directory:** Always use `--output-dir .arize-tmp-traces` on every `ax spans export` call. Before the first export, ensure the directory exists and is gitignored:
+**Exploratory export rule:** When exporting spans or traces **without** a specific `--trace-id`, `--span-id`, or `--session-id` (i.e., browsing/exploring a project), always start with `-n 50` to pull a small sample first. Summarize what you find, then pull more data only if the user asks or the task requires it. This avoids slow queries and overwhelming output on large projects.
 
-```bash
-mkdir -p .arize-tmp-traces
-grep -qxF '.arize-tmp-traces/' .gitignore 2>/dev/null || echo '.arize-tmp-traces/' >> .gitignore
-```
+**Default output directory:** Always use `--output-dir .arize-tmp-traces` on every `ax spans export` call. The CLI automatically creates the directory and adds it to `.gitignore`.
 
 ## Prerequisites
 
-### Install ax
+Three things are needed: `ax` CLI, an API key (env var or profile), and a space ID. A project name is also needed but usually comes from the user's message.
 
-Check for `ax` on PATH, then fall back to the common `uv tool` install location:
-
-```bash
-command -v ax || test -x ~/.local/bin/ax && export PATH="$HOME/.local/bin:$PATH"
-```
-
-If neither exists, install it (**requires `required_permissions: ["all"]`** in Cursor sandbox):
+Run a **single** shell call to check everything at once (use `required_permissions: ["all"]`):
 
 ```bash
-uv tool install arize-ax-cli   # preferred
-pipx install arize-ax-cli      # alternative
+export PATH="$HOME/.local/bin:$PATH" && ax --version && echo "--- env ---" && echo "ARIZE_API_KEY: ${ARIZE_API_KEY:-(not set)}" && echo "ARIZE_SPACE_ID: ${ARIZE_SPACE_ID:-(not set)}" && echo "--- profiles ---" && ax profiles show 2>&1
 ```
 
-### Resolve credentials and project
+**Read the output and proceed immediately** if either the env var or the profile has an API key. Only ask the user if **both** are missing. Resolve failures:
 
-**Credentials** -- resolve in this order, stop at the first success:
+- `ax --version` fails → install: `uv tool install arize-ax-cli`
+- No API key in env **and** no profile → **AskQuestion**: "Arize API key (https://app.arize.com/admin > API Keys)"
+- Space ID unknown → **AskQuestion**, or run `ax projects list -o json --limit 100 --space-id $ARIZE_SPACE_ID` and present as selectable options
+- Project unclear → ask, or run `ax projects list -o json --limit 100` and search for a match
 
-1. `ax profiles show --expand 2>&1` -- if it prints auth details without error, you're good.
-2. Source a workspace `.env` that has the key, then retry:
-   ```bash
-   for f in scripts/playground-tests/.env .cursor/skills/alyx-traces/.env .agents/skills/arize-cli/.env; do
-     [ -f "$f" ] && grep -q ARIZE_API_KEY "$f" && source "$f" && export ARIZE_API_KEY && break
-   done
-   ```
-3. If still missing, **AskQuestion**: "I need your Arize API key (find it at https://app.arize.com/admin > API Keys)."
-
-Once resolved, write the literal value to config so it works in any shell:
-
-```bash
-mkdir -p ~/.arize && cat > ~/.arize/config.toml << EOF
-[profile]
-name = "default"
-
-[auth]
-api_key = "$ARIZE_API_KEY"
-EOF
-```
-
-**Space ID** -- required when using a project name (not a base64 project ID) with `--project`:
-
-1. `$ARIZE_SPACE_ID` env var -- use it silently if set.
-2. Space ID mentioned in the user's message.
-3. Source from workspace `.env` files:
-   ```bash
-   for f in scripts/playground-tests/.env .cursor/skills/alyx-traces/.env .agents/skills/arize-cli/.env; do
-     [ -f "$f" ] && grep -q ARIZE_SPACE_ID "$f" && source "$f" && export ARIZE_SPACE_ID && break
-   done
-   ```
-4. If still missing, **AskQuestion**: "I need your Arize Space ID (find it at https://app.arize.com/admin > Space Settings, or in any Arize URL: `/spaces/{SPACE_ID}/...`)."
-
-Pass it via `--space-id SPACE_ID` on every `ax` command that uses `--project` with a name.
-
-**Project** -- resolve in this order:
-
-1. `$ARIZE_DEFAULT_PROJECT` env var -- use it silently if set.
-2. Project name/ID mentioned in the user's message.
-3. Otherwise run `ax projects list -o json --limit 30` and **AskQuestion** with the project names as selectable options.
-
-**IMPORTANT:** When using `--project` with a human-readable project name (e.g., `copilot-prod`), you **must** also pass `--space-id`. When using a base64-encoded project ID (e.g., `TW9kZWw6...`), `--space-id` is not needed.
+**IMPORTANT:** `--space-id` is required when using a human-readable project name with `--project`. It is not needed when using a base64-encoded project ID.
 
 ## Export Spans: `ax spans export`
 
@@ -147,7 +99,7 @@ ax spans export PROJECT_NAME --space-id SPACE_ID --filter "status_code = 'ERROR'
 - Downloading full traces with many child spans
 - Large time-range exports
 
-**Agent auto-escalation rule:** If a REST export returns exactly 500 spans, the result is likely truncated. Re-run the command with `--all` to get the full dataset.
+**Agent auto-escalation rule:** If a REST export returns exactly the number of spans requested by `-n` (or 500 if no limit was set), the result is likely truncated. Increase `-n` or re-run with `--all` to get the full dataset — but only when the user asks or the task requires more data.
 
 **Requirements for `--all`:**
 - `--space-id` is required (Flight uses `space_id` + `project_name`, not `project_id`)
@@ -168,14 +120,14 @@ Export full traces -- all spans belonging to traces that match a filter. Uses a 
 2. **Phase 2:** Extract unique trace IDs, then fetch every span for those traces
 
 ```bash
+# Explore recent traces (start small with -n 50, pull more if needed)
+ax traces export PROJECT_NAME --space-id SPACE_ID -n 50 --output-dir .arize-tmp-traces
+
 # Export traces with error spans (REST, up to 500 spans in phase 1)
 ax traces export PROJECT_NAME --space-id SPACE_ID --filter "status_code = 'ERROR'" --stdout
 
 # Export all traces matching a filter via Flight (no limit)
 ax traces export PROJECT_NAME --space-id SPACE_ID --filter "status_code = 'ERROR'" --all
-
-# Export recent traces (no filter, gets first 500 spans then all their traces)
-ax traces export PROJECT_NAME --space-id SPACE_ID --output-dir .arize-tmp-traces
 ```
 
 ### Flags
@@ -198,29 +150,6 @@ ax traces export PROJECT_NAME --space-id SPACE_ID --output-dir .arize-tmp-traces
 
 - `ax spans export` exports individual spans matching a filter
 - `ax traces export` exports complete traces -- it finds spans matching the filter, then pulls ALL spans for those traces (including siblings and children that may not match the filter)
-
-## Browse Traces: `ax traces list`
-
-Browse root spans (one row per trace). Output goes to stdout.
-
-```bash
-ax traces list PROJECT_NAME --space-id SPACE_ID --limit 15
-ax traces list PROJECT_NAME --space-id SPACE_ID --filter "status_code = 'ERROR'" --limit 10
-ax traces list PROJECT_NAME --space-id SPACE_ID --start-time 2026-03-01T00:00:00Z --limit 20
-```
-
-### Flags
-
-| Flag | Type | Default | Description |
-|------|------|---------|-------------|
-| `PROJECT` | string | required (or `$ARIZE_DEFAULT_PROJECT`) | Positional argument (name or base64 ID) |
-| `--space-id` | string | none | Space ID; required when PROJECT is a name |
-| `--start-time` | string | 1 week ago | ISO 8601 |
-| `--end-time` | string | now | ISO 8601 |
-| `--filter` | string | none | SQL-like filter expression |
-| `--limit` | int | 15 | Max results |
-| `--cursor` | string | none | Pagination cursor |
-| `-o, --output` | string | table | Output format: table, json, or csv |
 
 ## Filter Syntax Reference
 
@@ -272,11 +201,9 @@ event.attributes CONTAINS 'TimeoutError'
 
 ### Debug a failing trace
 
-1. `ax traces list PROJECT --space-id SPACE_ID --filter "status_code = 'ERROR'" --limit 5`
-2. Pick a trace_id from the results
-3. `ax spans export --trace-id TRACE_ID --project PROJECT --space-id SPACE_ID --output-dir .arize-tmp-traces`
-4. Read the output file, look for spans with `status_code: ERROR`
-5. Check `attributes.error.type` and `attributes.error.message` on error spans
+1. `ax traces export PROJECT --space-id SPACE_ID --filter "status_code = 'ERROR'" -n 50 --output-dir .arize-tmp-traces`
+2. Read the output file, look for spans with `status_code: ERROR`
+3. Check `attributes.error.type` and `attributes.error.message` on error spans
 
 ### Download a conversation session
 
@@ -420,6 +347,7 @@ ax spans export --trace-id TRACE_ID --project PROJECT --space-id SPACE_ID --outp
 | Problem | Solution |
 |---------|----------|
 | `ax: command not found` | Check `~/.local/bin/ax`; if missing: `uv tool install arize-ax-cli` (needs `required_permissions: ["all"]`) |
+| `No such command` on a subcommand that should exist | The installed `ax` is outdated. Reinstall from the local workspace: `uv tool install --force --reinstall /path/to/arize/sdk/python/arize-ax-cli` (needs `required_permissions: ["all"]`) |
 | `No profile found` | Follow "Resolve credentials" in Prerequisites to auto-discover or prompt for the API key |
 | `401 Unauthorized` with valid API key | You are likely using `--project` with a name (e.g., `copilot-prod`) without `--space-id`. Add `--space-id SPACE_ID` or use the base64 project ID instead |
 | `No spans found` | Expand `--days` (default 30), verify project ID |
