@@ -20,8 +20,14 @@ Three things are needed: `ax` CLI, an API key (env var or profile), and a space 
 
 Run a **single** shell call to check everything at once (use `required_permissions: ["all"]`):
 
+**macOS/Linux (bash):**
 ```bash
 export PATH="$HOME/.local/bin:$PATH" && ax --version && echo "--- env ---" && echo "ARIZE_API_KEY: ${ARIZE_API_KEY:-(not set)}" && echo "ARIZE_SPACE_ID: ${ARIZE_SPACE_ID:-(not set)}" && echo "--- profiles ---" && ax profiles show 2>&1
+```
+
+**Windows (PowerShell):**
+```powershell
+ax --version; Write-Host "--- env ---"; Write-Host "ARIZE_API_KEY: $env:ARIZE_API_KEY"; Write-Host "ARIZE_SPACE_ID: $env:ARIZE_SPACE_ID"; Write-Host "--- profiles ---"; ax profiles show 2>&1
 ```
 
 **Read the output and proceed immediately** if either the env var or the profile has an API key. Only ask the user if **both** are missing. Resolve failures:
@@ -333,7 +339,7 @@ At the **end of the session**, if the user manually provided any of the followin
 | Credential | Where it gets saved |
 |------------|---------------------|
 | API key | `ax` profile at `~/.arize/config.toml` |
-| Space ID | Shell config (`~/.zshrc` or `~/.bashrc`) as `export ARIZE_SPACE_ID="..."` |
+| Space ID | **macOS/Linux:** shell config (`~/.zshrc` or `~/.bashrc`) as `export ARIZE_SPACE_ID="..."`. **Windows:** user environment variable via `[System.Environment]::SetEnvironmentVariable('ARIZE_SPACE_ID', '...', 'User')` |
 
 **Skip this entirely if:**
 - The API key was already loaded from an existing profile or `ARIZE_API_KEY` env var
@@ -359,10 +365,20 @@ At the **end of the session**, if the user manually provided any of the followin
 
    Verify with: `ax profiles show`
 
-2. **Space ID** — Detect the user's shell config file (`~/.zshrc` for zsh, `~/.bashrc` for bash). Append:
+2. **Space ID** — Persist the space ID as an environment variable:
+
+   **macOS/Linux** — Detect the user's shell config file (`~/.zshrc` for zsh, `~/.bashrc` for bash). Append:
 
    ```bash
    export ARIZE_SPACE_ID="THE_SPACE_ID"
    ```
 
    Tell the user to run `source ~/.zshrc` (or restart their terminal) for it to take effect.
+
+   **Windows (PowerShell)** — Set a persistent user environment variable:
+
+   ```powershell
+   [System.Environment]::SetEnvironmentVariable('ARIZE_SPACE_ID', 'THE_SPACE_ID', 'User')
+   ```
+
+   Tell the user to restart their terminal for it to take effect.

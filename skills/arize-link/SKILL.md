@@ -70,7 +70,7 @@ Use these sources in priority order:
 2. **Exported span data**: If you have span data (e.g., from `ax spans export`), use the span's `start_time` field to calculate a range that covers the data:
    ```bash
    # Convert span start_time to epoch ms, then pad ±1 day
-   python3 -c "
+   python -c "
    from datetime import datetime, timedelta
    t = datetime.fromisoformat('2026-03-07T05:39:15.822147Z'.replace('Z','+00:00'))
    start = int((t - timedelta(days=1)).timestamp() * 1000)

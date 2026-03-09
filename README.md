@@ -9,7 +9,7 @@ Works with Cursor, Claude Code, Codex, Windsurf, and [40+ other agents](https://
 ### Option 1: npx (recommended)
 
 ```bash
-npx skills add Arize-ai/arize-skills --skill '*' --yes
+npx skills add Arize-ai/arize-skills --skill "*" --yes
 ```
 
 This auto-detects your agent (Cursor, Claude Code, Codex, etc.) and symlinks skills into place.
