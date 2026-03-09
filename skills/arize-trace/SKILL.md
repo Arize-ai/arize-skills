@@ -21,15 +21,37 @@ Use `ax spans export` to download trace data. This is the only supported command
 
 Three things are needed: `ax` CLI, an API key (env var or profile), and a space ID. A project name is also needed but usually comes from the user's message.
 
-Run a **single** shell call to check everything at once (use `required_permissions: ["all"]`):
+### Install ax
+
+Verify `ax` is installed and working before proceeding:
+
+1. Check if `ax` is on PATH: `command -v ax` (Unix) or `where ax` (Windows)
+2. If not found, check common install locations:
+   - macOS/Linux: `test -x ~/.local/bin/ax && export PATH="$HOME/.local/bin:$PATH"`
+   - Windows: check `%APPDATA%\Python\Scripts\ax.exe` or `%LOCALAPPDATA%\Programs\Python\Scripts\ax.exe`
+3. If still not found, install it (**requires `required_permissions: ["all"]`** in Cursor sandbox):
+   - Preferred: `uv tool install arize-ax-cli`
+   - Alternative: `pipx install arize-ax-cli`
+   - Fallback: `pip install arize-ax-cli`
+4. After install, if `ax` is not on PATH:
+   - macOS/Linux: `export PATH="$HOME/.local/bin:$PATH"`
+   - Windows (PowerShell): `$env:PATH = "$env:APPDATA\Python\Scripts;$env:PATH"`
+5. If `ax --version` fails with an SSL/certificate error:
+   - macOS: `export SSL_CERT_FILE=/etc/ssl/cert.pem`
+   - Linux: `export SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt`
+   - Windows (PowerShell): `$env:SSL_CERT_FILE = "C:\Program Files\Common Files\SSL\cert.pem"` (or use `python -c "import certifi; print(certifi.where())"` to find the cert bundle)
+6. `ax --version` must succeed before proceeding. If it doesn't, stop and ask the user for help.
+
+### Verify environment
+
+Run a quick check for credentials:
 
 ```bash
-export PATH="$HOME/.local/bin:$PATH" && ax --version && echo "--- env ---" && echo "ARIZE_API_KEY: ${ARIZE_API_KEY:-(not set)}" && echo "ARIZE_SPACE_ID: ${ARIZE_SPACE_ID:-(not set)}" && echo "--- profiles ---" && ax profiles show 2>&1
+ax --version && echo "--- env ---" && echo "ARIZE_API_KEY: ${ARIZE_API_KEY:-(not set)}" && echo "ARIZE_SPACE_ID: ${ARIZE_SPACE_ID:-(not set)}" && echo "--- profiles ---" && ax profiles show 2>&1
 ```
 
 **Read the output and proceed immediately** if either the env var or the profile has an API key. Only ask the user if **both** are missing. Resolve failures:
 
-- `ax --version` fails → install: `uv tool install arize-ax-cli`
 - No API key in env **and** no profile → **AskQuestion**: "Arize API key (https://app.arize.com/admin > API Keys)"
 - Space ID unknown → **AskQuestion**, or run `ax projects list -o json --limit 100 --space-id $ARIZE_SPACE_ID` and present as selectable options
 - Project unclear → ask, or run `ax projects list -o json --limit 100` and search for a match
@@ -346,7 +368,8 @@ ax spans export PROJECT --trace-id TRACE_ID --space-id SPACE_ID --output-dir .ar
 
 | Problem | Solution |
 |---------|----------|
-| `ax: command not found` | Check `~/.local/bin/ax`; if missing: `uv tool install arize-ax-cli` (needs `required_permissions: ["all"]`) |
+| `ax: command not found` | Check `~/.local/bin/ax`; if missing: `uv tool install arize-ax-cli` (needs `required_permissions: ["all"]`). Then `export PATH="$HOME/.local/bin:$PATH"` |
+| `SSL: CERTIFICATE_VERIFY_FAILED` | macOS: `export SSL_CERT_FILE=/etc/ssl/cert.pem`. Linux: `export SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt`. Windows: `$env:SSL_CERT_FILE = (python -c "import certifi; print(certifi.where())")` |
 | `No such command` on a subcommand that should exist | The installed `ax` is outdated. Reinstall from the local workspace: `uv tool install --force --reinstall /path/to/arize/sdk/python/arize-ax-cli` (needs `required_permissions: ["all"]`) |
 | `No profile found` | Follow "Resolve credentials" in Prerequisites to auto-discover or prompt for the API key |
 | `401 Unauthorized` with valid API key | You are likely using a project name (e.g., `copilot-prod`) without `--space-id`. Add `--space-id SPACE_ID` or use the base64 project ID instead |
