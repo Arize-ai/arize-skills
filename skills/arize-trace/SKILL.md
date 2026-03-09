@@ -137,7 +137,7 @@ ax traces export PROJECT_NAME --space-id SPACE_ID --filter "status_code = 'ERROR
 | `PROJECT` | string | required | Positional argument (name or base64 ID) |
 | `--filter` | string | none | Filter expression for phase-1 span lookup |
 | `--space-id` | string | none | Space ID; required when PROJECT is a name or when using `--all` |
-| `--limit, -n` | int | 500 | Max spans in phase-1 lookup (REST page max) |
+| `--limit, -n` | int | 50 | Max number of traces to export |
 | `--days` | int | 30 | Lookback window in days |
 | `--start-time` | string | none | Override start (ISO 8601) |
 | `--end-time` | string | none | Override end (ISO 8601) |
