@@ -7,10 +7,6 @@ on:
       - "scripts/**"
       - ".github/workflows/validate-skills.yml"
   pull_request:
-    paths:
-      - "skills/**"
-      - "scripts/**"
-      - ".github/workflows/validate-skills.yml"
 
 jobs:
   validate:
