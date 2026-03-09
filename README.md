@@ -6,7 +6,7 @@ Works with Cursor, Claude Code, Codex, Windsurf, and [40+ other agents](https://
 
 ## Quick Start
 
-### Option 1: npx (typescript vercel agent installer)
+### Option 1: npx (recommended)
 
 ```bash
 npx skills add Arize-ai/arize-skills --skill '*' --yes
@@ -54,6 +54,7 @@ Or set the `ARIZE_API_KEY` environment variable directly.
 | Skill | Description |
 |-------|-------------|
 | [arize-trace](skills/arize-trace/SKILL.md) | Export traces and spans by trace ID, span ID, or session ID. Debug LLM application issues. |
+| [arize-instrumentation](skills/arize-instrumentation/SKILL.md) | Add Arize AX tracing to an app. Two-phase flow: analyze codebase, then implement instrumentation (uses [Agent-Assisted Tracing](https://arize.com/docs/ax/alyx/tracing-assistant)). |
 | [arize-dataset](skills/arize-dataset/SKILL.md) | Create, manage, and download datasets and examples. |
 | [arize-experiment](skills/arize-experiment/SKILL.md) | Run and analyze experiments against datasets. |
 | [arize-prompt-optimization](skills/arize-prompt-optimization/SKILL.md) | Optimize prompts using trace data, experiments, and meta-prompting. |
