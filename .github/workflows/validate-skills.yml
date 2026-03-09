@@ -1,0 +1,31 @@
+name: Validate Skills
+
+on:
+  push:
+    paths:
+      - "skills/**"
+      - "scripts/**"
+      - ".github/workflows/validate-skills.yml"
+  pull_request:
+    paths:
+      - "skills/**"
+      - "scripts/**"
+      - ".github/workflows/validate-skills.yml"
+
+jobs:
+  validate:
+    name: Validate skill definitions
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Install dependencies
+        run: pip install -r scripts/requirements.txt
+
+      - name: Validate skills
+        run: python scripts/validate_skills.py
