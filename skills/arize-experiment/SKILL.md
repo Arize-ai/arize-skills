@@ -63,7 +63,7 @@ ax experiments list -o json
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
 | `--dataset-id` | string | none | Filter by dataset |
-| `--limit, -n` | int | 15 | Max results (1-100) |
+| `--limit, -l` | int | 15 | Max results (1-100) |
 | `--cursor` | string | none | Pagination cursor from previous response |
 | `-o, --output` | string | table | Output format: table, json, csv, parquet, or file path |
 | `-p, --profile` | string | default | Configuration profile |

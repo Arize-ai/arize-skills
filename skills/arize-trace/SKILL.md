@@ -13,7 +13,7 @@ description: "INVOKE THIS SKILL when downloading or exporting Arize traces and s
 
 Use `ax spans export` to download trace data. This is the only supported command for retrieving spans.
 
-**Exploratory export rule:** When exporting spans or traces **without** a specific `--trace-id`, `--span-id`, or `--session-id` (i.e., browsing/exploring a project), always start with `-n 50` to pull a small sample first. Summarize what you find, then pull more data only if the user asks or the task requires it. This avoids slow queries and overwhelming output on large projects.
+**Exploratory export rule:** When exporting spans or traces **without** a specific `--trace-id`, `--span-id`, or `--session-id` (i.e., browsing/exploring a project), always start with `-l 50` to pull a small sample first. Summarize what you find, then pull more data only if the user asks or the task requires it. This avoids slow queries and overwhelming output on large projects.
 
 **Default output directory:** Always use `--output-dir .arize-tmp-traces` on every `ax spans export` call. The CLI automatically creates the directory and adds it to `.gitignore`.
 
@@ -99,7 +99,7 @@ ax spans export PROJECT_NAME --space-id SPACE_ID --filter "status_code = 'ERROR'
 - Downloading full traces with many child spans
 - Large time-range exports
 
-**Agent auto-escalation rule:** If a REST export returns exactly the number of spans requested by `-n` (or 500 if no limit was set), the result is likely truncated. Increase `-n` or re-run with `--all` to get the full dataset — but only when the user asks or the task requires more data.
+**Agent auto-escalation rule:** If a REST export returns exactly the number of spans requested by `-l` (or 500 if no limit was set), the result is likely truncated. Increase `-l` or re-run with `--all` to get the full dataset — but only when the user asks or the task requires more data.
 
 **Requirements for `--all`:**
 - `--space-id` is required (Flight uses `space_id` + `project_name`, not `project_id`)
@@ -120,8 +120,8 @@ Export full traces -- all spans belonging to traces that match a filter. Uses a 
 2. **Phase 2:** Extract unique trace IDs, then fetch every span for those traces
 
 ```bash
-# Explore recent traces (start small with -n 50, pull more if needed)
-ax traces export PROJECT_NAME --space-id SPACE_ID -n 50 --output-dir .arize-tmp-traces
+# Explore recent traces (start small with -l 50, pull more if needed)
+ax traces export PROJECT_NAME --space-id SPACE_ID -l 50 --output-dir .arize-tmp-traces
 
 # Export traces with error spans (REST, up to 500 spans in phase 1)
 ax traces export PROJECT_NAME --space-id SPACE_ID --filter "status_code = 'ERROR'" --stdout
@@ -137,7 +137,7 @@ ax traces export PROJECT_NAME --space-id SPACE_ID --filter "status_code = 'ERROR
 | `PROJECT` | string | required | Positional argument (name or base64 ID) |
 | `--filter` | string | none | Filter expression for phase-1 span lookup |
 | `--space-id` | string | none | Space ID; required when PROJECT is a name or when using `--all` |
-| `--limit, -n` | int | 50 | Max number of traces to export |
+| `--limit, -l` | int | 50 | Max number of traces to export |
 | `--days` | int | 30 | Lookback window in days |
 | `--start-time` | string | none | Override start (ISO 8601) |
 | `--end-time` | string | none | Override end (ISO 8601) |
@@ -201,7 +201,7 @@ event.attributes CONTAINS 'TimeoutError'
 
 ### Debug a failing trace
 
-1. `ax traces export PROJECT --space-id SPACE_ID --filter "status_code = 'ERROR'" -n 50 --output-dir .arize-tmp-traces`
+1. `ax traces export PROJECT --space-id SPACE_ID --filter "status_code = 'ERROR'" -l 50 --output-dir .arize-tmp-traces`
 2. Read the output file, look for spans with `status_code: ERROR`
 3. Check `attributes.error.type` and `attributes.error.message` on error spans
 
