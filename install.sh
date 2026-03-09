@@ -142,6 +142,20 @@ pick_ssl_cert_file() {
   return 1
 }
 
+is_tls_failure() {
+  local message="$1"
+  grep -qiE "certificate verify failed|self[- ]signed|x509|unable to get local issuer|certificate has expired|ssl:|tlsv1|tls.*certificate|ssl certificate" <<<"$message"
+}
+
+run_ax_version_check() {
+  local cert_file="$1"
+  if [[ -n "$cert_file" ]]; then
+    SSL_CERT_FILE="$cert_file" "$AX_BIN" --version 2>&1
+  else
+    "$AX_BIN" --version 2>&1
+  fi
+}
+
 find_ax_binary() {
   local pattern
   local candidate
@@ -350,21 +364,33 @@ fi
 
 if [[ -n "$AX_BIN" ]]; then
   ax_cli_version=""
-  if ax_cli_version="$("$AX_BIN" --version 2>/dev/null)"; then
+  ax_cli_error=""
+  if ax_cli_version="$(run_ax_version_check "${SSL_CERT_FILE:-}")"; then
     echo "ax CLI check: ${ax_cli_version}"
-  elif [[ -n "${SSL_CERT_FILE:-}" ]] && ax_cli_version="$(SSL_CERT_FILE="$SSL_CERT_FILE" "$AX_BIN" --version 2>/dev/null)"; then
-    echo "ax CLI check: ${ax_cli_version}"
-    echo "Note: this environment needs SSL_CERT_FILE set."
-    echo "  export SSL_CERT_FILE=$SSL_CERT_FILE"
-    echo "If you still get TLS failures, use that line in every shell session."
-  elif ax_ssl_file="$(pick_ssl_cert_file || true)" && ax_cli_version="$(SSL_CERT_FILE="$ax_ssl_file" "$AX_BIN" --version 2>/dev/null)"; then
-    echo "ax CLI check: ${ax_cli_version}"
-    echo "Note: this environment needs SSL_CERT_FILE set to your cert bundle:"
-    echo "  export SSL_CERT_FILE=$ax_ssl_file"
-    echo "If you still get TLS failures, use that line in every shell session."
   else
-    echo "Warning: ax CLI is installed at $AX_BIN but not runnable."
-    echo "  Run: $AX_BIN --version"
+    ax_cli_error="${ax_cli_version}"
+    if is_tls_failure "${ax_cli_error}"; then
+      if [[ -n "${SSL_CERT_FILE:-}" ]] && ax_cli_version="$(run_ax_version_check "$SSL_CERT_FILE")"; then
+        echo "ax CLI check: ${ax_cli_version}"
+        echo "Note: this environment needs SSL_CERT_FILE set."
+        echo "  export SSL_CERT_FILE=$SSL_CERT_FILE"
+      elif ax_ssl_file="$(pick_ssl_cert_file || true)" && ax_cli_version="$(run_ax_version_check "$ax_ssl_file")"; then
+        echo "ax CLI check: ${ax_cli_version}"
+        echo "Note: this environment needs SSL_CERT_FILE set to your cert bundle:"
+        echo "  export SSL_CERT_FILE=$ax_ssl_file"
+      else
+        echo "Warning: ax CLI is installed at $AX_BIN but not runnable."
+        echo "  Error: ${ax_cli_error}"
+        echo "  Run: $AX_BIN --version to reproduce."
+      fi
+    else
+      echo "Warning: ax CLI is installed at $AX_BIN but not runnable."
+      echo "  Error: ${ax_cli_error}"
+      echo "  Run: $AX_BIN --version for exact output."
+    fi
+    if is_tls_failure "${ax_cli_error}"; then
+      echo "If this is a TLS problem, set SSL_CERT_FILE to a cert bundle and retry."
+    fi
   fi
 
   if ! command -v ax &>/dev/null; then
