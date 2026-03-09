@@ -24,6 +24,18 @@ cd arize-skills
 
 The `--project` flag tells the installer where to symlink skills. It detects installed agents and optionally installs the `ax` CLI. Use `--global` instead to install to `~/.<agent>/skills/`.
 
+## Quick readiness check
+
+Run this once after installation to confirm setup:
+
+```bash
+if command -v ax >/dev/null && ax --version >/dev/null 2>&1; then
+  echo "✅ ax is installed and working"
+else
+  echo "⚠️  Setup needed: https://github.com/Arize-ai/arize-skills/blob/main/docs/setup.md"
+fi
+```
+
 ## Prerequisites
 
 For initial environment setup (`ax` installation, PATH, TLS, and API key profile checks), follow:
