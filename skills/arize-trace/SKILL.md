@@ -349,48 +349,22 @@ ax spans export PROJECT --trace-id TRACE_ID --space-id SPACE_ID --output-dir .ar
 | `ax: command not found` | Check `~/.local/bin/ax`; if missing: `uv tool install arize-ax-cli` (needs `required_permissions: ["all"]`) |
 | `No such command` on a subcommand that should exist | The installed `ax` is outdated. Reinstall from the local workspace: `uv tool install --force --reinstall /path/to/arize/sdk/python/arize-ax-cli` (needs `required_permissions: ["all"]`) |
 | `No profile found` | Follow "Resolve credentials" in Prerequisites to auto-discover or prompt for the API key |
-| `401 Unauthorized` with valid API key | You are likely using a project name (e.g., `copilot-prod`) without `--space-id`. Add `--space-id SPACE_ID` or use the base64 project ID instead |
+| `401 Unauthorized` with valid API key | You are likely using a project name (e.g., `my-project`) without `--space-id`. Add `--space-id SPACE_ID` or use the base64 project ID instead |
 | `No spans found` | Expand `--days` (default 30), verify project ID |
 | `Filter error` | Check column name spelling, wrap string values in single quotes |
 | `Timeout on large export` | Use `--days 7` to narrow the time range |
 
-## Save Credentials for Future Use
+## Save Credentials
 
-At the **end of the session**, if the user manually provided any of the following during this conversation (via AskQuestion response, pasted text, or inline values) **and** those values were NOT already loaded from a saved profile or environment variable, offer to save them for future use.
+At session end, if the user manually provided an API key, space ID, or project name (not loaded from an existing profile), offer to save them to `~/.arize/config.toml`. Use **AskQuestion** with "Yes, save them" / "No thanks". Skip if all values were already in the profile.
 
-| Credential | Where it gets saved |
-|------------|---------------------|
-| API key | `ax` profile at `~/.arize/config.toml` |
-| Space ID | Shell config (`~/.zshrc` or `~/.bashrc`) as `export ARIZE_SPACE_ID="..."` |
+Read the existing file (or create it), add/update only the new fields, and write it back:
 
-**Skip this entirely if:**
-- The API key was already loaded from an existing profile or `ARIZE_API_KEY` env var
-- The space ID was already set via `ARIZE_SPACE_ID` env var
-- The user only used base64 project IDs (no space ID was needed)
+```toml
+[auth]
+api_key = "THE_API_KEY"
 
-**How to offer:** Use **AskQuestion**: *"Would you like to save your Arize credentials so you don't have to enter them next time?"* with options `"Yes, save them"` / `"No thanks"`.
-
-**If the user says yes:**
-
-1. **API key** — Check if `~/.arize/config.toml` exists. If it does, read it and update the `[auth]` section. If not, create it with this minimal content:
-
-   ```toml
-   [profile]
-   name = "default"
-
-   [auth]
-   api_key = "THE_API_KEY"
-
-   [output]
-   format = "table"
-   ```
-
-   Verify with: `ax profiles show`
-
-2. **Space ID** — Detect the user's shell config file (`~/.zshrc` for zsh, `~/.bashrc` for bash). Append:
-
-   ```bash
-   export ARIZE_SPACE_ID="THE_SPACE_ID"
-   ```
-
-   Tell the user to run `source ~/.zshrc` (or restart their terminal) for it to take effect.
+[defaults]
+space_id = "THE_SPACE_ID"
+project = "THE_PROJECT_NAME"
+```
