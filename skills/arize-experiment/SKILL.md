@@ -302,3 +302,44 @@ ax experiments export EXPERIMENT_ID --stdout | jq -r '.[] | [.example_id, .outpu
 | `example_id mismatch` | Ensure `example_id` values match IDs from the dataset (export dataset to verify) |
 | `No runs found` | Export returned empty -- verify experiment has runs via `ax experiments get` |
 | `Dataset not found` | The linked dataset may have been deleted; check with `ax datasets list` |
+
+## Save Credentials for Future Use
+
+At the **end of the session**, if the user manually provided any of the following during this conversation (via AskQuestion response, pasted text, or inline values) **and** those values were NOT already loaded from a saved profile or environment variable, offer to save them for future use.
+
+| Credential | Where it gets saved |
+|------------|---------------------|
+| API key | `ax` profile at `~/.arize/config.toml` |
+| Space ID | Shell config (`~/.zshrc` or `~/.bashrc`) as `export ARIZE_SPACE_ID="..."` |
+
+**Skip this entirely if:**
+- The API key was already loaded from an existing profile or `ARIZE_API_KEY` env var
+- The space ID was already set via `ARIZE_SPACE_ID` env var
+- The user only used base64 project IDs (no space ID was needed)
+
+**How to offer:** Use **AskQuestion**: *"Would you like to save your Arize credentials so you don't have to enter them next time?"* with options `"Yes, save them"` / `"No thanks"`.
+
+**If the user says yes:**
+
+1. **API key** — Check if `~/.arize/config.toml` exists. If it does, read it and update the `[auth]` section. If not, create it with this minimal content:
+
+   ```toml
+   [profile]
+   name = "default"
+
+   [auth]
+   api_key = "THE_API_KEY"
+
+   [output]
+   format = "table"
+   ```
+
+   Verify with: `ax profiles show`
+
+2. **Space ID** — Detect the user's shell config file (`~/.zshrc` for zsh, `~/.bashrc` for bash). Append:
+
+   ```bash
+   export ARIZE_SPACE_ID="THE_SPACE_ID"
+   ```
+
+   Tell the user to run `source ~/.zshrc` (or restart their terminal) for it to take effect.
