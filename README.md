@@ -1,10 +1,22 @@
 # Arize Skills
 
-Agent skills for [Arize](https://arize.com) — datasets, experiments, and traces via the `ax` CLI.
+Skills that guide AI coding agents to help you add observability, run experiments, and optimize prompts for your LLM applications.
+
+These skills encode the workflows we've refined building the [Arize](https://arize.com) platform and helping teams debug LLM apps in production. They handle the `ax` CLI flags, data shape quirks, and multi-step recipes so you don't have to.
 
 Works with Cursor, Claude Code, Codex, Windsurf, and [40+ other agents](https://github.com/nicepkg/agent-skills).
 
-## Quick Start
+## New to Arize? Start Here
+
+**Adding tracing to your app** — give your coding agent this prompt:
+
+> Follow the instructions from https://arize.com/docs/PROMPT.md and ask me questions as needed.
+
+This walks through a two-phase flow: analyze your codebase for LLM providers and frameworks, then add Arize AX tracing with the right instrumentors. No skill installation needed.
+
+**Already have traces?** Install the skills below, then start with `arize-trace` to export and debug spans, or `arize-experiment` to run evals against a dataset.
+
+## Installation
 
 ### Option 1: npx (recommended)
 
