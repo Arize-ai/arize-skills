@@ -26,59 +26,9 @@ The `--project` flag tells the installer where to symlink skills. It detects ins
 
 ## Prerequisites
 
-### Arize CLI (`ax`)
+For initial environment setup (`ax` installation, PATH, TLS, and API key profile checks), follow:
 
-The skills use the `ax` CLI to interact with the Arize API. Install it if you don't have it:
-
-```bash
-# Preferred (isolated environment)
-uv tool install arize-ax-cli
-# or
-pipx install arize-ax-cli
-# Fallback
-pip install arize-ax-cli
-```
-
-### API Key
-
-Set up authentication with a profile:
-
-```bash
-ax profiles create
-```
-
-Or set the `ARIZE_API_KEY` environment variable directly.
-
-## Common CLI setup issues
-
-If `ax` is installed but not usable right away, check:
-
-- `command -v ax` is finding the binary.
-- If installed in a Python environment not on `PATH`, add its directory to your shell profile:
-
-```bash
-export PATH="$HOME/.local/bin:$PATH"
-# or the real binary directory returned by `install.sh`
-```
-
-- TLS certificate failures in `ax` (example: `certificate verify failed`):
-
-```bash
-if [[ -f /etc/ssl/cert.pem ]]; then
-  export SSL_CERT_FILE=/etc/ssl/cert.pem
-elif [[ -f /etc/pki/tls/certs/ca-bundle.crt ]]; then
-  export SSL_CERT_FILE=/etc/pki/tls/certs/ca-bundle.crt
-fi
-ax --version
-```
-
-If this fixes it, add the same export to your shell startup file (or your platform-specific cert bundle path).
-
-On Windows (PowerShell), set it with your system cert bundle path:
-
-```powershell
-$env:SSL_CERT_FILE = 'C:\\Path\\To\\Your\\CertBundle.crt'
-```
+- [Skills setup guide](docs/setup.md)
 
 ### CLI command style
 
