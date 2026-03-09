@@ -112,11 +112,28 @@ agent_skills_dir() {
   esac
 }
 
+add_agent() {
+  local name="$1"
+  # Deduplicate: only add if not already in AGENTS
+  for existing in "${AGENTS[@]+"${AGENTS[@]}"}"; do
+    [[ "$existing" == "$name" ]] && return
+  done
+  AGENTS+=("$name")
+}
+
 detect_agents() {
   local base="$1"
-  if [[ -d "$base/.cursor" ]]; then AGENTS+=("cursor"); fi
-  if [[ -d "$base/.claude" ]]; then AGENTS+=("claude"); fi
-  if [[ -d "$base/.codex" ]];  then AGENTS+=("codex"); fi
+
+  # Check for config directories in the target project/home
+  if [[ -d "$base/.cursor" ]]; then add_agent "cursor"; fi
+  if [[ -d "$base/.claude" ]]; then add_agent "claude"; fi
+  if [[ -d "$base/.codex" ]];  then add_agent "codex"; fi
+
+  # Also check for installed agent binaries (catches agents that haven't
+  # created config dirs in this project yet)
+  command -v cursor &>/dev/null && add_agent "cursor"
+  command -v claude &>/dev/null && add_agent "claude"
+  command -v codex  &>/dev/null && add_agent "codex"
 }
 
 if [[ "$GLOBAL" != true && -z "$PROJECT_DIR" ]]; then
@@ -134,7 +151,7 @@ else
 fi
 
 if [[ ${#AGENTS[@]} -eq 0 ]]; then
-  echo "No agents detected (looked for .cursor/, .claude/, .codex/)."
+  echo "No agents detected (checked for .cursor/, .claude/, .codex/ directories and cursor/claude/codex binaries)."
   echo "Use --agent <name> to specify manually, e.g.: ./install.sh --agent cursor"
   exit 1
 fi

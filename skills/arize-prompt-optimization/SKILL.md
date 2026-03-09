@@ -56,7 +56,7 @@ Verify `ax` is installed and working before proceeding:
 2. If not found, check common install locations:
    - macOS/Linux: `test -x ~/.local/bin/ax && export PATH="$HOME/.local/bin:$PATH"`
    - Windows: check `%APPDATA%\Python\Scripts\ax.exe` or `%LOCALAPPDATA%\Programs\Python\Scripts\ax.exe`
-3. If still not found, install it (**requires `required_permissions: ["all"]`** in Cursor sandbox):
+3. If still not found, install it (requires shell access to install packages):
    - Preferred: `uv tool install arize-ax-cli`
    - Alternative: `pipx install arize-ax-cli`
    - Fallback: `pip install arize-ax-cli`
@@ -473,7 +473,7 @@ When optimizing prompts that use template variables:
 
 | Problem | Solution |
 |---------|----------|
-| `ax: command not found` | Check `~/.local/bin/ax`; if missing: `uv tool install arize-ax-cli` (needs `required_permissions: ["all"]`) |
+| `ax: command not found` | Check `~/.local/bin/ax`; if missing: `uv tool install arize-ax-cli` (requires shell access to install packages) |
 | `No profile found` | Create `~/.arize/config.toml` with `api_key = "${ARIZE_API_KEY}"` (see Prerequisites) |
 | No `input_messages` on span | Check span kind -- Chain/Agent spans store prompts on child LLM spans, not on themselves |
 | Prompt template is `null` | Not all instrumentations emit `prompt_template`. Use `input_messages` or `input.value` instead |

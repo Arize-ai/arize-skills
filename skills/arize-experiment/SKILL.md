@@ -26,7 +26,7 @@ Verify `ax` is installed and working before proceeding:
 2. If not found, check common install locations:
    - macOS/Linux: `test -x ~/.local/bin/ax && export PATH="$HOME/.local/bin:$PATH"`
    - Windows: check `%APPDATA%\Python\Scripts\ax.exe` or `%LOCALAPPDATA%\Programs\Python\Scripts\ax.exe`
-3. If still not found, install it (**requires `required_permissions: ["all"]`** in Cursor sandbox):
+3. If still not found, install it (requires shell access to install packages):
    - Preferred: `uv tool install arize-ax-cli`
    - Alternative: `pipx install arize-ax-cli`
    - Fallback: `pip install arize-ax-cli`
@@ -316,7 +316,7 @@ ax experiments export EXPERIMENT_ID --stdout | jq -r '.[] | [.example_id, .outpu
 
 | Problem | Solution |
 |---------|----------|
-| `ax: command not found` | Check `~/.local/bin/ax`; if missing: `uv tool install arize-ax-cli` (needs `required_permissions: ["all"]`) |
+| `ax: command not found` | Check `~/.local/bin/ax`; if missing: `uv tool install arize-ax-cli` (requires shell access to install packages) |
 | `401 Unauthorized` | API key may not have access to this space. Verify the key and space ID are correct. Keys are scoped per space -- get the right one from https://app.arize.com/admin > API Keys. |
 | `No profile found` | Run `ax profiles show --expand` to check; set `ARIZE_API_KEY` env var or write `~/.arize/config.toml` |
 | `Experiment not found` | Verify experiment ID with `ax experiments list` |
