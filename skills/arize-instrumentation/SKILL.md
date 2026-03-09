@@ -98,6 +98,8 @@ Proceed **only after the user confirms** the Phase 1 analysis.
 - Use **auto-instrumentation first**; manual spans only when needed.
 - **Fail gracefully** if env vars are missing (warn, do not crash).
 - **Import order:** register tracer → attach instrumentors → then create LLM clients.
+- **Project name attribute (required):** Arize rejects spans with HTTP 500 if the project name is missing — `service.name` alone is not accepted. Set it as a **resource attribute** on the TracerProvider (recommended — one place, applies to all spans): Python: `register(project_name="my-app")` handles it automatically (sets `"openinference.project.name"` on the resource); TypeScript: Arize accepts both `"model_id"` (shown in the official TS quickstart) and `"openinference.project.name"` via `SEMRESATTRS_PROJECT_NAME` from `@arizeai/openinference-semantic-conventions` (shown in the manual instrumentation docs) — both work. For routing spans to different projects in Python, use `set_routing_context(space_id=..., project_name=...)` from `arize.otel`.
+- **CLI/script apps — flush before exit:** `provider.shutdown()` (TS) / `provider.force_flush()` then `provider.shutdown()` (Python) must be called before the process exits, otherwise async OTLP exports are dropped and no traces appear.
 - **When the app has tool/function execution:** add manual CHAIN + TOOL spans (see **Enriching traces** below) so the trace tree shows each tool call and its result — otherwise traces will look sparse (only LLM API spans, no tool input/output).
 
 ## Enriching traces: manual spans for tool use and agent loops
@@ -162,7 +164,7 @@ After implementation:
 
 1. Run the application and trigger at least one LLM call.
 2. Check [Arize UI](https://app.arize.com) for traces under the project name.
-3. If no traces: verify `ARIZE_SPACE_ID` and `ARIZE_API_KEY`, ensure tracer is initialized before instrumentors and clients, check connectivity to `otlp.arize.com:443`; for debug set `GRPC_VERBOSITY=debug`.
+3. If no traces: verify `ARIZE_SPACE_ID` and `ARIZE_API_KEY`, ensure tracer is initialized before instrumentors and clients, check connectivity to `otlp.arize.com:443`; for debug set `GRPC_VERBOSITY=debug` or pass `log_to_console=True` to `register()`. Common gotchas: (a) missing project name resource attribute causes HTTP 500 rejections — `service.name` alone is not enough; Python: pass `project_name` to `register()`; TypeScript: set `"model_id"` or `SEMRESATTRS_PROJECT_NAME` on the resource; (b) CLI/script processes exit before OTLP exports flush — call `provider.force_flush()` then `provider.shutdown()` before exit.
 4. If the app uses tools: in the trace tree, confirm CHAIN and TOOL spans appear with `input.value` / `output.value` so tool calls and results are visible.
 
 ## Leveraging the Tracing Assistant (MCP)
