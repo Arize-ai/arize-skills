@@ -64,11 +64,13 @@ export PATH="$HOME/.local/bin:$PATH"
 - TLS certificate failures in `ax` (example: `certificate verify failed`):
 
 ```bash
-export SSL_CERT_FILE=/etc/ssl/cert.pem
+if [[ -f /etc/ssl/cert.pem ]]; then
+  export SSL_CERT_FILE=/etc/ssl/cert.pem
+fi
 ax --version
 ```
 
-If this fixes it, add `export SSL_CERT_FILE=/etc/ssl/cert.pem` to your shell startup file.
+If this fixes it, add the same export to your shell startup file (or your platform-specific cert bundle path).
 
 ### CLI command style
 

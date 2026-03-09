@@ -22,7 +22,9 @@ Run a **single** shell call to check everything at once (use `required_permissio
 
 ```bash
 export PATH="$HOME/.local/bin:$PATH"
-export SSL_CERT_FILE="${SSL_CERT_FILE:-/etc/ssl/cert.pem}"
+if [[ -z "${SSL_CERT_FILE:-}" && -f /etc/ssl/cert.pem ]]; then
+  export SSL_CERT_FILE=/etc/ssl/cert.pem
+fi
 ax --version
 echo "--- env ---"
 if [[ -n "${ARIZE_API_KEY:+x}" ]]; then echo "ARIZE_API_KEY: set"; else echo "ARIZE_API_KEY: not set"; fi

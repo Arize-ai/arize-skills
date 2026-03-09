@@ -295,7 +295,7 @@ install_ax_cli() {
     echo "Installing ax CLI via pip..."
     pip install arize-ax-cli 2>/dev/null || pip install --user arize-ax-cli
   else
-    echo "Warning: No Python package manager found (tried uv, pipx, pip)."
+    echo "Warning: No Python package manager found (tried uv, pipx, pip3, pip)."
     echo "Install ax manually: https://github.com/Arize-ai/arize-ax-cli"
     return 1
   fi
@@ -328,10 +328,14 @@ fi
 if [[ -n "$AX_BIN" ]]; then
   if "$AX_BIN" --version &>/dev/null; then
     echo "ax CLI check: $("$AX_BIN" --version 2>/dev/null || echo \"unknown\")"
-  elif [[ -f /etc/ssl/cert.pem ]] && SSL_CERT_FILE=/etc/ssl/cert.pem "$AX_BIN" --version &>/dev/null; then
+  elif SSL_CERT_FILE="${SSL_CERT_FILE:-/etc/ssl/cert.pem}" "$AX_BIN" --version &>/dev/null; then
     echo "ax CLI check: $("$AX_BIN" --version 2>/dev/null || echo \"unknown\")"
-    echo "Note: this environment needs SSL_CERT_FILE set"
-    echo "  export SSL_CERT_FILE=/etc/ssl/cert.pem"
+    if [[ -z "${SSL_CERT_FILE:-}" ]]; then
+      echo "Note: this environment needs SSL_CERT_FILE set to your system cert bundle."
+    else
+      echo "Note: this environment needs SSL_CERT_FILE set to the default fallback."
+      echo "  export SSL_CERT_FILE=${SSL_CERT_FILE}"
+    fi
     echo "If you still get TLS failures, use that line in every shell session."
   else
     echo "Warning: ax CLI is installed at $AX_BIN but not runnable."
