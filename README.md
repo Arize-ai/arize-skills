@@ -23,20 +23,28 @@ This walks through a two-phase flow: analyze your codebase for LLM providers and
 ### Option 1: npx (recommended)
 
 ```bash
-npx skills add Arize-ai/arize-skills --skill '*' --yes
+npx skills add Arize-ai/arize-skills --skill "*" --yes
 ```
 
 This auto-detects your agent (Cursor, Claude Code, Codex, etc.) and symlinks skills into place.
 
 ### Option 2: git clone
 
+**macOS / Linux:**
 ```bash
 git clone https://github.com/Arize-ai/arize-skills.git
 cd arize-skills
 ./install.sh --project ~/my-project
 ```
 
-The `--project` flag tells the installer where to symlink skills. It detects installed agents and optionally installs the `ax` CLI. Use `--global` instead to install to `~/.<agent>/skills/`.
+**Windows (PowerShell):**
+```powershell
+git clone https://github.com/Arize-ai/arize-skills.git
+cd arize-skills
+.\install.ps1 -Project ~\my-project
+```
+
+The installer detects installed agents and optionally installs the `ax` CLI. Use `--global` / `-Global` instead to install to `~/.<agent>/skills/`.
 
 ### Option 3: Claude Code plugin
 
@@ -105,7 +113,9 @@ ax --version && ax profiles show 2>&1
 | [arize-prompt-optimization](skills/arize-prompt-optimization/SKILL.md) | Optimize prompts using trace data, experiments, and meta-prompting. |
 | [arize-link](skills/arize-link/SKILL.md) | Generate deep links to traces, spans, and sessions in the Arize UI. |
 
-## install.sh Flags
+## Installer Flags
+
+**Bash (`install.sh`):**
 
 | Flag | Description |
 |------|-------------|
@@ -115,10 +125,25 @@ ax --version && ax profiles show 2>&1
 | `--force` | Overwrite existing skills |
 | `--skip-cli` | Don't install `ax` CLI even if missing |
 | `--agent <name>` | Manually specify agent (cursor, claude, codex) — repeatable |
-| `--skill <name>` | Only install specific skills — repeatable (e.g. `--skill arize-trace --skill arize-dataset`) |
+| `--skill <name>` | Only install/uninstall specific skills — repeatable (e.g. `--skill arize-trace --skill arize-dataset`) |
 | `--yes` | Skip confirmation prompts |
 | `--list` | List all available skills and exit |
 | `--uninstall` | Remove previously installed skill symlinks |
+
+**PowerShell (`install.ps1`):**
+
+| Flag | Description |
+|------|-------------|
+| `-Project <dir>` | **Required.** Target project directory for skill symlinks |
+| `-Global` | Install to `~/.<agent>/skills/` instead (alternative to `-Project`) |
+| `-Copy` | Copy files instead of symlinking |
+| `-Force` | Overwrite existing skills |
+| `-SkipCli` | Don't install `ax` CLI even if missing |
+| `-Agent <name>` | Manually specify agent (cursor, claude, codex) — repeatable |
+| `-Skill <name>` | Only install/uninstall specific skills — repeatable |
+| `-Yes` | Skip confirmation prompts |
+| `-Uninstall` | Remove previously installed skill symlinks |
+| `-List` | List all available skills and exit |
 
 ## Updating
 

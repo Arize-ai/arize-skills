@@ -3,3 +3,6 @@
 *.swo
 *~
 .env
+.arize-tmp-traces/
+
+.claude/

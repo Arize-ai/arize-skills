@@ -13,7 +13,7 @@ description: "INVOKE THIS SKILL when downloading or exporting Arize traces and s
 
 Use `ax spans export` to download trace data. This is the only supported command for retrieving spans.
 
-**Exploratory export rule:** When exporting spans or traces **without** a specific `--trace-id`, `--span-id`, or `--session-id` (i.e., browsing/exploring a project), always start with `-n 50` to pull a small sample first. Summarize what you find, then pull more data only if the user asks or the task requires it. This avoids slow queries and overwhelming output on large projects.
+**Exploratory export rule:** When exporting spans or traces **without** a specific `--trace-id`, `--span-id`, or `--session-id` (i.e., browsing/exploring a project), always start with `-l 50` to pull a small sample first. Summarize what you find, then pull more data only if the user asks or the task requires it. This avoids slow queries and overwhelming output on large projects.
 
 **Default output directory:** Always use `--output-dir .arize-tmp-traces` on every `ax spans export` call. The CLI automatically creates the directory and adds it to `.gitignore`.
 
@@ -46,8 +46,14 @@ Verify `ax` is installed and working before proceeding:
 
 Run a quick check for credentials:
 
+**macOS/Linux (bash):**
 ```bash
 ax --version && echo "--- env ---" && echo "ARIZE_API_KEY: ${ARIZE_API_KEY:-(not set)}" && echo "ARIZE_SPACE_ID: ${ARIZE_SPACE_ID:-(not set)}" && echo "--- profiles ---" && ax profiles show 2>&1
+```
+
+**Windows (PowerShell):**
+```powershell
+ax --version; Write-Host "--- env ---"; Write-Host "ARIZE_API_KEY: $env:ARIZE_API_KEY"; Write-Host "ARIZE_SPACE_ID: $env:ARIZE_SPACE_ID"; Write-Host "--- profiles ---"; ax profiles show 2>&1
 ```
 
 **Read the output and proceed immediately** if either the env var or the profile has an API key. Only ask the user if **both** are missing. Resolve failures:
@@ -121,7 +127,7 @@ ax spans export PROJECT_NAME --space-id SPACE_ID --filter "status_code = 'ERROR'
 - Downloading full traces with many child spans
 - Large time-range exports
 
-**Agent auto-escalation rule:** If a REST export returns exactly the number of spans requested by `-n` (or 500 if no limit was set), the result is likely truncated. Increase `-n` or re-run with `--all` to get the full dataset — but only when the user asks or the task requires more data.
+**Agent auto-escalation rule:** If a REST export returns exactly the number of spans requested by `-l` (or 500 if no limit was set), the result is likely truncated. Increase `-l` or re-run with `--all` to get the full dataset — but only when the user asks or the task requires more data.
 
 **Requirements for `--all`:**
 - `--space-id` is required (Flight uses `space_id` + `project_name`, not `project_id`)
@@ -142,8 +148,8 @@ Export full traces -- all spans belonging to traces that match a filter. Uses a 
 2. **Phase 2:** Extract unique trace IDs, then fetch every span for those traces
 
 ```bash
-# Explore recent traces (start small with -n 50, pull more if needed)
-ax traces export PROJECT_NAME --space-id SPACE_ID -n 50 --output-dir .arize-tmp-traces
+# Explore recent traces (start small with -l 50, pull more if needed)
+ax traces export PROJECT_NAME --space-id SPACE_ID -l 50 --output-dir .arize-tmp-traces
 
 # Export traces with error spans (REST, up to 500 spans in phase 1)
 ax traces export PROJECT_NAME --space-id SPACE_ID --filter "status_code = 'ERROR'" --stdout
@@ -159,7 +165,7 @@ ax traces export PROJECT_NAME --space-id SPACE_ID --filter "status_code = 'ERROR
 | `PROJECT` | string | required | Positional argument (name or base64 ID) |
 | `--filter` | string | none | Filter expression for phase-1 span lookup |
 | `--space-id` | string | none | Space ID; required when PROJECT is a name or when using `--all` |
-| `--limit, -n` | int | 500 | Max spans in phase-1 lookup (REST page max) |
+| `--limit, -l` | int | 50 | Max number of traces to export |
 | `--days` | int | 30 | Lookback window in days |
 | `--start-time` | string | none | Override start (ISO 8601) |
 | `--end-time` | string | none | Override end (ISO 8601) |
@@ -223,7 +229,7 @@ event.attributes CONTAINS 'TimeoutError'
 
 ### Debug a failing trace
 
-1. `ax traces export PROJECT --space-id SPACE_ID --filter "status_code = 'ERROR'" -n 50 --output-dir .arize-tmp-traces`
+1. `ax traces export PROJECT --space-id SPACE_ID --filter "status_code = 'ERROR'" -l 50 --output-dir .arize-tmp-traces`
 2. Read the output file, look for spans with `status_code: ERROR`
 3. Check `attributes.error.type` and `attributes.error.message` on error spans
 
@@ -372,48 +378,22 @@ ax spans export PROJECT --trace-id TRACE_ID --space-id SPACE_ID --output-dir .ar
 | `SSL: CERTIFICATE_VERIFY_FAILED` | macOS: `export SSL_CERT_FILE=/etc/ssl/cert.pem`. Linux: `export SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt`. Windows: `$env:SSL_CERT_FILE = (python -c "import certifi; print(certifi.where())")` |
 | `No such command` on a subcommand that should exist | The installed `ax` is outdated. Reinstall from the local workspace: `uv tool install --force --reinstall /path/to/arize/sdk/python/arize-ax-cli` (requires shell access to install packages) |
 | `No profile found` | Follow "Resolve credentials" in Prerequisites to auto-discover or prompt for the API key |
-| `401 Unauthorized` with valid API key | You are likely using a project name (e.g., `copilot-prod`) without `--space-id`. Add `--space-id SPACE_ID` or use the base64 project ID instead |
+| `401 Unauthorized` with valid API key | You are likely using a project name (e.g., `my-project`) without `--space-id`. Add `--space-id SPACE_ID` or use the base64 project ID instead |
 | `No spans found` | Expand `--days` (default 30), verify project ID |
 | `Filter error` | Check column name spelling, wrap string values in single quotes |
 | `Timeout on large export` | Use `--days 7` to narrow the time range |
 
-## Save Credentials for Future Use
+## Save Credentials
 
-At the **end of the session**, if the user manually provided any of the following during this conversation (via AskQuestion response, pasted text, or inline values) **and** those values were NOT already loaded from a saved profile or environment variable, offer to save them for future use.
+At session end, if the user manually provided an API key, space ID, or project name (not loaded from an existing profile), offer to save them to `~/.arize/config.toml`. Use **AskQuestion** with "Yes, save them" / "No thanks". Skip if all values were already in the profile.
 
-| Credential | Where it gets saved |
-|------------|---------------------|
-| API key | `ax` profile at `~/.arize/config.toml` |
-| Space ID | Shell config (`~/.zshrc` or `~/.bashrc`) as `export ARIZE_SPACE_ID="..."` |
+Read the existing file (or create it), add/update only the new fields, and write it back:
 
-**Skip this entirely if:**
-- The API key was already loaded from an existing profile or `ARIZE_API_KEY` env var
-- The space ID was already set via `ARIZE_SPACE_ID` env var
-- The user only used base64 project IDs (no space ID was needed)
+```toml
+[auth]
+api_key = "THE_API_KEY"
 
-**How to offer:** Use **AskQuestion**: *"Would you like to save your Arize credentials so you don't have to enter them next time?"* with options `"Yes, save them"` / `"No thanks"`.
-
-**If the user says yes:**
-
-1. **API key** — Check if `~/.arize/config.toml` exists. If it does, read it and update the `[auth]` section. If not, create it with this minimal content:
-
-   ```toml
-   [profile]
-   name = "default"
-
-   [auth]
-   api_key = "THE_API_KEY"
-
-   [output]
-   format = "table"
-   ```
-
-   Verify with: `ax profiles show`
-
-2. **Space ID** — Detect the user's shell config file (`~/.zshrc` for zsh, `~/.bashrc` for bash). Append:
-
-   ```bash
-   export ARIZE_SPACE_ID="THE_SPACE_ID"
-   ```
-
-   Tell the user to run `source ~/.zshrc` (or restart their terminal) for it to take effect.
+[defaults]
+space_id = "THE_SPACE_ID"
+project = "THE_PROJECT_NAME"
+```

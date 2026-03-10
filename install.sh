@@ -151,9 +151,29 @@ else
 fi
 
 if [[ ${#AGENTS[@]} -eq 0 ]]; then
-  echo "No agents detected (checked for .cursor/, .claude/, .codex/ directories and cursor/claude/codex binaries)."
-  echo "Use --agent <name> to specify manually, e.g.: ./install.sh --agent cursor"
-  exit 1
+  if [[ -t 0 && "$YES" != true ]]; then
+    echo "No agents detected (checked for .cursor/, .claude/, .codex/ directories and cursor/claude/codex binaries)."
+    echo ""
+    echo "Which agent(s) are you using?"
+    echo "  1) cursor"
+    echo "  2) claude"
+    echo "  3) codex"
+    echo ""
+    read -rp "Enter number(s) separated by spaces [1]: " agent_choices
+    agent_choices="${agent_choices:-1}"
+    for choice in $agent_choices; do
+      case "$choice" in
+        1) AGENTS+=("cursor") ;;
+        2) AGENTS+=("claude") ;;
+        3) AGENTS+=("codex") ;;
+        *) echo "Unknown choice: $choice"; exit 1 ;;
+      esac
+    done
+  else
+    echo "No agents detected (checked for .cursor/, .claude/, .codex/ directories and cursor/claude/codex binaries)."
+    echo "Use --agent <name> to specify manually, e.g.: ./install.sh --agent cursor"
+    exit 1
+  fi
 fi
 
 # --- Resolve base directory ---
