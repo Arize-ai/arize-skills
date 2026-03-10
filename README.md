@@ -1,10 +1,24 @@
 # Arize Skills
 
-Agent skills for [Arize](https://arize.com) — datasets, experiments, and traces via the `ax` CLI.
+Skills that guide AI coding agents to help you add observability, run experiments, and optimize prompts for your LLM applications.
+
+These skills encode the workflows we've refined building the [Arize](https://arize.com) platform and helping teams debug LLM apps in production. They handle the `ax` CLI flags, data shape quirks, and multi-step recipes so you don't have to.
 
 Works with Cursor, Claude Code, Codex, Windsurf, and [40+ other agents](https://github.com/nicepkg/agent-skills).
 
-## Quick Start
+## New to Arize? Start Here
+
+**Adding tracing to your app** — give your coding agent this prompt:
+
+> Follow the instructions from https://arize.com/docs/PROMPT.md and ask me questions as needed.
+
+This walks through a two-phase flow: analyze your codebase for LLM providers and frameworks, then add Arize AX tracing with the right instrumentors. No skill installation needed.
+
+**Already have traces?** Give your agent this prompt to install the skills and start debugging:
+
+> Install the Arize skills plugin from https://github.com/Arize-ai/arize-skills, then use the arize-trace skill to export and analyze recent traces from my project. Summarize any errors or latency issues you find.
+
+## Installation
 
 ### Option 1: npx (recommended)
 
@@ -32,6 +46,12 @@ cd arize-skills
 
 The installer detects installed agents and optionally installs the `ax` CLI. Use `--global` / `-Global` instead to install to `~/.<agent>/skills/`.
 
+### Option 3: Claude Code plugin
+
+```
+/plugin add https://github.com/Arize-ai/arize-skills
+```
+
 ## Prerequisites
 
 ### Arize CLI (`ax`)
@@ -47,15 +67,40 @@ pipx install arize-ax-cli
 pip install arize-ax-cli
 ```
 
-### API Key
+### Authentication
 
-Set up authentication with a profile:
+**Option A — Environment variables** (CI/CD, quick start):
+```bash
+export ARIZE_API_KEY="your-api-key"       # from https://app.arize.com/admin > API Keys
+export ARIZE_SPACE_ID="U3BhY2U6..."       # base64 space ID from your Arize URL
+```
 
+**Option B — Interactive profile** (persistent):
 ```bash
 ax profiles create
 ```
 
-Or set the `ARIZE_API_KEY` environment variable directly.
+**Option C — Direct TOML file** (scripted/non-interactive):
+```bash
+mkdir -p ~/.arize && cat > ~/.arize/config.toml << 'EOF'
+[profile]
+name = "default"
+
+[auth]
+api_key = "your-api-key"
+
+[output]
+format = "table"
+EOF
+```
+
+> **Note:** `ax profiles create` is interactive-only — no `--api-key` flag exists. For CI/CD or scripted setup, use Option A or C.
+
+### Verify
+
+```bash
+ax --version && ax profiles show 2>&1
+```
 
 ## Available Skills
 
@@ -80,10 +125,10 @@ Or set the `ARIZE_API_KEY` environment variable directly.
 | `--force` | Overwrite existing skills |
 | `--skip-cli` | Don't install `ax` CLI even if missing |
 | `--agent <name>` | Manually specify agent (cursor, claude, codex) — repeatable |
-| `--skill <name>` | Only install/uninstall specific skills — repeatable |
+| `--skill <name>` | Only install/uninstall specific skills — repeatable (e.g. `--skill arize-trace --skill arize-dataset`) |
 | `--yes` | Skip confirmation prompts |
-| `--uninstall` | Remove previously installed skill symlinks |
 | `--list` | List all available skills and exit |
+| `--uninstall` | Remove previously installed skill symlinks |
 
 **PowerShell (`install.ps1`):**
 
@@ -114,4 +159,4 @@ Or set the `ARIZE_API_KEY` environment variable directly.
 
 ## License
 
-MIT
+Apache 2.0

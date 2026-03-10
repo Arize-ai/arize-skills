@@ -1,0 +1,16 @@
+{
+  "name": "Arize-ai-arize-skills",
+  "metadata": {
+    "description": "Skills for Arize observability and the ax CLI"
+  },
+  "owner": {
+    "name": "Arize AI"
+  },
+  "plugins": [
+    {
+      "name": "arize-skills",
+      "source": "./",
+      "description": "Trace export, dataset management, experiment workflows, instrumentation, prompt optimization, and deep linking via the ax CLI."
+    }
+  ]
+}
