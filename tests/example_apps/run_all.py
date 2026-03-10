@@ -15,6 +15,9 @@ import os
 import subprocess
 import sys
 import time
+from dotenv import load_dotenv
+
+load_dotenv()
 
 APPS = [
     ("openai_rag_app", "app.py"),

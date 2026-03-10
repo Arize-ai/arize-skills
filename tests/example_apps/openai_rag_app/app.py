@@ -20,6 +20,10 @@ import random
 from opentelemetry.trace import StatusCode, get_tracer
 from phoenix.otel import register
 
+from dotenv import load_dotenv
+
+load_dotenv()
+
 tracer_provider = register(
     project_name="skill-test-rag-app",
     auto_instrument=True,
