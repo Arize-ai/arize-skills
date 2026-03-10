@@ -13,13 +13,15 @@ description: "INVOKE THIS SKILL when downloading or exporting Arize traces and s
 
 Use `ax spans export` to download trace data. This is the only supported command for retrieving spans.
 
+**Resolving project for export:** Export commands require the project's **base64 ID** as `PROJECT`. (1) If the user's value looks like a base64 ID (long alphanumeric string, e.g. `TW9kZWw6NjUyMTA4NTQxMTpCbFZK`), use it as `PROJECT`. (2) If not (e.g. "financial_agent"), treat it as a project name: run `ax projects list --space-id SPACE_ID --limit 100 -o json`, find the project by `name`, and use its `id` as `PROJECT` in all export commands.
+
 **Exploratory export rule:** When exporting spans or traces **without** a specific `--trace-id`, `--span-id`, or `--session-id` (i.e., browsing/exploring a project), always start with `-l 50` to pull a small sample first. Summarize what you find, then pull more data only if the user asks or the task requires it. This avoids slow queries and overwhelming output on large projects.
 
 **Default output directory:** Always use `--output-dir .arize-tmp-traces` on every `ax spans export` call. The CLI automatically creates the directory and adds it to `.gitignore`.
 
 ## Prerequisites
 
-Three things are needed: `ax` CLI, an API key (env var or profile), and a space ID. A project name is also needed but usually comes from the user's message.
+Three things are needed: `ax` CLI, an API key (env var or profile), and a space ID. A **project ID** is required for export commands. If the user provides a project name, resolve it to the project ID (e.g. run `ax projects list --space-id SPACE_ID --limit 100 -o json`, find the project by `name`, then use its `id`).
 
 Run a **single** shell call to check everything at once (use `required_permissions: ["all"]`):
 
@@ -40,7 +42,7 @@ ax --version; Write-Host "--- env ---"; Write-Host "ARIZE_API_KEY: $env:ARIZE_AP
 - Space ID unknown → **AskQuestion**, or run `ax projects list -o json --limit 100 --space-id $ARIZE_SPACE_ID` and present as selectable options
 - Project unclear → ask, or run `ax projects list -o json --limit 100` and search for a match
 
-**IMPORTANT:** `--space-id` is required when using a human-readable project name as the `PROJECT` positional argument. It is not needed when using a base64-encoded project ID.
+**IMPORTANT:** Export commands require the project's **base64 ID** as the `PROJECT` argument. If the user gives a project name, resolve it to an ID first (see above); do not pass the name as PROJECT.
 
 ## Export Spans: `ax spans export`
 
@@ -49,23 +51,19 @@ The primary command for downloading trace data to a file.
 ### By trace ID
 
 ```bash
-# Using project name (requires --space-id)
-ax spans export PROJECT_NAME --trace-id TRACE_ID --space-id SPACE_ID --output-dir .arize-tmp-traces
-
-# Using base64 project ID (no --space-id needed)
 ax spans export PROJECT_ID --trace-id TRACE_ID --output-dir .arize-tmp-traces
 ```
 
 ### By span ID
 
 ```bash
-ax spans export PROJECT_NAME --span-id SPAN_ID --space-id SPACE_ID --output-dir .arize-tmp-traces
+ax spans export PROJECT_ID --span-id SPAN_ID --output-dir .arize-tmp-traces
 ```
 
 ### By session ID
 
 ```bash
-ax spans export PROJECT_NAME --session-id SESSION_ID --space-id SPACE_ID --output-dir .arize-tmp-traces
+ax spans export PROJECT_ID --session-id SESSION_ID --output-dir .arize-tmp-traces
 ```
 
 ### Flags
@@ -75,8 +73,8 @@ ax spans export PROJECT_NAME --session-id SESSION_ID --space-id SPACE_ID --outpu
 | `--trace-id` | string | mutex | Filter: `context.trace_id = 'X'` |
 | `--span-id` | string | mutex | Filter: `context.span_id = 'X'` |
 | `--session-id` | string | mutex | Filter: `attributes.session.id = 'X'` |
-| `PROJECT` | string (positional) | yes (or `$ARIZE_DEFAULT_PROJECT`) | Project name or base64 ID (positional arg, not a flag) |
-| `--space-id` | string | yes (when `PROJECT` is a name) | Space ID; required to resolve project names |
+| `PROJECT` | string (positional) | yes (or `$ARIZE_DEFAULT_PROJECT`) | Base64 project ID (positional arg, not a flag). If the user gives a project name, resolve it via `ax projects list --space-id SPACE_ID --limit 100 -o json` and use the project's `id`. |
+| `--space-id` | string | when using `--all` | Space ID; required for Arrow Flight (`--all`) only |
 | `--days` | int | no | Lookback window (default: 30) |
 | `--start-time` | string | no | Override start (ISO 8601) |
 | `--end-time` | string | no | Override end (ISO 8601) |
@@ -93,7 +91,7 @@ Output is a JSON array of span objects. File naming: `{type}_{id}_{timestamp}/sp
 By default, `ax spans export` uses the REST API which is limited to 500 spans per page and capped by `--limit`. Pass `--all` to switch to Arrow Flight for streaming bulk export with no span limit.
 
 ```bash
-ax spans export PROJECT_NAME --space-id SPACE_ID --filter "status_code = 'ERROR'" --all --output-dir .arize-tmp-traces
+ax spans export PROJECT_ID --space-id SPACE_ID --filter "status_code = 'ERROR'" --all --output-dir .arize-tmp-traces
 ```
 
 **REST vs Flight trade-offs:**
@@ -127,22 +125,22 @@ Export full traces -- all spans belonging to traces that match a filter. Uses a 
 
 ```bash
 # Explore recent traces (start small with -l 50, pull more if needed)
-ax traces export PROJECT_NAME --space-id SPACE_ID -l 50 --output-dir .arize-tmp-traces
+ax traces export PROJECT_ID -l 50 --output-dir .arize-tmp-traces
 
 # Export traces with error spans (REST, up to 500 spans in phase 1)
-ax traces export PROJECT_NAME --space-id SPACE_ID --filter "status_code = 'ERROR'" --stdout
+ax traces export PROJECT_ID --filter "status_code = 'ERROR'" --stdout
 
 # Export all traces matching a filter via Flight (no limit)
-ax traces export PROJECT_NAME --space-id SPACE_ID --filter "status_code = 'ERROR'" --all
+ax traces export PROJECT_ID --space-id SPACE_ID --filter "status_code = 'ERROR'" --all
 ```
 
 ### Flags
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
-| `PROJECT` | string | required | Positional argument (name or base64 ID) |
+| `PROJECT` | string | required | Base64 project ID (resolve name to ID via `ax projects list` if needed) |
 | `--filter` | string | none | Filter expression for phase-1 span lookup |
-| `--space-id` | string | none | Space ID; required when PROJECT is a name or when using `--all` |
+| `--space-id` | string | none | Space ID; required when using `--all` (Arrow Flight) |
 | `--limit, -l` | int | 50 | Max number of traces to export |
 | `--days` | int | 30 | Lookback window in days |
 | `--start-time` | string | none | Override start (ISO 8601) |
@@ -207,20 +205,20 @@ event.attributes CONTAINS 'TimeoutError'
 
 ### Debug a failing trace
 
-1. `ax traces export PROJECT --space-id SPACE_ID --filter "status_code = 'ERROR'" -l 50 --output-dir .arize-tmp-traces`
+1. `ax traces export PROJECT_ID --filter "status_code = 'ERROR'" -l 50 --output-dir .arize-tmp-traces`
 2. Read the output file, look for spans with `status_code: ERROR`
 3. Check `attributes.error.type` and `attributes.error.message` on error spans
 
 ### Download a conversation session
 
-1. `ax spans export PROJECT --session-id SESSION_ID --space-id SPACE_ID --output-dir .arize-tmp-traces`
+1. `ax spans export PROJECT_ID --session-id SESSION_ID --output-dir .arize-tmp-traces`
 2. Spans are ordered by `start_time`, grouped by `context.trace_id`
 3. If you only have a trace_id, export that trace first, then look for `attributes.session.id` in the output to get the session ID
 
 ### Export for offline analysis
 
 ```bash
-ax spans export PROJECT --trace-id TRACE_ID --space-id SPACE_ID --output-dir .arize-tmp-traces --stdout | jq '.[]'
+ax spans export PROJECT_ID --trace-id TRACE_ID --output-dir .arize-tmp-traces --stdout | jq '.[]'
 ```
 
 ## Span Column Reference (OpenInference Semantic Conventions)
@@ -355,14 +353,14 @@ ax spans export PROJECT --trace-id TRACE_ID --space-id SPACE_ID --output-dir .ar
 | `ax: command not found` | Check `~/.local/bin/ax`; if missing: `uv tool install arize-ax-cli` (needs `required_permissions: ["all"]`) |
 | `No such command` on a subcommand that should exist | The installed `ax` is outdated. Reinstall from the local workspace: `uv tool install --force --reinstall /path/to/arize/sdk/python/arize-ax-cli` (needs `required_permissions: ["all"]`) |
 | `No profile found` | Follow "Resolve credentials" in Prerequisites to auto-discover or prompt for the API key |
-| `401 Unauthorized` with valid API key | You are likely using a project name (e.g., `my-project`) without `--space-id`. Add `--space-id SPACE_ID` or use the base64 project ID instead |
+| `401 Unauthorized` with valid API key | Use the base64 project ID as PROJECT. If you have a project name, resolve it first: `ax projects list --space-id SPACE_ID --limit 100 -o json` and use the project's `id`. |
 | `No spans found` | Expand `--days` (default 30), verify project ID |
 | `Filter error` | Check column name spelling, wrap string values in single quotes |
 | `Timeout on large export` | Use `--days 7` to narrow the time range |
 
 ## Save Credentials
 
-At session end, if the user manually provided an API key, space ID, or project name (not loaded from an existing profile), offer to save them to `~/.arize/config.toml`. Use **AskQuestion** with "Yes, save them" / "No thanks". Skip if all values were already in the profile.
+At session end, if the user manually provided an API key, space ID, or project ID (or name you resolved to an ID) (not loaded from an existing profile), offer to save them to `~/.arize/config.toml`. Use **AskQuestion** with "Yes, save them" / "No thanks". Skip if all values were already in the profile.
 
 Read the existing file (or create it), add/update only the new fields, and write it back:
 
