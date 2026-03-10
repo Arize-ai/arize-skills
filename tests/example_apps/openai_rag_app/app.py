@@ -14,6 +14,7 @@ Prerequisites:
 """
 
 import json
+import os
 import random
 
 from opentelemetry.trace import StatusCode, get_tracer
@@ -22,6 +23,9 @@ from phoenix.otel import register
 tracer_provider = register(
     project_name="skill-test-rag-app",
     auto_instrument=True,
+    endpoint="https://otlp.arize.com/v1/traces",
+    headers={"space_id": os.environ["ARIZE_SPACE_ID"]},
+    api_key=os.environ.get("ARIZE_API_KEY"),
 )
 
 from openai import OpenAI

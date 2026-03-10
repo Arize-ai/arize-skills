@@ -1,4 +1,4 @@
 arize-phoenix>=5.0
 openai>=1.0
 anthropic>=0.30
-openinference-instrumentation-openai>=1.0
+openinference-instrumentation-openai>=0.1.41

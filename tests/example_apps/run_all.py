@@ -7,7 +7,7 @@ Usage:
     python tests/example_apps/run_all.py
 
 Prerequisites:
-    ARIZE_API_KEY, ARIZE_SPACE_ID, and OPENAI_API_KEY must be set.
+    ARIZE_API_KEY, ARIZE_SPACE_ID, and OPENAI_API_KEY must be set (or in .env).
     pip install -r tests/example_apps/requirements.txt
 """
 

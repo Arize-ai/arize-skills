@@ -13,8 +13,13 @@ Requires:
 import asyncio
 import json
 import os
+import pathlib
 import sys
 from datetime import datetime
+
+from dotenv import load_dotenv
+
+load_dotenv(pathlib.Path(__file__).parent.parent / ".env")
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
@@ -31,6 +36,13 @@ MODELS_TO_COMPARE = [
     "claude-sonnet-4-6",
     "claude-opus-4-6",
 ]
+
+PROMPT_PREVIEW_LEN = 60
+
+
+def _preview(prompt: str, max_len: int = PROMPT_PREVIEW_LEN) -> str:
+    return (prompt[:max_len] + "…") if len(prompt) > max_len else prompt
+
 
 ALL_PROMPTS = (
     [(p, e, t) for p, e, t in SPECIFIC_PROMPTS]
@@ -61,12 +73,13 @@ async def run_model(model: str) -> dict:
             status = "PASS" if result.correct else "FAIL"
             print(
                 f"  [{i + 1}/{len(ALL_PROMPTS)}] {status} | "
+                f"{_preview(prompt)} | "
                 f"Expected: {expected_skills} | "
                 f"Got: {result.selected_skills} | "
                 f"${result.total_cost_usd or 0:.4f}"
             )
         except Exception as e:
-            print(f"  [{i + 1}/{len(ALL_PROMPTS)}] ERROR: {e}")
+            print(f"  [{i + 1}/{len(ALL_PROMPTS)}] ERROR | {_preview(prompt)} | {e}")
             results.append(
                 {
                     "prompt": prompt,

@@ -14,6 +14,10 @@ import pathlib
 import sys
 
 import pytest
+from dotenv import load_dotenv
+
+# Load .env from the repository root (parent of tests/)
+load_dotenv(pathlib.Path(__file__).parent.parent / ".env")
 
 # Ensure tests dir is on path so harness is importable when running from project root
 _tests_dir = pathlib.Path(__file__).resolve().parent

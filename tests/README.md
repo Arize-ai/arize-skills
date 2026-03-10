@@ -64,7 +64,22 @@ pip install -r tests/requirements.txt
 pip install -r tests/example_apps/requirements.txt
 ```
 
-Environment variables:
+### Environment Setup
+
+Create a `.env` file in the repository root with your API keys and configuration. This file is gitignored and is automatically loaded by `conftest.py` at the start of every test run via `python-dotenv`.
+
+```bash
+# .env
+ANTHROPIC_API_KEY=sk-ant-...
+ARIZE_API_KEY=your-arize-api-key
+ARIZE_SPACE_ID=your-space-id
+OPENAI_API_KEY=sk-...           # Only needed for example apps
+
+# Optional overrides
+TEST_PROJECT_NAME=skill-tests   # Arize project name (default: skill-tests)
+TEST_MODEL=claude-sonnet-4-6    # Claude model override
+SKILL_TESTS_REPORT_DIR=test-results  # Report output directory
+```
 
 | Variable | Required | Description |
 |----------|----------|-------------|
