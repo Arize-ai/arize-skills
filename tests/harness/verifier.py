@@ -202,6 +202,98 @@ class AxResourceExistsVerifier(Verifier):
         )
 
 
+class BashCommandContainsVerifier(Verifier):
+    """Verify that Bash tool calls contain expected command substrings.
+
+    Each required substring must appear in at least one Bash command.
+    Fails if no Bash commands were issued at all.
+    """
+
+    def __init__(self, required_substrings: list[str]):
+        self.required_substrings = required_substrings
+
+    def verify(self, result: TestResult, **context: Any) -> VerificationResult:
+        bash_commands = [
+            tc["input"].get("command", "")
+            for tc in result.tool_calls
+            if tc["tool"] == "Bash"
+        ]
+        checks = []
+        for substring in self.required_substrings:
+            found = any(substring in cmd for cmd in bash_commands)
+            checks.append(
+                {
+                    "name": f"bash_cmd_contains_{substring[:30]}",
+                    "passed": found,
+                    "message": (
+                        f"Found '{substring}' in a Bash command"
+                        if found
+                        else f"No Bash command contained '{substring}'"
+                    ),
+                }
+            )
+        all_passed = all(c["passed"] for c in checks)
+        return VerificationResult(
+            passed=all_passed,
+            checks=checks,
+            summary=(
+                "All command patterns found"
+                if all_passed
+                else "Missing expected command patterns"
+            ),
+        )
+
+
+class WriteOrEditContainsVerifier(Verifier):
+    """Verify that Write or Edit tool calls contained expected strings.
+
+    Collects content from all Write (content field) and Edit (new_string
+    field) tool calls, then checks that each required string appears in
+    the combined written content.
+    """
+
+    def __init__(self, required_strings: list[str], case_sensitive: bool = False):
+        self.required_strings = required_strings
+        self.case_sensitive = case_sensitive
+
+    def verify(self, result: TestResult, **context: Any) -> VerificationResult:
+        written_parts: list[str] = []
+        for tc in result.tool_calls:
+            if tc["tool"] == "Write":
+                written_parts.append(tc["input"].get("content", ""))
+            elif tc["tool"] == "Edit":
+                written_parts.append(tc["input"].get("new_string", ""))
+
+        all_written = "\n".join(written_parts)
+        text = all_written if self.case_sensitive else all_written.lower()
+
+        checks = []
+        for s in self.required_strings:
+            target = s if self.case_sensitive else s.lower()
+            found = target in text
+            checks.append(
+                {
+                    "name": f"written_contains_{s[:30]}",
+                    "passed": found,
+                    "message": (
+                        f"Found '{s}' in written/edited content"
+                        if found
+                        else f"Missing '{s}' in written/edited content"
+                    ),
+                }
+            )
+        all_passed = all(c["passed"] for c in checks)
+        return VerificationResult(
+            passed=all_passed,
+            checks=checks,
+            summary=(
+                "All strings found in written content"
+                if all_passed
+                else "Missing expected strings in written content"
+            ),
+        )
+
+
 class URLFormatVerifier(Verifier):
     """Verify the output contains a properly formatted Arize URL."""
 

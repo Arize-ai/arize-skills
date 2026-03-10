@@ -15,6 +15,7 @@ from harness.ax_helpers import (
     export_dataset,
 )
 from harness.verifier import (
+    BashCommandContainsVerifier,
     CompositeVerifier,
     NoErrorVerifier,
     OutputContainsVerifier,
@@ -112,7 +113,8 @@ class TestPromptOptimizationFromExperiment:
         )
         verifier = CompositeVerifier(
             NoErrorVerifier(),
-            ToolWasCalledVerifier(["Bash"]),
+            # Must fetch experiment results and dataset examples
+            BashCommandContainsVerifier(["ax experiments export"]),
             OutputContainsVerifier(
                 ["sentiment", "positive", "negative"]
             ),
@@ -143,6 +145,8 @@ class TestPromptOptimizationVariablePreservation:
         )
         verifier = CompositeVerifier(
             NoErrorVerifier(),
+            BashCommandContainsVerifier(["ax experiments export"]),
+            # The revised prompt must still contain the template variable
             OutputContainsVerifier(["{text}"]),
         )
         result.verification = verifier.verify(result)

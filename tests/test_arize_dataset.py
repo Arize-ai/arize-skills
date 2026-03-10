@@ -9,6 +9,8 @@ import pytest
 from conftest import make_runner
 from harness.ax_helpers import create_dataset, delete_dataset, export_dataset
 from harness.verifier import (
+    AxResourceExistsVerifier,
+    BashCommandContainsVerifier,
     CompositeVerifier,
     NoErrorVerifier,
     OutputContainsVerifier,
@@ -36,8 +38,9 @@ class TestDatasetCreate:
         )
         verifier = CompositeVerifier(
             NoErrorVerifier(),
-            ToolWasCalledVerifier(["Bash"]),
+            BashCommandContainsVerifier(["ax datasets create"]),
             OutputContainsVerifier(["dataset", "created"]),
+            AxResourceExistsVerifier("datasets", unique_name),
         )
         result.verification = verifier.verify(result)
         test_report.add(result)
@@ -52,7 +55,8 @@ class TestDatasetList:
         result = await dataset_runner.run("List all my Arize datasets.")
         verifier = CompositeVerifier(
             NoErrorVerifier(),
-            ToolWasCalledVerifier(["Bash"]),
+            BashCommandContainsVerifier(["ax datasets list"]),
+            OutputContainsVerifier(["dataset"]),
         )
         result.verification = verifier.verify(result)
         test_report.add(result)
@@ -83,7 +87,7 @@ class TestDatasetExport:
             )
             verifier = CompositeVerifier(
                 NoErrorVerifier(),
-                ToolWasCalledVerifier(["Bash"]),
+                BashCommandContainsVerifier(["ax datasets export"]),
                 OutputContainsVerifier(["3", "question", "answer"]),
             )
             result.verification = verifier.verify(result)
@@ -114,10 +118,16 @@ class TestDatasetAppend:
             )
             verifier = CompositeVerifier(
                 NoErrorVerifier(),
-                ToolWasCalledVerifier(["Bash"]),
+                BashCommandContainsVerifier(["ax datasets append"]),
             )
             result.verification = verifier.verify(result)
             test_report.add(result)
             assert result.passed
+
+            # Post-run: verify examples were actually appended via ax CLI
+            examples_after = export_dataset(ds_id)
+            assert len(examples_after) == 3, (
+                f"Expected 3 examples after append, got {len(examples_after)}"
+            )
         finally:
             delete_dataset(ds_id)

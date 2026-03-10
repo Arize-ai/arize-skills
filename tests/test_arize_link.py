@@ -40,7 +40,8 @@ class TestTraceLinkGeneration:
             URLFormatVerifier(
                 expected_params=["selectedTraceId", "startA", "endA"]
             ),
-            OutputContainsVerifier(["app.arize.com"]),
+            # The specific trace ID must appear in the generated URL
+            OutputContainsVerifier(["app.arize.com", "abc123def456"]),
         )
         result.verification = verifier.verify(result)
         test_report.add(result)
@@ -64,6 +65,8 @@ class TestSpanLinkGeneration:
                     "selectedSpanId",
                 ]
             ),
+            # Both the trace ID and span ID must be present in the output
+            OutputContainsVerifier(["abc123def456", "span789"]),
         )
         result.verification = verifier.verify(result)
         test_report.add(result)
@@ -81,6 +84,7 @@ class TestSessionLinkGeneration:
         )
         verifier = CompositeVerifier(
             NoErrorVerifier(),
+            URLFormatVerifier(expected_params=["selectedSessionId"]),
             OutputContainsVerifier(["app.arize.com", "sess_12345"]),
         )
         result.verification = verifier.verify(result)
@@ -103,8 +107,12 @@ class TestLinkFromExportedData:
         )
         verifier = CompositeVerifier(
             NoErrorVerifier(),
+            URLFormatVerifier(
+                expected_params=["selectedTraceId", "selectedSpanId"]
+            ),
+            # Both IDs must appear in the output links
             OutputContainsVerifier(
-                ["app.arize.com", "selectedTraceId"]
+                ["app.arize.com", "0123456789abcdef", "fedcba9876543210"]
             ),
         )
         result.verification = verifier.verify(result)

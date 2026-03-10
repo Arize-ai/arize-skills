@@ -15,6 +15,7 @@ from harness.verifier import (
     NoErrorVerifier,
     OutputContainsVerifier,
     ToolWasCalledVerifier,
+    WriteOrEditContainsVerifier,
 )
 
 
@@ -131,7 +132,7 @@ class TestInstrumentationPhase1Analysis:
         verifier = CompositeVerifier(
             NoErrorVerifier(),
             ToolWasCalledVerifier(["Read", "Glob"]),
-            OutputContainsVerifier(["openai", "python"]),
+            OutputContainsVerifier(["openai", "python", "arize"]),
         )
         result.verification = verifier.verify(result)
         test_report.add(result)
@@ -155,6 +156,8 @@ class TestInstrumentationFullFlow:
         verifier = CompositeVerifier(
             NoErrorVerifier(),
             ToolWasCalledVerifier(["Read", "Glob"]),
+            # Phase 2 must actually write instrumentation code
+            WriteOrEditContainsVerifier(["register", "arize"]),
             OutputContainsVerifier(["openai", "register"]),
         )
         result.verification = verifier.verify(result)
@@ -179,6 +182,8 @@ class TestInstrumentationToolCalling:
         verifier = CompositeVerifier(
             NoErrorVerifier(),
             ToolWasCalledVerifier(["Read"]),
+            # Must write CHAIN and TOOL span kinds for tool-calling apps
+            WriteOrEditContainsVerifier(["CHAIN", "TOOL"], case_sensitive=True),
             OutputContainsVerifier(["CHAIN", "TOOL", "anthropic"]),
         )
         result.verification = verifier.verify(result)

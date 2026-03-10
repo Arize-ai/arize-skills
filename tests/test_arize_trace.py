@@ -9,6 +9,7 @@ import pytest
 
 from conftest import make_runner
 from harness.verifier import (
+    BashCommandContainsVerifier,
     CompositeVerifier,
     NoErrorVerifier,
     OutputContainsVerifier,
@@ -31,7 +32,7 @@ class TestTracePrerequisiteCheck:
         )
         verifier = CompositeVerifier(
             NoErrorVerifier(),
-            ToolWasCalledVerifier(["Bash"]),
+            BashCommandContainsVerifier(["ax profiles show"]),
         )
         result.verification = verifier.verify(result)
         test_report.add(result)
@@ -42,17 +43,19 @@ class TestTraceExportByTraceId:
     """User provides a trace ID and asks to export it."""
 
     @pytest.mark.asyncio
+    @pytest.mark.timeout(600)
     async def test_export_single_trace(
         self, trace_runner, test_report, arize_space_id, test_project_name
     ):
         result = await trace_runner.run(
-            f"Export the most recent trace from project "
+            f"Export the single most recent trace from project "
             f"'{test_project_name}' using space ID {arize_space_id}. "
-            f"Save the output to a file."
+            f"Use -l 1 to limit to one trace and save to the default output dir."
         )
         verifier = CompositeVerifier(
             NoErrorVerifier(),
-            ToolWasCalledVerifier(["Bash"]),
+            BashCommandContainsVerifier(["ax traces export"]),
+            OutputContainsVerifier(["trace"]),
         )
         result.verification = verifier.verify(result)
         test_report.add(result)
@@ -72,7 +75,8 @@ class TestTraceExportWithFilter:
         )
         verifier = CompositeVerifier(
             NoErrorVerifier(),
-            ToolWasCalledVerifier(["Bash"]),
+            BashCommandContainsVerifier(["ax traces export"]),
+            OutputContainsVerifier(["error", "trace"]),
         )
         result.verification = verifier.verify(result)
         test_report.add(result)
@@ -80,7 +84,7 @@ class TestTraceExportWithFilter:
 
 
 class TestTraceExportBySessionId:
-    """User wants to download a conversation session."""
+    """User wants to list traces and export spans from the first one."""
 
     @pytest.mark.asyncio
     async def test_export_session(
@@ -92,7 +96,9 @@ class TestTraceExportBySessionId:
         )
         verifier = CompositeVerifier(
             NoErrorVerifier(),
-            ToolWasCalledVerifier(["Bash"]),
+            # Should export traces first, then export spans from the first trace
+            BashCommandContainsVerifier(["ax traces export", "ax spans export"]),
+            OutputContainsVerifier(["span", "trace"]),
         )
         result.verification = verifier.verify(result)
         test_report.add(result)
@@ -113,7 +119,8 @@ class TestTraceDebugWorkflow:
         )
         verifier = CompositeVerifier(
             NoErrorVerifier(),
-            ToolWasCalledVerifier(["Bash", "Read"]),
+            BashCommandContainsVerifier(["ax traces export"]),
+            ToolWasCalledVerifier(["Read"]),
             OutputContainsVerifier(["error"]),
         )
         result.verification = verifier.verify(result)

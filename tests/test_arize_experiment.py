@@ -15,6 +15,8 @@ from harness.ax_helpers import (
     export_dataset,
 )
 from harness.verifier import (
+    AxResourceExistsVerifier,
+    BashCommandContainsVerifier,
     CompositeVerifier,
     NoErrorVerifier,
     OutputContainsVerifier,
@@ -60,8 +62,9 @@ class TestExperimentCreate:
         )
         verifier = CompositeVerifier(
             NoErrorVerifier(),
-            ToolWasCalledVerifier(["Bash"]),
+            BashCommandContainsVerifier(["ax experiments create"]),
             OutputContainsVerifier(["experiment"]),
+            AxResourceExistsVerifier("experiments", exp_name),
         )
         result.verification = verifier.verify(result)
         result.tags = ["e2e", "experiment-create"]
@@ -81,7 +84,8 @@ class TestExperimentList:
         )
         verifier = CompositeVerifier(
             NoErrorVerifier(),
-            ToolWasCalledVerifier(["Bash"]),
+            BashCommandContainsVerifier(["ax experiments list"]),
+            OutputContainsVerifier(["experiment"]),
         )
         result.verification = verifier.verify(result)
         test_report.add(result)
@@ -132,7 +136,8 @@ class TestExperimentCompare:
             )
             verifier = CompositeVerifier(
                 NoErrorVerifier(),
-                ToolWasCalledVerifier(["Bash"]),
+                # Must export or fetch both experiments to compare them
+                BashCommandContainsVerifier(["ax experiments export"]),
                 OutputContainsVerifier(["better", "correctness"]),
             )
             result.verification = verifier.verify(result)
