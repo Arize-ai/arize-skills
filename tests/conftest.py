@@ -11,8 +11,14 @@ Key environment variables (set in CI or locally):
 
 import os
 import pathlib
+import sys
 
 import pytest
+
+# Ensure tests dir is on path so harness is importable when running from project root
+_tests_dir = pathlib.Path(__file__).resolve().parent
+if str(_tests_dir) not in sys.path:
+    sys.path.insert(0, str(_tests_dir))
 
 from harness.report import TestReport
 from harness.runner import SkillTestRunner
