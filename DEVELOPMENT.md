@@ -208,6 +208,95 @@ claude-sonnet-4-6                       91.3%    $0.1845    42/46
 claude-opus-4-6                         95.7%    $0.8920    44/46
 ```
 
+## Interactive Skill Runner
+
+`tests/run_skill.py` is a developer tool that runs any skill interactively and
+records the full session. Unlike the pytest tests it streams Claude's output to
+your terminal in real time, so you can watch each tool call and text block as
+they happen, then replay the session later from the saved JSON.
+
+### Usage
+
+```bash
+python tests/run_skill.py <skill> "<prompt>" [options]
+```
+
+| Argument / Flag | Description |
+|-----------------|-------------|
+| `skill` | Skill name (e.g. `arize-trace`, `arize-dataset`) |
+| `prompt` | The prompt to send to the skill |
+| `--model MODEL` | Claude model override. Falls back to `TEST_MODEL` env var. |
+| `--output-dir DIR` | Directory for the session JSON (default: `sessions/`) |
+| `--max-turns N` | Maximum agent turns before stopping (default: `50`) |
+| `--budget USD` | Maximum spend in USD (default: `1.0`) |
+| `--workspace DIR` | Agent working directory (default: a temporary directory) |
+
+### Examples
+
+```bash
+# Export recent error traces and watch every tool call
+python tests/run_skill.py arize-trace "Export the last 10 error traces from project my-app"
+
+# Create a dataset with a specific model
+python tests/run_skill.py arize-dataset "Create a dataset named test-data with 5 examples" \
+    --model claude-sonnet-4-6
+
+# Generate a UI link and save the session to a custom directory
+python tests/run_skill.py arize-link "Get a link to trace abc123" --output-dir sessions/
+
+# Debug a faulty app with a persistent workspace so you can inspect files afterward
+python tests/run_skill.py arize-trace "Debug why my RAG app hallucinate" \
+    --workspace /tmp/debug-run
+```
+
+### Session files
+
+After each run a JSON file is saved to `--output-dir` (default `sessions/`):
+
+```
+sessions/session_arize-trace_20240310_153012.json
+```
+
+The file contains the full `TestResult` — prompt, all tool calls and their
+inputs, the complete text output, token usage, cost, duration, and session ID.
+You can load multiple sessions to compare prompts or replay them in tests:
+
+```python
+import json, pathlib
+
+session = json.loads(pathlib.Path("sessions/session_arize-trace_20240310_153012.json").read_text())
+print(session["session_id"])     # resume in Claude Code
+print(session["total_cost_usd"]) # cost for this run
+for tc in session["tool_calls"]:
+    print(tc["tool"], tc["input"])
+```
+
+### Output format
+
+```
+──────────────────────────────────────────────────────────────────────
+Skill:  arize-trace
+Prompt: Export the last 10 error traces from project my-app
+──────────────────────────────────────────────────────────────────────
+
+I'll export the error traces from your project.
+
+[Bash]
+  $ ax traces export --project my-app --filter "status_code == ERROR" --limit 10
+
+... (streaming output continues) ...
+
+──────────────────────────────────────────────────────────────────────
+Status:   OK
+Turns:    4
+Duration: 18.3s
+Cost:     $0.0412
+Tokens:   12400 in / 820 out / 3200 cache-read
+Session:  sess_01AbCdEf...
+Saved:    sessions/session_arize-trace_20240310_153012.json
+──────────────────────────────────────────────────────────────────────
+```
+
 ## Reports
 
 All test runs produce JSON reports in `test-results/`:

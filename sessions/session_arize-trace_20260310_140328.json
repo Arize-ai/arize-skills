@@ -1,0 +1,92 @@
+{
+  "skill_name": "arize-trace",
+  "prompt": "Export the last 10 error traces from project my-app",
+  "wall_duration_ms": 66781,
+  "num_turns": 9,
+  "total_cost_usd": 0.278667,
+  "usage": {
+    "input_tokens": 11,
+    "cache_creation_input_tokens": 22168,
+    "cache_read_input_tokens": 144324,
+    "output_tokens": 2716,
+    "server_tool_use": {
+      "web_search_requests": 0,
+      "web_fetch_requests": 0
+    },
+    "service_tier": "standard",
+    "cache_creation": {
+      "ephemeral_1h_input_tokens": 0,
+      "ephemeral_5m_input_tokens": 22168
+    },
+    "inference_geo": "",
+    "iterations": [],
+    "speed": "standard"
+  },
+  "is_error": false,
+  "stop_reason": "end_turn",
+  "session_id": "9f9c0e6f-07c9-4407-9af5-f0aa50a399ce",
+  "text_output": "I'll start by checking the prerequisites \u2014 `ax` CLI, API key, and space ID.\nEverything looks good \u2014 `ax` is installed, an API key is set in the environment, and a space ID is available. Now I'll export the last 10 error traces from `my-app`.\nThere seems to be an internal API validation issue with the limit flag. Let me try with the explicit `--limit` flag instead:\nThe error is coming from the internal `projects_list` call, not the limit we set. Let me try without a limit to see if the project lookup itself is the issue:\nThe error is consistently in `projects_list` \u2014 it looks like the CLI is internally passing an invalid limit when looking up the project by name. Let me first list available projects to find its base64 ID, which bypasses the name lookup:\nThe env var API key doesn't have access to that space. The active profile uses a different key. Let me try with the profile's credentials instead:\nI don't see `my-app` in the first 10. Let me search through more projects:\nI searched through all accessible projects and there's no project named **`my-app`** in your account. Here are the projects I found that you have access to:\n\n| Project Name | Space ID |\n|---|---|\n| arize-demo-llm-travel-agent | U3BhY2U6MzkzMDU6NitTYQ== |\n| arize-demo-generative-llm-tracing | U3BhY2U6MzkzMDU6NitTYQ== |\n| testproj | U3BhY2U6NzE5Mjp4V1Q1 |\n| Playground Traces | U3BhY2U6MjI2MjA6ckZlZA== |\n| Eval Traces | U3BhY2U6NzE5Mjp4V1Q1 |\n| litellm-tracing | U3BhY2U6MjI2MjA6ckZlZA== |\n| agno-agents | U3BhY2U6NzE5Mjp4V1Q1 |\n| langgraph-multi-agent | U3BhY2U6MjI2MjA6ckZlZA== |\n| coding_agent | U3BhY2U6MjI2MjA6ckZlZA== |\n| travel-agent-demo | U3BhY2U6MjI2MjA6ckZlZA== |\n| \u2026 and more |  |\n\nCould you double-check the project name? Perhaps it's one of the above, or maybe `my-app` lives under a different API key/space? Once you confirm the correct project name, I'll run the error trace export right away.",
+  "tool_calls": [
+    {
+      "tool": "Bash",
+      "input": {
+        "command": "export PATH=\"$HOME/.local/bin:$PATH\" && ax --version && echo \"--- env ---\" && echo \"ARIZE_API_KEY: ${ARIZE_API_KEY:-(not set)}\" && echo \"ARIZE_SPACE_ID: ${ARIZE_SPACE_ID:-(not set)}\" && echo \"--- profiles ---\" && ax profiles show 2>&1",
+        "description": "Check ax CLI version, env vars, and profiles"
+      }
+    },
+    {
+      "tool": "Bash",
+      "input": {
+        "command": "export PATH=\"$HOME/.local/bin:$PATH\" && ax traces export my-app --space-id \"U3BhY2U6Mzg2NDA6elptVw==\" --filter \"status_code = 'ERROR'\" -l 10 --output-dir .arize-tmp-traces 2>&1",
+        "description": "Export last 10 error traces from project my-app"
+      }
+    },
+    {
+      "tool": "Bash",
+      "input": {
+        "command": "export PATH=\"$HOME/.local/bin:$PATH\" && ax traces export my-app --space-id \"U3BhY2U6Mzg2NDA6elptVw==\" --filter \"status_code = 'ERROR'\" --limit 10 --output-dir .arize-tmp-traces 2>&1",
+        "description": "Export last 10 error traces using --limit flag"
+      }
+    },
+    {
+      "tool": "Bash",
+      "input": {
+        "command": "export PATH=\"$HOME/.local/bin:$PATH\" && ax traces export my-app --space-id \"U3BhY2U6Mzg2NDA6elptVw==\" --filter \"status_code = 'ERROR'\" --output-dir .arize-tmp-traces 2>&1",
+        "description": "Export error traces without explicit limit"
+      }
+    },
+    {
+      "tool": "Bash",
+      "input": {
+        "command": "export PATH=\"$HOME/.local/bin:$PATH\" && ax projects list -o json --limit 100 --space-id \"U3BhY2U6Mzg2NDA6elptVw==\" 2>&1",
+        "description": "List all projects to find base64 ID for my-app"
+      }
+    },
+    {
+      "tool": "Bash",
+      "input": {
+        "command": "export PATH=\"$HOME/.local/bin:$PATH\" && ARIZE_API_KEY=\"\" ARIZE_SPACE_ID=\"\" ax projects list -o json --limit 10 2>&1",
+        "description": "List projects using the active profile credentials (not env vars)"
+      }
+    },
+    {
+      "tool": "Bash",
+      "input": {
+        "command": "export PATH=\"$HOME/.local/bin:$PATH\" && ARIZE_API_KEY=\"\" ARIZE_SPACE_ID=\"\" ax projects list -o json --limit 100 2>&1 | grep -i \"my-app\" || echo \"Not found in first 100\"",
+        "description": "Search for my-app in first 100 projects"
+      }
+    },
+    {
+      "tool": "Bash",
+      "input": {
+        "command": "export PATH=\"$HOME/.local/bin:$PATH\" && ARIZE_API_KEY=\"\" ARIZE_SPACE_ID=\"\" ax projects list -o json --limit 100 2>&1",
+        "description": "List 100 projects with profile credentials to find my-app"
+      }
+    }
+  ],
+  "verification": null,
+  "test_case_id": "",
+  "timestamp": "2026-03-10T14:03:28.621305+00:00",
+  "model": "",
+  "tags": []
+}

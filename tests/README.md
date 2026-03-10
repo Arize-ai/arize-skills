@@ -91,6 +91,44 @@ SKILL_TESTS_REPORT_DIR=test-results  # Report output directory
 | `TEST_MODEL` | No | Claude model override (e.g., `claude-sonnet-4-6`) |
 | `SKILL_TESTS_REPORT_DIR` | No | Report output directory (default: `test-results/`) |
 
+## Interactive Runner
+
+`run_skill.py` is a standalone developer tool that runs any skill and streams
+Claude's output to the terminal in real time. It is not a pytest test — use it
+when you want to watch a skill work, experiment with prompts, or record a
+session for later analysis.
+
+```bash
+# Basic usage: skill name then prompt
+python tests/run_skill.py arize-trace "Export the last 10 error traces from project my-app"
+
+# Override model
+python tests/run_skill.py arize-dataset "Create a dataset named test-data" \
+    --model claude-sonnet-4-6
+
+# Save sessions to a custom directory, keep the workspace around afterward
+python tests/run_skill.py arize-link "Get a link to trace abc123" \
+    --output-dir sessions/ --workspace /tmp/debug-run
+```
+
+Each run saves a JSON file to `--output-dir` (default `sessions/`) containing
+the full session: tool calls, text output, token usage, cost, duration, and
+session ID. See `DEVELOPMENT.md` for details on replaying sessions.
+
+```
+sessions/session_arize-trace_20240310_153012.json
+```
+
+Available flags:
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--model` | `TEST_MODEL` env / SDK default | Claude model to use |
+| `--output-dir` | `sessions/` | Where to save the session JSON |
+| `--max-turns` | `50` | Maximum agent turns |
+| `--budget` | `1.0` | Max spend in USD |
+| `--workspace` | temp dir | Agent working directory |
+
 ## Running
 
 ```bash
