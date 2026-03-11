@@ -52,9 +52,12 @@ Otherwise, continue to step 2.
 ### 2. Discover Available Data
 
 Ask the user what data their spans contain. Key questions:
+- **What scope** — span-level (one row per span) or trace/session-level (aggregating across spans)?
 - **What span kinds** are involved? (LLM, Tool, Retriever, Agent, etc.)
 - **Any custom attributes?** Users often add domain-specific data at `attributes.metadata.<key>`
   or `attributes.<key>`. Ask what custom fields they've instrumented.
+- **Any existing eval results?** If aggregating prior evals (e.g., `eval.<name>.score`), ask
+  which eval columns exist on the child spans.
 - **What does the output look like?** Is `attributes.output.value` plain text, JSON, structured data?
 
 Use the Span Attributes Reference below to suggest relevant standard fields based on their span kinds.
@@ -114,7 +117,6 @@ class MyEvaluator(CodeEvaluator):
 ## Key Rules
 
 - **Signature**: `evaluate(self, *, dataset_row, **kwargs) -> EvaluationResult` — do not change parameter names
-- **dataset_row keys** use `attributes.` prefix: `attributes.output.value`, `attributes.llm.token_count.total`, etc.
 - **EvaluationResult** requires at least `score` or `label` (both recommended):
   - `score: float | None` — numeric evaluation result
   - `label: str | None` — categorical result (e.g., "pass", "fail", "relevant")
@@ -123,6 +125,50 @@ class MyEvaluator(CodeEvaluator):
 - **Available packages**: `numpy`, `pandas`, `scipy`, `pyarrow`, `pydantic`, `jellyfish`, `json`, standard library
 - **Handle missing data** — always guard `dataset_row` being `None` and attributes being absent
 - **Configurable values** go in `__init__` so users can adjust thresholds without editing `evaluate()`
+
+## Evaluation Scopes and Data Access
+
+### Span-Level Evaluators
+
+Run once per span. Keys in `dataset_row` use the `attributes.` prefix:
+- `dataset_row.get("attributes.output.value")`
+- `dataset_row.get("attributes.llm.token_count.total")`
+
+Custom user attributes appear at `attributes.metadata.<key>` or `attributes.<key>`.
+
+### Trace/Session-Level Evaluators
+
+Run once per trace or session. The user selects which span attributes to pass in, and
+Arize **stitches values from all matched child spans into a comma-separated string**.
+
+- Access via `dataset_row.get("<key>")` — the key matches what the user selected (no `attributes.` prefix)
+- Values arrive as strings: `"0.85,0.72,0.91"` — parse by splitting on `,` and converting
+- Nested attributes can be accessed with dot notation: `llm.output_messages.[0].content`
+- Eval results from child spans are accessible as `eval.<eval_name>.score`, `eval.<eval_name>.label`
+- For experiments, the output key is `output`
+
+**Parsing pattern for stitched values:**
+```python
+import math
+
+raw = str(dataset_row.get("some.attribute") or "")
+values = []
+for val in raw.split(","):
+    val = val.strip()
+    if val:
+        try:
+            num = float(val)
+            if not math.isnan(num):
+                values.append(num)
+        except ValueError:
+            continue
+```
+
+Note: Stitched values often contain `nan` for spans where the attribute or eval result
+was missing. Always filter out `nan` values after parsing — `float("nan")` parses
+successfully but poisons arithmetic operations.
+
+Ask the user which attributes they plan to select in the UI — these determine the available keys.
 
 ## Span Attributes Reference
 
@@ -209,7 +255,8 @@ Custom user attributes appear at `attributes.metadata.<key>` or `attributes.<key
 ## Examples
 
 Each example shows separate **Imports** and **Code** blocks as entered in the Arize UI.
-These illustrate different patterns: metric computation, structured data parsing, and external package usage.
+These illustrate different patterns: span-level metric computation, span-level structured data parsing,
+trace-level aggregation of stitched values, and external package usage.
 
 ### Pattern: Metric Computation (Token Efficiency)
 
@@ -309,6 +356,78 @@ class RetrievalRelevanceScorer(CodeEvaluator):
             score=round(avg_score, 4),
             label="relevant" if passed else "irrelevant",
             explanation=f"{above_threshold}/{len(scores)} docs above {self.min_score}, avg={avg_score:.3f}",
+        )
+```
+
+### Pattern: Trace-Level Aggregation (Eval Score Averaging)
+
+Aggregates stitched eval scores from child spans across a trace. Parses comma-separated
+string values and applies multi-threshold labeling.
+
+**Imports:**
+```python
+import json
+from typing import Any, Mapping, Optional
+
+from arize.experimental.datasets.experiments.evaluators.base import (
+    CodeEvaluator,
+    EvaluationResult,
+    JSONSerializable,
+)
+```
+
+**Code:**
+```python
+import math
+
+class ToolCallAppropriatenessAggregator(CodeEvaluator):
+    def __init__(self, low_threshold: float = 0.33, high_threshold: float = 0.8):
+        self.low_threshold = low_threshold
+        self.high_threshold = high_threshold
+
+    def evaluate(
+        self,
+        *,
+        dataset_row: Optional[Mapping[str, JSONSerializable]] = None,
+        **kwargs: Any,
+    ) -> EvaluationResult:
+        if not dataset_row:
+            return EvaluationResult(label="error", score=0.0, explanation="No data")
+
+        raw = dataset_row.get("eval.tool_call_appropriateness.score")
+        if not raw:
+            return EvaluationResult(label="no_evals", score=0.0,
+                explanation="No tool call appropriateness scores found")
+
+        scores = []
+        for val in str(raw).split(","):
+            val = val.strip()
+            if val:
+                try:
+                    num = float(val)
+                    if not math.isnan(num):
+                        scores.append(num)
+                except ValueError:
+                    continue
+
+        if not scores:
+            return EvaluationResult(label="no_valid_scores", score=0.0,
+                explanation="Could not parse any valid scores")
+
+        avg = sum(scores) / len(scores)
+        above_high = sum(1 for s in scores if s > self.high_threshold)
+
+        if avg <= self.low_threshold:
+            label = "inappropriate"
+        elif avg <= self.high_threshold:
+            label = "mixed"
+        else:
+            label = "appropriate"
+
+        return EvaluationResult(
+            score=round(avg, 4),
+            label=label,
+            explanation=f"{above_high}/{len(scores)} tool calls scored above {self.high_threshold}, avg={avg:.3f}",
         )
 ```
 
