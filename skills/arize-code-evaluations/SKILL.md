@@ -1,17 +1,12 @@
 ---
 name: arize-code-evaluations
 description: >
-  Help users set up evaluators for Arize tracing spans. Arize supports three evaluator types:
-  (1) Built-in managed evaluators (regex matching, JSON parseable, contains keywords),
-  (2) LLM-as-a-judge evaluators for subjective quality assessment,
-  (3) Custom code evaluators (CodeEvaluator subclasses) for deterministic logic.
-  This skill guides users through choosing the right evaluator type for their goal and,
-  when a custom code evaluator is needed, generates the Python implementation with separate
-  imports and code blocks for the Arize UI. Use when the user wants to:
-  create an evaluator, eval, or code eval for Arize; evaluate span attributes;
-  compute metrics or scores from trace data; validate output format or content;
-  build evaluations using span metadata or custom attributes; aggregate or compare
-  values across span fields; or assess trace/session quality.
+  Set up evaluators for Arize tracing spans. Guides selection between built-in
+  (regex, JSON, keywords), LLM-as-a-judge, or custom CodeEvaluator subclasses.
+  Generates Python code with separate imports and code blocks for the Arize UI.
+  Use when: creating evaluators/evals for Arize, evaluating span attributes,
+  computing metrics from trace data, validating output, aggregating scores
+  across spans, or assessing trace/session quality.
 ---
 
 # Arize Code Evaluations
