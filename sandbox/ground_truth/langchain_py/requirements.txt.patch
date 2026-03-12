@@ -1,0 +1,5 @@
+--- a/backend/requirements.txt
++++ b/backend/requirements.txt
+@@ -end
++arize-otel
++openinference-instrumentation-langchain
