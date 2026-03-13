@@ -1,7 +1,12 @@
 """
 SkillSelectionRunner — tests whether Claude Code selects the correct skill
-for a given prompt. Runs Claude Code with all skills installed and checks
-which skill(s) it invokes.
+for a given prompt.
+
+Runs Claude Code with all skills installed (loaded from the repo's
+.claude/skills/ which symlink to /skills/) and checks which Skill tool
+invocation Claude Code makes. The Skill tool call is intercepted via
+can_use_tool and denied so the skill body never executes — we only care
+about which skill was chosen.
 
 This evaluates the specificity and accuracy of skill name/description pairs
 for vague, ambiguous, and multi-skill prompts.
@@ -9,8 +14,10 @@ for vague, ambiguous, and multi-skill prompts.
 
 import re
 import time
+from collections.abc import AsyncIterable
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
 from claude_agent_sdk import (
@@ -19,9 +26,13 @@ from claude_agent_sdk import (
     ResultMessage,
     query,
 )
-from claude_agent_sdk.types import TextBlock, ToolUseBlock
+from claude_agent_sdk.types import (
+    TextBlock,
+    ToolUseBlock,
+)
 
-from .result import TestResult, VerificationResult
+# Repo root — two levels up from tests/harness/
+_REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 
 
 @dataclass
@@ -60,46 +71,39 @@ class SkillSelectionResult:
         }
 
 
-# All known skill names
-ALL_SKILLS = [
-    "arize-trace",
-    "arize-instrumentation",
-    "arize-dataset",
-    "arize-experiment",
-    "arize-prompt-optimization",
-    "arize-link",
-]
+def _discover_skill_names() -> list[str]:
+    """Read valid skill names from /skills/*/SKILL.md frontmatter."""
+    skills_dir = _REPO_ROOT / "skills"
+    names: list[str] = []
+    for skill_dir in sorted(skills_dir.iterdir()):
+        skill_md = skill_dir / "SKILL.md"
+        if not skill_md.is_file():
+            continue
+        # Parse the name from YAML frontmatter (between --- markers)
+        text = skill_md.read_text()
+        match = re.search(r"^---\s*\n(.*?)\n---", text, re.DOTALL)
+        if match:
+            for line in match.group(1).splitlines():
+                m = re.match(r"name:\s*(.+)", line)
+                if m:
+                    names.append(m.group(1).strip().strip('"').strip("'"))
+                    break
+    return names
+
+
+# Discover at import time so ALL_SKILLS reflects the actual /skills/ directory
+ALL_SKILLS = _discover_skill_names()
 
 
 class SkillSelectionRunner:
     """
-    Runs Claude Code with a system prompt that lists all available skills
-    and asks it to identify which skill(s) to use for a given prompt.
+    Runs Claude Code with all skills installed and intercepts which Skill tool
+    invocation(s) Claude Code makes in response to a user prompt.
 
-    Instead of executing the full skill, we just ask Claude to select and
-    name the skill — keeping token usage and duration minimal.
+    Skills are loaded naturally by Claude Code from .claude/skills/ (which
+    symlink to /skills/). The Skill tool call is intercepted via can_use_tool
+    and denied with interrupt=True so the skill body never executes.
     """
-
-    SELECTION_SYSTEM_PROMPT = """\
-You are an AI assistant with access to these Arize skills:
-
-1. **arize-trace**: INVOKE THIS SKILL when downloading or exporting Arize traces and spans. Covers exporting traces by ID, sessions by ID, and debugging LLM application issues using the ax CLI.
-
-2. **arize-instrumentation**: INVOKE THIS SKILL when adding Arize AX tracing to an application. Follow the Agent-Assisted Tracing two-phase flow: analyze the codebase (read-only), then implement instrumentation after user confirmation.
-
-3. **arize-dataset**: INVOKE THIS SKILL when creating, managing, or querying Arize datasets and examples. Covers dataset CRUD, appending examples, exporting data, and file-based dataset creation using the ax CLI.
-
-4. **arize-experiment**: INVOKE THIS SKILL when creating, running, or analyzing Arize experiments. Covers experiment CRUD, exporting runs, comparing results, and evaluation workflows using the ax CLI.
-
-5. **arize-prompt-optimization**: INVOKE THIS SKILL when optimizing, improving, or debugging LLM prompts using production trace data, evaluations, and annotations.
-
-6. **arize-link**: Generate deep links to traces, spans, and sessions in the Arize UI. Use when the user wants a clickable URL to open a specific trace, span, or session.
-
-Given the user's request, respond with ONLY the skill name(s) you would invoke, one per line. Format:
-SELECTED_SKILL: <skill-name>
-
-If multiple skills are needed, list each on its own line. Do NOT explain your reasoning. Do NOT invoke any tools.
-"""
 
     def __init__(
         self,
@@ -107,43 +111,60 @@ If multiple skills are needed, list each on its own line. Do NOT explain your re
         max_budget_usd: float = 0.10,
     ):
         self.model = model
-        self.options = ClaudeAgentOptions(
-            system_prompt=self.SELECTION_SYSTEM_PROMPT,
-            allowed_tools=[],  # No tools needed for selection
-            permission_mode="bypassPermissions",
-            max_turns=1,
-            max_budget_usd=max_budget_usd,
-            model=model,
-        )
+        self.max_budget_usd = max_budget_usd
 
-    async def select(self, prompt: str) -> tuple[list[str], ResultMessage | None, str]:
-        """Run Claude Code to select which skill(s) match the prompt.
+    @staticmethod
+    async def _prompt_stream(text: str) -> AsyncIterable[dict[str, Any]]:
+        """Wrap a string prompt as the AsyncIterable that streaming mode expects."""
+        yield {
+            "type": "user",
+            "message": {"role": "user", "content": text},
+            "parent_tool_use_id": None,
+            "session_id": "",
+        }
+
+    async def select(
+        self, prompt: str, stop_after: int = 1
+    ) -> tuple[list[str], ResultMessage | None, str]:
+        """Run Claude Code and capture which Skill tool(s) it attempts to invoke.
+
+        stop_after: interrupt the session once this many distinct valid skills
+        have been recorded (use len(expected_skills) from the caller).
 
         Returns (selected_skills, result_message, text_output).
         """
         text_blocks: list[str] = []
+        text_output = ""
         result_message: ResultMessage | None = None
+        selected_skills: list[str] = []
 
-        async for message in query(prompt=prompt, options=self.options):
+        options = ClaudeAgentOptions(
+            permission_mode="default",
+            setting_sources=["project"],
+            # Typical list of tools (to exclude all unknown tools of the tester)
+            tools=['Task', 'TaskOutput', 'Bash', 'Glob', 'Grep', 'ExitPlanMode', 'Read', 'Edit', 'Write', 'NotebookEdit', 'WebFetch', 'TodoWrite', 'WebSearch', 'TaskStop', 'AskUserQuestion', 'Skill'],
+            max_turns=5,
+            max_budget_usd=self.max_budget_usd,
+            model=self.model,
+            cwd=str(_REPO_ROOT),
+        )
+
+        async for message in query(prompt=self._prompt_stream(prompt), options=options):
             if isinstance(message, AssistantMessage):
                 for block in message.content:
                     if isinstance(block, TextBlock):
                         text_blocks.append(block.text)
+                    if isinstance(block, ToolUseBlock):
+                        if block.name == "Skill":
+                            skill_name = block.input.get("skill", "").strip()
+                            selected_skills.append(skill_name)
             elif isinstance(message, ResultMessage):
                 result_message = message
-
+            # Exit early once we've captured the target number of distinct skills
+            if len(selected_skills) >= stop_after:
+                break
         text_output = "\n".join(text_blocks)
-
-        # Parse selected skills from output
-        selected = []
-        for line in text_output.splitlines():
-            match = re.search(r"SELECTED_SKILL:\s*(\S+)", line)
-            if match:
-                skill_name = match.group(1).strip().lower()
-                if skill_name in ALL_SKILLS:
-                    selected.append(skill_name)
-
-        return selected, result_message, text_output
+        return selected_skills, result_message, text_output
 
     async def test_prompt(
         self,
@@ -153,7 +174,9 @@ If multiple skills are needed, list each on its own line. Do NOT explain your re
     ) -> SkillSelectionResult:
         """Test a single prompt and return the selection result."""
         wall_start = time.monotonic()
-        selected, result_msg, text_output = await self.select(prompt)
+        selected, result_msg, text_output = await self.select(
+            prompt, stop_after=max(len(expected_skills), 1)
+        )
         wall_end = time.monotonic()
 
         # Check correctness: selected must match expected (order-independent)
