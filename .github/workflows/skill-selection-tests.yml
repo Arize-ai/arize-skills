@@ -1,0 +1,50 @@
+name: Skill Selection Tests
+
+on:
+  push:
+    paths:
+      - "skills/**"
+      - "tests/**"
+      - ".github/workflows/skill-selection-tests.yml"
+  pull_request:
+    paths:
+      - "skills/**"
+      - "tests/**"
+      - ".github/workflows/skill-selection-tests.yml"
+  workflow_dispatch:
+    inputs:
+      test_model:
+        description: "Claude model to use (leave blank for default)"
+        required: false
+        default: ""
+
+jobs:
+  skill-selection:
+    name: Skill selection routing tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.12"
+
+      - name: Install test dependencies
+        run: pip install -r tests/requirements.txt
+
+      - name: Run skill selection tests
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          TEST_MODEL: ${{ inputs.test_model || '' }}
+          SKILL_TESTS_REPORT_DIR: test-results
+        working-directory: tests
+        run: pytest test_skill_selection.py -v --timeout=300
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: skill-selection-results
+          path: tests/test-results/
+          if-no-files-found: ignore
