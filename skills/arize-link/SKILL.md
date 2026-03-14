@@ -24,6 +24,21 @@ Collect these from the user or from context (e.g., exported trace data, parsed U
   - **trace_id** (and optionally **span_id**) for trace/span links
   - **session_id** for session links
 
+**Verify IDs are base64-encoded:** All three path IDs (`org_id`, `space_id`, `project_id`) must be base64-encoded strings, not raw numeric or UUID values. A misencoded ID produces a well-formed URL that returns a 404 when opened.
+
+```python
+# Quick check: a valid base64 ID contains only A-Z, a-z, 0-9, +, /, = characters
+import base64, re
+
+def is_base64(s):
+    return bool(re.match(r'^[A-Za-z0-9+/]+=*$', s))
+
+# If you have a raw numeric ID, encode it:
+# base64.b64encode(b"Organization:1:abC1=").decode()
+```
+
+If a user provides `123456` instead of `QWNjb3VudE9yZ2FuaXphdGlvbjoxOmFiQzE=`, ask them to copy the ID directly from their Arize URL (e.g., `https://app.arize.com/organizations/{org_id}/spaces/{space_id}/...`).
+
 ## URL Construction
 
 Base URL: `https://app.arize.com` (override for on-prem if the user specifies a custom base URL)
@@ -79,16 +94,49 @@ Use these sources in priority order:
    "
    ```
 
-3. **Default fallback**: Use the last 90 days. Calculate:
+3. **Default fallback**: If no time information is available, use the last 90 days. Calculate:
    - `startA`: `(now - 90 days)` as epoch milliseconds
    - `endA`: current time as epoch milliseconds
+
+   **Prefer a tight window when possible.** A 90-day window loads slowly and the trace may be hard to find. If you have `start_time` from span data, use ± 1 hour instead of ± 1 day for a faster-loading view. An overly narrow window that excludes the trace shows an empty view — pad generously if in doubt.
 
 ## Instructions
 
 1. Gather the required IDs from the user or from available context (URLs, exported trace data, conversation history).
-2. Determine `startA` and `endA` epoch milliseconds using the priority order above.
-3. Substitute values into the appropriate URL template above.
-4. Present the URL as a clickable markdown link.
+2. Verify that `org_id`, `space_id`, and `project_id` are base64-encoded (see above).
+3. Determine `startA` and `endA` epoch milliseconds using the priority order above.
+4. Substitute values into the appropriate URL template above.
+5. Present the URL as a clickable markdown link.
+6. **Validate the link** by checking it returns HTTP 200:
+   ```bash
+   curl -s -o /dev/null -w "%{http_code}" "THE_GENERATED_URL"
+   # 200 = valid, 404 = wrong IDs or path, 403 = auth required
+   ```
+   If it returns 404, the IDs are likely wrong or not base64-encoded. Ask the user to copy IDs from their browser URL bar.
+
+## Unsupported link types
+
+The URL templates above cover **traces, spans, and sessions only**. Deep links to the following are **not currently supported** via this skill:
+- Dataset detail pages
+- Experiment result pages
+- Evaluation annotation views
+- User/team management pages
+
+Do not attempt to construct URLs for these using the trace/session templates — the URL schema is different and the links will not work.
+
+## Troubleshooting
+
+| Problem | Solution |
+|---------|----------|
+| Link opens but shows "no data" | The trace falls outside the time window. Widen `startA`/`endA` — pad by ±7 days when unsure. |
+| Link returns 404 | An ID is wrong or not base64-encoded. Re-check `org_id`, `space_id`, `project_id` from the browser URL bar. |
+| Trace loads but span is not highlighted | The `span_id` may be from a different trace. Verify `span_id` belongs to `trace_id` in the exported span data. |
+| Wrong timezone / time appears shifted | The URL hardcodes `timeZoneA=America%2FLos_Angeles`. This affects display only, not which data is shown. No fix needed unless the user reports confusion — then note that all timestamps in the UI are shown in Pacific time. |
+| `org_id` is unknown | The `ax` CLI does not expose `org_id`. Ask the user to open `https://app.arize.com` in their browser, navigate to any project, and copy `org_id` from the URL: `https://app.arize.com/organizations/{org_id}/spaces/{space_id}/...` |
+
+## Related Skills
+
+- **arize-trace**: Export spans to get `trace_id`, `span_id`, and `start_time` needed for link construction → use `arize-trace`
 
 ## Example Output
 
