@@ -95,16 +95,18 @@ ax spans export PROJECT_ID --session-id SESSION_ID --output-dir .arize-tmp-trace
 | `--trace-id` | string | mutex | Filter: `context.trace_id = 'X'` |
 | `--span-id` | string | mutex | Filter: `context.span_id = 'X'` |
 | `--session-id` | string | mutex | Filter: `attributes.session.id = 'X'` |
+| `--filter` | string | mutex | SQL-like filter expression (see Filter Syntax Reference below) |
+| `--limit, -l` | int | no | Max spans to return (default: 500 for REST; ignored for `--all`) |
 | `PROJECT` | string (positional) | yes (or `$ARIZE_DEFAULT_PROJECT`) | Project name or base64 ID (positional arg, not a flag) |
 | `--space-id` | string | yes (when `PROJECT` is a name) | Space ID; required to resolve project names. Not needed when using a base64 project ID. Also required when using `--all` (Arrow Flight). |
-| `--days` | int | no | Lookback window (default: 30) |
-| `--start-time` | string | no | Override start (ISO 8601) |
-| `--end-time` | string | no | Override end (ISO 8601) |
+| `--days` | int | no | Lookback window (default: 30). Ignored if `--start-time`/`--end-time` are provided. |
+| `--start-time` | string | no | Override start (ISO 8601). Takes precedence over `--days` when provided. |
+| `--end-time` | string | no | Override end (ISO 8601). Use with `--start-time`. |
 | `--output-dir` | string | no | Output directory (default: `.arize-tmp-traces`; ensure it is gitignored — see above) |
 | `--stdout` | bool | no | Print JSON to stdout instead of file |
 | `--all` | bool | no | Use Arrow Flight for bulk export (see below) |
 
-Exactly one of `--trace-id`, `--span-id`, `--session-id` is required.
+Exactly one of `--trace-id`, `--span-id`, `--session-id`, or `--filter` is required.
 
 Output is a JSON array of span objects. File naming: `{type}_{id}_{timestamp}/spans.json`.
 
@@ -126,6 +128,26 @@ ax spans export PROJECT_ID --space-id SPACE_ID --filter "status_code = 'ERROR'" 
 - Large time-range exports
 
 **Agent auto-escalation rule:** If a REST export returns exactly the number of spans requested by `-l` (or 500 if no limit was set), the result is likely truncated. Increase `-l` or re-run with `--all` to get the full dataset — but only when the user asks or the task requires more data.
+
+**REST vs. Arrow Flight decision tree:**
+```
+Do you have a --trace-id, --span-id, or --session-id?
+├─ YES: count is bounded → use REST (no --all). If result is exactly 500, re-run with --all.
+└─ NO (exploratory export):
+    ├─ Just browsing a sample? → use REST with -l 50
+    └─ Need all matching spans?
+        ├─ Expected < 500 → REST is fine
+        └─ Expected ≥ 500 or unknown → use --all (Arrow Flight)
+            └─ Arrow Flight times out? → batch by --days (e.g., --days 7) and loop
+```
+
+**Pre-flight span count:** Before choosing REST vs. Arrow Flight for large exploratory exports, check how many spans match your filter:
+```bash
+# Count matching spans without downloading them
+ax spans export PROJECT_ID --filter "status_code = 'ERROR'" -l 1 --stdout | jq 'length'
+# If returns 1 (hit limit), run with --all
+# If returns 0, no data matches -- check filter or expand --days
+```
 
 **Requirements for `--all`:**
 - `--space-id` is required (Flight uses `space_id` + `project_name`, not `project_id`)
@@ -242,6 +264,16 @@ event.attributes CONTAINS 'TimeoutError'
 ```bash
 ax spans export PROJECT_ID --trace-id TRACE_ID --output-dir .arize-tmp-traces --stdout | jq '.[]'
 ```
+
+### Choose an output format
+
+| Format | Best for |
+|--------|----------|
+| JSON (default) | `jq` pipelines, programmatic analysis, reading span attributes |
+| CSV (`-o csv`) | Spreadsheet review, sharing with non-engineers |
+| Parquet (`-o parquet`) | pandas/pyarrow analysis, large datasets preserving column types |
+
+**Note:** CSV loses type information (dates become strings, null becomes empty). JSON preserves the full span structure including nested attributes.
 
 ## Span Column Reference (OpenInference Semantic Conventions)
 
@@ -378,8 +410,16 @@ ax spans export PROJECT_ID --trace-id TRACE_ID --output-dir .arize-tmp-traces --
 | `No profile found` | Follow "Resolve credentials" in Prerequisites to auto-discover or prompt for the API key |
 | `401 Unauthorized` with valid API key | You are likely using a project name without `--space-id`. Add `--space-id SPACE_ID`, or resolve to a base64 project ID first: `ax projects list --space-id SPACE_ID -l 100 -o json` and use the project's `id`. |
 | `No spans found` | Expand `--days` (default 30), verify project ID |
-| `Filter error` | Check column name spelling, wrap string values in single quotes |
+| `Filter error` or `invalid filter expression` | Check column name spelling (e.g., `attributes.openinference.span.kind` not `span_kind`), wrap string values in single quotes, use `CONTAINS` for free-text fields |
+| `unknown attribute` in filter | The attribute path is wrong or not indexed. Try browsing a small sample first to see actual column names: `ax spans export PROJECT_ID -l 5 --stdout \| jq '.[0] \| keys'` |
 | `Timeout on large export` | Use `--days 7` to narrow the time range |
+
+## Related Skills
+
+- **arize-dataset**: After collecting trace data, create labeled datasets for evaluation → use `arize-dataset`
+- **arize-experiment**: Run experiments comparing prompt versions against a dataset → use `arize-experiment`
+- **arize-prompt-optimization**: Use trace data to improve prompts → use `arize-prompt-optimization`
+- **arize-link**: Turn trace IDs from exported data into clickable Arize UI URLs → use `arize-link`
 
 ## Save Credentials
 
