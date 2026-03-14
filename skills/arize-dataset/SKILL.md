@@ -155,7 +155,27 @@ ax datasets export DATASET_ID --stdout | jq '.[0]'
 - **REST** (default): Lower friction -- no Arrow/Flight dependency, standard HTTPS ports, works through any corporate proxy or firewall. Limited to 500 examples per page.
 - **Flight** (`--all`): Required for datasets with more than 500 examples. Uses gRPC+TLS on a separate host/port (`flight.arize.com:443`) which some corporate networks may block.
 
+**REST vs. Arrow Flight decision tree:**
+```
+How many examples does the dataset have?
+├─ < 500 → REST is fine (no --all needed)
+├─ ≥ 500 or unknown → use --all (Arrow Flight)
+│   └─ Arrow Flight times out? → contact support or export in version chunks
+└─ Just checking? → use REST with --stdout | jq 'length' to count first
+```
+
 **Agent auto-escalation rule:** If a REST export returns exactly 500 examples, the result is likely truncated. Re-run with `--all` to get the full dataset.
+
+**Export completeness verification:** After exporting, confirm the row count matches what the server reports:
+```bash
+# Get the server-reported count from dataset metadata
+ax datasets get DATASET_ID -o json | jq '.versions[-1] | {version: .id, examples: .example_count}'
+
+# Compare to what was exported
+jq 'length' dataset_*/examples.json
+
+# If counts differ and you used REST, re-export with --all
+```
 
 Output is a JSON array of example objects. Each example has system fields (`id`, `created_at`, `updated_at`) plus all user-defined fields:
 
@@ -199,8 +219,13 @@ ax datasets create --name "My Dataset" --space-id SPACE_ID --file data.parquet
 |--------|-----------|-------|
 | CSV | `.csv` | Column headers become field names |
 | JSON | `.json` | Array of objects |
-| JSON Lines | `.jsonl` | One object per line |
-| Parquet | `.parquet` | Column names become field names |
+| JSON Lines | `.jsonl` | One object per line (NOT a JSON array) |
+| Parquet | `.parquet` | Column names become field names; preserves types |
+
+**Format gotchas:**
+- **CSV**: Loses type information — dates become strings, `null` becomes empty string. Use JSON/Parquet to preserve types.
+- **JSONL**: Each line is a separate JSON object. A JSON array (`[{...}, {...}]`) in a `.jsonl` file will fail — use `.json` extension instead.
+- **Parquet**: Preserves column types. Requires `pandas`/`pyarrow` to read locally: `pd.read_parquet("examples.parquet")`.
 
 ## Append Examples: `ax datasets append`
 
@@ -251,6 +276,20 @@ Exactly one of `--json` or `--file` is required.
 - Fields `id`, `created_at`, `updated_at` are auto-generated -- do not include them
 - Maximum 100,000 examples per request
 
+**Schema validation before append:** If the dataset already has examples, inspect its schema before appending to avoid silent field mismatches:
+
+```bash
+# Check existing field names in the dataset
+ax datasets export DATASET_ID --stdout | jq '.[0] | keys'
+
+# Verify your new data has matching field names
+echo '[{"question": "..."}]' | jq '.[0] | keys'
+
+# Both outputs should show the same user-defined fields
+```
+
+Fields are free-form: extra fields in new examples are added, and missing fields become null. However, typos in field names (e.g., `queston` vs `question`) create new columns silently -- verify spelling before appending.
+
 ## Delete Dataset: `ax datasets delete`
 
 ```bash
@@ -267,6 +306,18 @@ ax datasets delete DATASET_ID --force   # skip confirmation prompt
 | `-p, --profile` | string | default | Configuration profile |
 
 ## Workflows
+
+### Find a dataset by name
+
+Users often refer to datasets by name rather than ID. Resolve a name to an ID before running other commands:
+
+```bash
+# Find dataset ID by name
+ax datasets list -o json | jq '.[] | select(.name == "eval-set-v1") | .id'
+
+# If the list is paginated, fetch more
+ax datasets list -o json --limit 100 | jq '.[] | select(.name | test("eval-set")) | {id, name}'
+```
 
 ### Create a dataset from file for evaluation
 
@@ -338,6 +389,12 @@ Examples are free-form JSON objects. There is no fixed schema -- columns are wha
 | `updated_at` | datetime | server | Auto-updated on modification |
 | *(any user field)* | any JSON type | user | String, number, boolean, null, nested object, array |
 
+
+## Related Skills
+
+- **arize-trace**: Export production spans to understand what data to put in datasets → use `arize-trace`
+- **arize-experiment**: Run evaluations against this dataset → next step is `arize-experiment`
+- **arize-prompt-optimization**: Use dataset + experiment results to improve prompts → use `arize-prompt-optimization`
 
 ## Troubleshooting
 
