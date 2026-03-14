@@ -65,6 +65,8 @@ Return a concise summary:
 
 **STOP. Present your analysis and wait for user confirmation before proceeding to Phase 2.**
 
+> **Phase gate — mandatory:** Do NOT write any code, install any packages, or create any files until after you have presented Phase 1 findings and received explicit user confirmation. This protects against instrumentation errors that are harder to detect than a failed export. If the user says "go ahead" or equivalent, proceed to Phase 2.
+
 ## Integration routing and docs
 
 The **canonical list** of supported integrations and doc URLs is in the [Agent Setup Prompt](https://arize.com/docs/PROMPT.md). Use it to map detected signals to implementation docs.
@@ -85,10 +87,21 @@ Proceed **only after the user confirms** the Phase 1 analysis.
 ### Steps
 
 1. **Fetch integration docs** — Read the matched doc URLs and follow their installation and instrumentation steps.
+**Idempotency check:** Before proceeding, decide which scenario applies based on Phase 1 findings:
+- **No existing tracing** → install and set up from scratch
+- **Full Arize tracing already present** → skip Phase 2, report to user
+- **Partial setup** (e.g., OpenTelemetry configured but missing Arize exporter) → add only the missing pieces; do NOT reinstall what already works
+- **Different vendor** (e.g., Datadog, Honeycomb) → add Arize as an *additional* exporter; do not replace existing observability
+
 2. **Install packages** using the detected package manager **before** writing code:
    - Python: `pip install arize-otel` plus `openinference-instrumentation-{name}` (hyphens in package name; underscores in import, e.g. `openinference.instrumentation.llama_index`).
    - TypeScript/JavaScript: `@opentelemetry/sdk-trace-node` plus the relevant `@arizeai/openinference-*` package.
    - Java: OpenTelemetry SDK plus `openinference-instrumentation-*` in pom.xml or build.gradle.
+
+   **Verify installation before writing code:**
+   - Python: `python -c "import arize_otel; print('arize_otel OK')"` — if this fails, the package is not installed correctly; stop and fix before proceeding.
+   - TypeScript: check `node_modules/@arizeai` exists: `ls node_modules/@arizeai 2>/dev/null || echo "NOT FOUND"`
+   - Java: `mvn dependency:resolve` or `gradle dependencies` to confirm the artifact resolves.
 3. **Credentials** — User needs **Arize Space ID** and **API Key** from [Space API Keys](https://app.arize.com/organizations/-/settings/space-api-keys). Set as `ARIZE_SPACE_ID` and `ARIZE_API_KEY`.
 4. **Centralized instrumentation** — Create a single module (e.g. `instrumentation.py`, `instrumentation.ts`) and initialize tracing **before** any LLM client is created.
 5. **Existing OTel** — If there is already a TracerProvider, add Arize as an **additional** exporter (e.g. BatchSpanProcessor with Arize OTLP). Do not replace existing setup unless the user asks.
@@ -188,6 +201,26 @@ For deeper instrumentation guidance inside the IDE, the user can enable:
 Then the user can ask things like: *"Instrument this app using Arize AX"*, *"Can you use manual instrumentation so I have more control over my traces?"*, *"How can I redact sensitive information from my spans?"*
 
 See the full setup at [Agent-Assisted Tracing Setup](https://arize.com/docs/ax/alyx/tracing-assistant).
+
+## Safety and rollback
+
+All Phase 2 changes are purely additive (new files + package installs). To undo:
+
+```bash
+git diff --stat          # see what changed
+git checkout .           # revert all uncommitted edits
+pip uninstall arize-otel openinference-instrumentation-openai  # remove packages
+```
+
+If instrumentation breaks the app at runtime, check:
+1. Import order — tracer must be registered before LLM clients are created
+2. Missing project name — causes HTTP 500; pass `project_name` to `register()`
+3. Syntax errors in the instrumentation module — run `python instrumentation.py` to surface them
+
+## Related Skills
+
+- **arize-trace**: After instrumenting, use `arize-trace` to verify traces are arriving and inspect span structure
+- **arize-prompt-optimization**: Use collected traces to improve prompts → `arize-prompt-optimization`
 
 ## Reference links
 
