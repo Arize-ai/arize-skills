@@ -100,24 +100,24 @@ If `ARIZE_DEFAULT_PROJECT` is not set and no project is provided, ask the user f
 ### Find LLM spans containing prompts
 
 ```bash
-# List LLM spans (where prompts live)
-ax spans list PROJECT_ID --filter "attributes.openinference.span.kind = 'LLM'" --limit 10
+# Sample LLM spans (where prompts live) -- use ax spans export with --filter
+ax spans export PROJECT_ID --filter "attributes.openinference.span.kind = 'LLM'" -l 10 --output-dir .arize-tmp-traces
 
 # Filter by model
-ax spans list PROJECT_ID --filter "attributes.llm.model_name = 'gpt-4o'" --limit 10
+ax spans export PROJECT_ID --filter "attributes.llm.model_name = 'gpt-4o'" -l 10 --output-dir .arize-tmp-traces
 
 # Filter by span name (e.g., a specific LLM call)
-ax spans list PROJECT_ID --filter "name = 'ChatCompletion'" --limit 10
+ax spans export PROJECT_ID --filter "name = 'ChatCompletion'" -l 10 --stdout | jq '.[0]'
 ```
 
 ### Export a trace to inspect prompt structure
 
 ```bash
-# Export all spans in a trace
-ax spans export --trace-id TRACE_ID --project PROJECT_ID
+# Export all spans in a trace (PROJECT_ID is the first positional argument)
+ax spans export PROJECT_ID --trace-id TRACE_ID --output-dir .arize-tmp-traces
 
 # Export a single span
-ax spans export --span-id SPAN_ID --project PROJECT_ID
+ax spans export PROJECT_ID --span-id SPAN_ID --output-dir .arize-tmp-traces
 ```
 
 ### Extract prompts from exported JSON
@@ -158,22 +158,22 @@ If the span has `attributes.llm.prompt_template.template`, the prompt uses varia
 
 ```bash
 # Find error spans -- these indicate prompt failures
-ax spans list PROJECT_ID \
+ax spans export PROJECT_ID \
   --filter "status_code = 'ERROR' AND attributes.openinference.span.kind = 'LLM'" \
-  --limit 20
+  -l 20 --output-dir .arize-tmp-traces
 
 # Find spans with low eval scores
-ax spans list PROJECT_ID \
+ax spans export PROJECT_ID \
   --filter "annotation.correctness.label = 'incorrect'" \
-  --limit 20
+  -l 20 --output-dir .arize-tmp-traces
 
 # Find spans with high latency (may indicate overly complex prompts)
-ax spans list PROJECT_ID \
+ax spans export PROJECT_ID \
   --filter "attributes.openinference.span.kind = 'LLM' AND latency_ms > 10000" \
-  --limit 20
+  -l 20 --output-dir .arize-tmp-traces
 
-# Export error traces for detailed inspection
-ax spans export --trace-id TRACE_ID --project PROJECT_ID
+# Export error traces for detailed inspection (PROJECT_ID is positional)
+ax spans export PROJECT_ID --trace-id TRACE_ID --output-dir .arize-tmp-traces
 ```
 
 ### From datasets and experiments
@@ -223,6 +223,21 @@ Look for patterns across failures:
 4. **Look for verbosity mismatches**: If outputs are too long/short vs ground truth
 5. **Check format compliance**: Are outputs in the expected format?
 
+### Choose a primary metric to optimize
+
+Pick **one** primary metric before running the meta-prompt. Optimizing for multiple metrics at once often makes things worse.
+
+| Use case | Primary metric |
+|----------|---------------|
+| RAG / Q&A | `faithfulness` (does output stay grounded in context?) |
+| Classification | `correctness` (label accuracy) |
+| Summarization | `relevance` + `conciseness` |
+| Agent task completion | `task_success` (did the agent complete the goal?) |
+| Safety / content moderation | `safety` / `toxicity` |
+| Format compliance | `format_correctness` |
+
+If multiple metrics are available, pick the one with the most failures (`jq '[.[] | select(.evaluations.YOUR_METRIC.label == "incorrect")] | length' runs.json`) as the primary optimization target. Check for regressions on secondary metrics after each iteration.
+
 ## Phase 3: Optimize the Prompt
 
 ### The Optimization Meta-Prompt
@@ -233,6 +248,14 @@ Use this template to generate an improved version of the prompt. Fill in the thr
 You are an expert in prompt optimization. Given the original baseline prompt
 and the associated performance data (inputs, outputs, evaluation labels, and
 explanations), generate a revised version that improves results.
+
+CONSTRAINTS (do not violate these during optimization)
+======================================================
+
+{PASTE_ANY_HARD_CONSTRAINTS_HERE}
+Examples: "Output must be valid JSON", "Response must be under 200 tokens",
+"Must cite sources", "Must not change the output format schema",
+"Must preserve all {template_variables}"
 
 ORIGINAL BASELINE PROMPT
 ========================
@@ -346,13 +369,28 @@ After the LLM returns the revised messages array:
 
 ```
 1. Extract prompt    -> Phase 1 (once)
-2. Run experiment    -> ax experiments create ...
-3. Export results    -> ax experiments export EXPERIMENT_ID
-4. Analyze failures  -> jq to find low scores
-5. Run meta-prompt   -> Phase 3 with new failure data
-6. Apply revised prompt
-7. Repeat from step 2
+2. Record current prompt version (see below)
+3. Run experiment    -> ax experiments create ...
+4. Export results    -> ax experiments export EXPERIMENT_ID
+5. Analyze failures  -> jq to find low scores
+6. Run meta-prompt   -> Phase 3 with new failure data
+7. Apply revised prompt
+8. Check convergence -> STOP if criteria met, else repeat from step 2
 ```
+
+**Stop conditions (convergence criteria):** Stop iterating when ANY of these is true:
+- Primary metric score improves by < 2% between iterations
+- Primary metric score exceeds your target threshold (e.g., > 90%)
+- 3 iterations completed with no meaningful improvement
+- A new iteration introduces regressions that offset the gains
+
+**Prompt version tracking:** Before each experiment, record the prompt version so results are reproducible:
+```bash
+# Save prompt version alongside the experiment name
+echo '{"experiment": "gpt4o-prompt-v2", "prompt": PASTE_PROMPT_JSON_HERE}' > prompt_versions.jsonl
+# Or store as experiment metadata field in the runs file
+```
+Always name experiments to reflect the prompt version: `gpt4o-baseline`, `gpt4o-prompt-v2`, etc.
 
 ### Measure improvement
 
@@ -378,7 +416,16 @@ jq -s '
 1. Create two experiments against the same dataset, each using a different prompt version
 2. Export both: `ax experiments export EXP_A` and `ax experiments export EXP_B`
 3. Compare average scores, failure rates, and specific example flips
-4. Check for regressions -- examples that passed with prompt A but fail with prompt B
+4. Check for regressions -- examples that passed with prompt A but fail with prompt B:
+   ```bash
+   # Regression detection: passed A but failed B
+   jq -s '
+     [.[0][] | select(.evaluations.correctness.label == "correct")] as $passed_a |
+     [.[1][] | select(.evaluations.correctness.label != "correct") |
+       select(.example_id as $id | $passed_a | any(.example_id == $id))
+     ]
+   ' experiment_a/runs.json experiment_b/runs.json | jq 'length'
+   ```
 
 ## Prompt Engineering Best Practices
 
@@ -412,11 +459,11 @@ When optimizing prompts that use template variables:
 
 1. Find failing traces:
    ```bash
-   ax traces list PROJECT_ID --filter "status_code = 'ERROR'" --limit 5
+   ax traces export PROJECT_ID --filter "status_code = 'ERROR'" -l 5 --output-dir .arize-tmp-traces
    ```
-2. Export the trace:
+2. Export a specific trace:
    ```bash
-   ax spans export --trace-id TRACE_ID --project PROJECT_ID
+   ax spans export PROJECT_ID --trace-id TRACE_ID --output-dir .arize-tmp-traces
    ```
 3. Extract the prompt from the LLM span:
    ```bash
@@ -451,9 +498,9 @@ When optimizing prompts that use template variables:
 
 1. Export spans where the output format is wrong:
    ```bash
-   ax spans list PROJECT_ID \
+   ax spans export PROJECT_ID \
      --filter "attributes.openinference.span.kind = 'LLM' AND annotation.format.label = 'incorrect'" \
-     --limit 10 -o json > bad_format.json
+     -l 10 --stdout > bad_format.json
    ```
 2. Look at what the LLM is producing vs what was expected
 3. Add explicit format instructions to the prompt (JSON schema, examples, delimiters)
@@ -463,17 +510,23 @@ When optimizing prompts that use template variables:
 
 1. Find traces where the model hallucinated:
    ```bash
-   ax spans list PROJECT_ID \
+   ax spans export PROJECT_ID \
      --filter "annotation.faithfulness.label = 'unfaithful'" \
-     --limit 20
+     -l 20 --output-dir .arize-tmp-traces
    ```
 2. Export and inspect the retriever + LLM spans together:
    ```bash
-   ax spans export --trace-id TRACE_ID --project PROJECT_ID
+   ax spans export PROJECT_ID --trace-id TRACE_ID --output-dir .arize-tmp-traces
    jq '[.[] | {kind: .attributes.openinference.span.kind, name, input: .attributes.input.value, output: .attributes.output.value}]' trace_*/spans.json
    ```
 3. Check if the retrieved context actually contained the answer
 4. Add grounding instructions to the system prompt: "Only use information from the provided context. If the answer is not in the context, say so."
+
+## Related Skills
+
+- **arize-trace**: Export production traces to find failing spans and extract current prompts → use `arize-trace`
+- **arize-dataset**: Create a labeled dataset from failed traces for systematic evaluation → use `arize-dataset`
+- **arize-experiment**: Run experiments to measure prompt performance and compare versions → use `arize-experiment`
 
 ## Troubleshooting
 
