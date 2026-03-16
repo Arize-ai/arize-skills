@@ -87,11 +87,12 @@ Proceed **only after the user confirms** the Phase 1 analysis.
 ### Steps
 
 1. **Fetch integration docs** — Read the matched doc URLs and follow their installation and instrumentation steps.
-**Idempotency check:** Before proceeding, decide which scenario applies based on Phase 1 findings:
-- **No existing tracing** → install and set up from scratch
-- **Full Arize tracing already present** → skip Phase 2, report to user
-- **Partial setup** (e.g., OpenTelemetry configured but missing Arize exporter) → add only the missing pieces; do NOT reinstall what already works
-- **Different vendor** (e.g., Datadog, Honeycomb) → add Arize as an *additional* exporter; do not replace existing observability
+
+   **Idempotency check:** Before proceeding, decide which scenario applies based on Phase 1 findings:
+   - **No existing tracing** → install and set up from scratch
+   - **Full Arize tracing already present** → skip Phase 2, report to user
+   - **Partial setup** (e.g., OpenTelemetry configured but missing Arize exporter) → add only the missing pieces; do NOT reinstall what already works
+   - **Different vendor** (e.g., Datadog, Honeycomb) → add Arize as an *additional* exporter; do not replace existing observability
 
 2. **Install packages** using the detected package manager **before** writing code:
    - Python: `pip install arize-otel` plus `openinference-instrumentation-{name}` (hyphens in package name; underscores in import, e.g. `openinference.instrumentation.llama_index`).
@@ -116,21 +117,6 @@ Proceed **only after the user confirms** the Phase 1 analysis.
 - **When the app has tool/function execution:** add manual CHAIN + TOOL spans (see **Enriching traces** below) so the trace tree shows each tool call and its result — otherwise traces will look sparse (only LLM API spans, no tool input/output).
 
 ## Enriching traces: manual spans for tool use and agent loops
-
-### Why doesn't the auto-instrumentor do this?
-
-**Provider instrumentors (Anthropic, OpenAI, etc.) only wrap the LLM *client* — the code that sends HTTP requests and receives responses.** They see:
-
-- One span per API call: request (messages, system prompt, tools) and response (text, tool_use blocks, etc.).
-
-They **cannot** see what happens *inside your application* after the response:
-
-- **Tool execution** — Your code parses the response, calls `run_tool("check_loan_eligibility", {...})`, and gets a result. That runs in your process; the instrumentor has no hook into your `run_tool()` or the actual tool output. The *next* API call (sending the tool result back) is just another `messages.create` span — the instrumentor doesn't know that the message content is a tool result or what the tool returned.
-- **Agent/chain boundary** — The idea of "one user turn → multiple LLM calls + tool calls" is an *application-level* concept. The instrumentor only sees separate API calls; it doesn't know they belong to the same logical "run_agent" run.
-
-So TOOL and CHAIN spans have to be added **manually** (or by a *framework* instrumentor like LangChain/LangGraph that knows about tools and chains). Once you add them, they appear in the same trace as the LLM spans because they use the same TracerProvider.
-
----
 
 To avoid sparse traces where tool inputs/outputs are missing:
 
@@ -179,43 +165,6 @@ After implementation:
 2. **Use the `arize-trace` skill** to confirm traces arrived. If empty, retry shortly. Verify spans have expected `openinference.span.kind`, `input.value`/`output.value`, and parent-child relationships.
 3. If no traces: verify `ARIZE_SPACE_ID` and `ARIZE_API_KEY`, ensure tracer is initialized before instrumentors and clients, check connectivity to `otlp.arize.com:443`; for debug set `GRPC_VERBOSITY=debug` or pass `log_to_console=True` to `register()`. Common gotchas: (a) missing project name resource attribute causes HTTP 500 rejections — `service.name` alone is not enough; Python: pass `project_name` to `register()`; TypeScript: set `"model_id"` or `SEMRESATTRS_PROJECT_NAME` on the resource; (b) CLI/script processes exit before OTLP exports flush — call `provider.force_flush()` then `provider.shutdown()` before exit.
 4. If the app uses tools: confirm CHAIN and TOOL spans appear with `input.value` / `output.value` so tool calls and results are visible.
-
-## Leveraging the Tracing Assistant (MCP)
-
-For deeper instrumentation guidance inside the IDE, the user can enable:
-
-- **Arize AX Tracing Assistant MCP** — instrumentation guides, framework examples, and support. In Cursor: **Settings → MCP → Add** and use:
-  ```json
-  "arize-tracing-assistant": {
-    "command": "uvx",
-    "args": ["arize-tracing-assistant@latest"]
-  }
-  ```
-- **Arize AX Docs MCP** — searchable docs. In Cursor:
-  ```json
-  "arize-ax-docs": {
-    "url": "https://arize.com/docs/mcp"
-  }
-  ```
-
-Then the user can ask things like: *"Instrument this app using Arize AX"*, *"Can you use manual instrumentation so I have more control over my traces?"*, *"How can I redact sensitive information from my spans?"*
-
-See the full setup at [Agent-Assisted Tracing Setup](https://arize.com/docs/ax/alyx/tracing-assistant).
-
-## Safety and rollback
-
-All Phase 2 changes are purely additive (new files + package installs). To undo:
-
-```bash
-git diff --stat          # see what changed
-git checkout .           # revert all uncommitted edits
-pip uninstall arize-otel openinference-instrumentation-openai  # remove packages
-```
-
-If instrumentation breaks the app at runtime, check:
-1. Import order — tracer must be registered before LLM clients are created
-2. Missing project name — causes HTTP 500; pass `project_name` to `register()`
-3. Syntax errors in the instrumentation module — run `python instrumentation.py` to surface them
 
 ## Related Skills
 
