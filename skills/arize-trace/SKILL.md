@@ -11,7 +11,7 @@ description: "INVOKE THIS SKILL when downloading or exporting Arize traces and s
 - **Span** = a single operation (LLM call, tool call, retriever, chain, agent)
 - **Session** = a group of traces sharing `attributes.session.id` (e.g., a multi-turn conversation)
 
-Use `ax spans export` to download trace data. This is the only supported command for retrieving spans.
+Use `ax spans export` to download individual spans, or `ax traces export` to download complete traces (all spans belonging to matching traces).
 
 **Resolving project for export:** The `PROJECT` positional argument accepts either a project name or a base64 project ID. When using a name, `--space-id` is required. If you hit limit errors or `401 Unauthorized` when using a project name, resolve it to a base64 ID: run `ax projects list --space-id SPACE_ID -l 100 -o json`, find the project by `name`, and use its `id` as `PROJECT`.
 
@@ -90,58 +90,51 @@ ax spans export PROJECT_ID --session-id SESSION_ID --output-dir .arize-tmp-trace
 
 ### Flags
 
-| Flag | Type | Required | Description |
-|------|------|----------|-------------|
-| `--trace-id` | string | mutex | Filter: `context.trace_id = 'X'` |
-| `--span-id` | string | mutex | Filter: `context.span_id = 'X'` |
-| `--session-id` | string | mutex | Filter: `attributes.session.id = 'X'` |
-| `--filter` | string | mutex | SQL-like filter expression (see Filter Syntax Reference below) |
-| `--limit, -l` | int | no | Max spans to return (default: 500 for REST; ignored for `--all`) |
-| `PROJECT` | string (positional) | yes (or `$ARIZE_DEFAULT_PROJECT`) | Project name or base64 ID (positional arg, not a flag) |
-| `--space-id` | string | yes (when `PROJECT` is a name) | Space ID; required to resolve project names. Not needed when using a base64 project ID. Also required when using `--all` (Arrow Flight). |
-| `--days` | int | no | Lookback window (default: 30). Ignored if `--start-time`/`--end-time` are provided. |
-| `--start-time` | string | no | Override start (ISO 8601). Takes precedence over `--days` when provided. |
-| `--end-time` | string | no | Override end (ISO 8601). Use with `--start-time`. |
-| `--output-dir` | string | no | Output directory (default: `.arize-tmp-traces`; ensure it is gitignored — see above) |
-| `--stdout` | bool | no | Print JSON to stdout instead of file |
-| `--all` | bool | no | Use Arrow Flight for bulk export (see below) |
-
-Exactly one of `--trace-id`, `--span-id`, `--session-id`, or `--filter` is required.
+| Flag | Default | Description |
+|------|---------|-------------|
+| `PROJECT` (positional) | `$ARIZE_DEFAULT_PROJECT` | Project name or base64 ID |
+| `--trace-id` | — | Filter by `context.trace_id` (mutex with other ID flags) |
+| `--span-id` | — | Filter by `context.span_id` (mutex with other ID flags) |
+| `--session-id` | — | Filter by `attributes.session.id` (mutex with other ID flags) |
+| `--filter` | — | SQL-like filter; combinable with any ID flag |
+| `--limit, -l` | 500 | Max spans (REST); ignored with `--all` |
+| `--space-id` | — | Required when `PROJECT` is a name, or with `--all` |
+| `--days` | 30 | Lookback window; ignored if `--start-time`/`--end-time` set |
+| `--start-time` / `--end-time` | — | ISO 8601 time range override |
+| `--output-dir` | `.arize-tmp-traces` | Output directory |
+| `--stdout` | false | Print JSON to stdout instead of file |
+| `--all` | false | Unlimited bulk export via Arrow Flight (see below) |
 
 Output is a JSON array of span objects. File naming: `{type}_{id}_{timestamp}/spans.json`.
 
-### Bulk export with `--all` (Arrow Flight)
+### Bulk export with `--all`
 
-By default, `ax spans export` uses the REST API which is limited to 500 spans per page and capped by `--limit`. Pass `--all` to switch to Arrow Flight for streaming bulk export with no span limit.
+By default, `ax spans export` is capped at 500 spans by `-l`. Pass `--all` for unlimited bulk export.
 
 ```bash
 ax spans export PROJECT_ID --space-id SPACE_ID --filter "status_code = 'ERROR'" --all --output-dir .arize-tmp-traces
 ```
-
-**REST vs Flight trade-offs:**
-- **REST** (default): Lower friction -- no Arrow/Flight dependency needed, uses standard HTTPS ports, works through any corporate proxy or firewall. Limited to 500 spans per page.
-- **Flight** (`--all`): Required for bulk export beyond 500 spans. Uses gRPC+TLS on a separate host/port which some corporate networks may block.
 
 **When to use `--all`:**
 - Exporting more than 500 spans
 - Downloading full traces with many child spans
 - Large time-range exports
 
-**Agent auto-escalation rule:** If a REST export returns exactly the number of spans requested by `-l` (or 500 if no limit was set), the result is likely truncated. Increase `-l` or re-run with `--all` to get the full dataset — but only when the user asks or the task requires more data.
+**Agent auto-escalation rule:** If an export returns exactly the number of spans requested by `-l` (or 500 if no limit was set), the result is likely truncated. Increase `-l` or re-run with `--all` to get the full dataset — but only when the user asks or the task requires more data.
 
-**REST vs. Arrow Flight decision tree:**
+**Decision tree:**
 ```
 Do you have a --trace-id, --span-id, or --session-id?
-├─ YES: count is bounded → use REST (no --all). If result is exactly 500, re-run with --all.
+├─ YES: count is bounded → omit --all. If result is exactly 500, re-run with --all.
 └─ NO (exploratory export):
-    ├─ Just browsing a sample? → use REST with -l 50
+    ├─ Just browsing a sample? → use -l 50
     └─ Need all matching spans?
-        ├─ Expected < 500 → REST is fine
-        └─ Expected ≥ 500 or unknown → use --all (Arrow Flight)
-            └─ Arrow Flight times out? → batch by --days (e.g., --days 7) and loop
+        ├─ Expected < 500 → -l is fine
+        └─ Expected ≥ 500 or unknown → use --all
+            └─ Times out? → batch by --days (e.g., --days 7) and loop
 ```
 
-**Pre-flight span count:** Before choosing REST vs. Arrow Flight for large exploratory exports, check how many spans match your filter:
+**Check span count first:** Before a large exploratory export, check how many spans match your filter:
 ```bash
 # Count matching spans without downloading them
 ax spans export PROJECT_ID --filter "status_code = 'ERROR'" -l 1 --stdout | jq 'length'
@@ -175,7 +168,7 @@ ax traces export PROJECT_ID -l 50 --output-dir .arize-tmp-traces
 ax traces export PROJECT_ID --filter "status_code = 'ERROR'" --stdout
 
 # Export all traces matching a filter via Flight (no limit)
-ax traces export PROJECT_ID --space-id SPACE_ID --filter "status_code = 'ERROR'" --all
+ax traces export PROJECT_ID --space-id SPACE_ID --filter "status_code = 'ERROR'" --all --output-dir .arize-tmp-traces
 ```
 
 ### Flags
@@ -262,18 +255,9 @@ event.attributes CONTAINS 'TimeoutError'
 ### Export for offline analysis
 
 ```bash
-ax spans export PROJECT_ID --trace-id TRACE_ID --output-dir .arize-tmp-traces --stdout | jq '.[]'
+ax spans export PROJECT_ID --trace-id TRACE_ID --stdout | jq '.[]'
 ```
 
-### Choose an output format
-
-| Format | Best for |
-|--------|----------|
-| JSON (default) | `jq` pipelines, programmatic analysis, reading span attributes |
-| CSV (`-o csv`) | Spreadsheet review, sharing with non-engineers |
-| Parquet (`-o parquet`) | pandas/pyarrow analysis, large datasets preserving column types |
-
-**Note:** CSV loses type information (dates become strings, null becomes empty). JSON preserves the full span structure including nested attributes.
 
 ## Span Column Reference (OpenInference Semantic Conventions)
 
@@ -406,7 +390,7 @@ ax spans export PROJECT_ID --trace-id TRACE_ID --output-dir .arize-tmp-traces --
 |---------|----------|
 | `ax: command not found` | Check `~/.local/bin/ax`; if missing: `uv tool install arize-ax-cli` (requires shell access to install packages). Then `export PATH="$HOME/.local/bin:$PATH"` |
 | `SSL: CERTIFICATE_VERIFY_FAILED` | macOS: `export SSL_CERT_FILE=/etc/ssl/cert.pem`. Linux: `export SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt`. Windows: `$env:SSL_CERT_FILE = (python -c "import certifi; print(certifi.where())")` |
-| `No such command` on a subcommand that should exist | The installed `ax` is outdated. Reinstall from the local workspace: `uv tool install --force --reinstall /path/to/arize/sdk/python/arize-ax-cli` (requires shell access to install packages) |
+| `No such command` on a subcommand that should exist | The installed `ax` is outdated. Reinstall: `uv tool install --force --reinstall arize-ax-cli` (requires shell access to install packages) |
 | `No profile found` | Follow "Resolve credentials" in Prerequisites to auto-discover or prompt for the API key |
 | `401 Unauthorized` with valid API key | You are likely using a project name without `--space-id`. Add `--space-id SPACE_ID`, or resolve to a base64 project ID first: `ax projects list --space-id SPACE_ID -l 100 -o json` and use the project's `id`. |
 | `No spans found` | Expand `--days` (default 30), verify project ID |
