@@ -46,7 +46,7 @@ These columns carry the feedback data used for optimization:
 
 ## Prerequisites
 
-Three things are needed: `ax` CLI, an API key (env var or profile), and a project. A space ID is also needed when using project names.
+Three things are needed: `ax` CLI, an API key (env var or profile), and a space ID. A project name or ID is also needed but usually comes from the user's message.
 
 ### Install ax
 
@@ -86,8 +86,10 @@ ax --version; Write-Host "--- env ---"; Write-Host "ARIZE_API_KEY: $(if ($env:AR
 **Read the output and proceed immediately** if either the env var or the profile has an API key. Only ask the user if **both** are missing. Resolve failures:
 
 - No API key in env **and** no profile → **AskQuestion**: "Arize API key (https://app.arize.com/admin > API Keys)"
-- Space ID unknown → **AskQuestion**, or run `ax projects list -o json --limit 100` and search for a match
+- Space ID unknown → **AskQuestion**, or run `ax projects list -o json --limit 100 --space-id $ARIZE_SPACE_ID` and search for a match
 - Project unclear → ask, or run `ax projects list -o json --limit 100` and present as selectable options
+
+**IMPORTANT:** `--space-id` is required when using a human-readable project name as the `PROJECT` positional argument on `ax spans export` and `ax traces export`. It is not needed when using a base64-encoded project ID. If you hit `401 Unauthorized` or limit errors when using a project name, resolve it to a base64 ID first: run `ax projects list --space-id SPACE_ID -l 100 -o json`, find the project by `name`, and use its `id` as `PROJECT`.
 
 ### Default Project
 
@@ -533,7 +535,8 @@ When optimizing prompts that use template variables:
 | Problem | Solution |
 |---------|----------|
 | `ax: command not found` | **macOS/Linux:** check `~/.local/bin/ax`. **Windows:** check if `ax` is on PATH. If missing: `uv tool install arize-ax-cli` (requires shell access to install packages) |
-| `No profile found` | Create `~/.arize/config.toml` with `api_key = "${ARIZE_API_KEY}"` (see Prerequisites) |
+| `No profile found` | Follow "Verify environment" in Prerequisites to auto-discover or prompt for the API key |
+| `401 Unauthorized` with valid API key | You are likely using a project name without `--space-id`. Add `--space-id SPACE_ID`, or resolve to a base64 project ID first: `ax projects list --space-id SPACE_ID -l 100 -o json` and use the project's `id` |
 | No `input_messages` on span | Check span kind -- Chain/Agent spans store prompts on child LLM spans, not on themselves |
 | Prompt template is `null` | Not all instrumentations emit `prompt_template`. Use `input_messages` or `input.value` instead |
 | Variables lost after optimization | Verify the revised prompt preserves all `{var}` placeholders from the original |
