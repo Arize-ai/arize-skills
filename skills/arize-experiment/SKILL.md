@@ -63,7 +63,7 @@ ax --version; Write-Host "--- env ---"; Write-Host "ARIZE_API_KEY: $(if ($env:AR
 
 Both are needed for most commands. Resolve each:
 
-1. User provides it in the conversation -- use directly via `--space-id` / `--project` flags.
+1. User provides it in the conversation -- note that space ID and project are resolved via the API key profile, not CLI flags.
 2. Env var is set (`ARIZE_SPACE_ID`, `ARIZE_DEFAULT_PROJECT`) -- use silently.
 3. If missing, **AskQuestion** once. Tell the user:
    - Space ID is in the Arize URL: `/spaces/{SPACE_ID}/...`
@@ -186,9 +186,9 @@ ax experiments create --name "claude-test" --dataset-id DATASET_ID --file runs.c
 
 | Flag | Type | Required | Description |
 |------|------|----------|-------------|
-| `--name, -n` | string | yes (prompted) | Experiment name |
-| `--dataset-id` | string | yes (prompted) | Dataset to run the experiment against |
-| `--file, -f` | path | yes (prompted) | Data file with runs: CSV, JSON, JSONL, or Parquet |
+| `--name, -n` | string | yes | Experiment name |
+| `--dataset-id` | string | yes | Dataset to run the experiment against |
+| `--file, -f` | path | yes | Data file with runs: CSV, JSON, JSONL, or Parquet |
 | `-o, --output` | string | no | Output format |
 | `-p, --profile` | string | no | Configuration profile |
 
