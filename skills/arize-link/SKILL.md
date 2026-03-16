@@ -1,6 +1,6 @@
 ---
 name: arize-link
-description: Generate deep links to traces, spans, and sessions in the Arize UI. Use when the user wants a clickable URL to open a specific trace, span, or session.
+description: "Generate deep links to traces, spans, and sessions in the Arize UI. Use when the user wants a clickable URL to open a specific trace, span, or session, wants to share a trace with their team, or wants to open something in the Arize UI."
 ---
 
 # Arize Link

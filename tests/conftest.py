@@ -19,6 +19,11 @@ from dotenv import load_dotenv
 # Load .env from the repository root (parent of tests/)
 load_dotenv(pathlib.Path(__file__).parent.parent / ".env", override=True)
 
+# Remove CLAUDECODE so the SDK can spawn Claude Code subprocesses even when
+# tests are run from inside a Claude Code session (nested sessions are blocked
+# by the presence of this env var).
+os.environ.pop("CLAUDECODE", None)
+
 # Ensure tests dir is on path so harness is importable when running from project root
 _tests_dir = pathlib.Path(__file__).resolve().parent
 if str(_tests_dir) not in sys.path:

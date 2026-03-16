@@ -1,6 +1,6 @@
 ---
 name: arize-experiment
-description: "INVOKE THIS SKILL when creating, running, or analyzing Arize experiments. Covers experiment CRUD, exporting runs, comparing results, and evaluation workflows using the ax CLI."
+description: "INVOKE THIS SKILL when creating, running, or analyzing Arize experiments. Also use when the user wants to evaluate or measure model performance, or assess how well their AI is doing. Covers experiment CRUD, exporting runs, comparing results, and evaluation workflows using the ax CLI."
 ---
 
 # Arize Experiment Skill

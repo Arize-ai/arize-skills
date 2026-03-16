@@ -1,6 +1,6 @@
 ---
 name: arize-trace
-description: "INVOKE THIS SKILL when downloading or exporting Arize traces and spans. Covers exporting traces by ID, sessions by ID, and debugging LLM application issues using the ax CLI."
+description: "INVOKE THIS SKILL when downloading or exporting Arize traces and spans, or when a user says their LLM app/chatbot is broken and asks to find what is wrong by inspecting existing trace data. Use for debugging unknown runtime issues, failures, and behavior regressions in already-instrumented apps. Covers exporting traces by ID, spans by ID, sessions by ID, and root-cause investigation with the ax CLI."
 ---
 
 # Arize Trace Skill
