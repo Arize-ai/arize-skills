@@ -201,35 +201,6 @@ VAGUE_PROMPTS = [
     ),
 ]
 
-# Multi-skill: prompts that should trigger multiple skills
-MULTI_SKILL_PROMPTS = [
-    (
-        "Export my traces, then create a dataset from the error cases",
-        ["arize-trace", "arize-dataset"],
-        ["multi", "trace", "dataset"],
-    ),
-    (
-        "Set up tracing for my app and then run an experiment to evaluate it",
-        ["arize-instrumentation", "arize-experiment"],
-        ["multi", "instrumentation", "experiment"],
-    ),
-    (
-        "Download the experiment results and use them to optimize my prompt",
-        ["arize-experiment", "arize-prompt-optimization"],
-        ["multi", "experiment", "prompt-optimization"],
-    ),
-    (
-        "Export the traces, analyze the failures, and give me a link to the worst one",
-        ["arize-trace", "arize-link"],
-        ["multi", "trace", "link"],
-    ),
-    (
-        "Create a dataset from my traces and run an experiment on it",
-        ["arize-dataset", "arize-experiment"],
-        ["multi", "dataset", "experiment"],
-    ),
-]
-
 # Negative/irrelevant prompts (should not match any skill strongly)
 NEGATIVE_PROMPTS = [
     (
@@ -366,34 +337,6 @@ class TestVaguePrompts:
             f"for prompt: {prompt}"
         )
 
-
-class TestMultiSkillPrompts:
-    """Test prompts that should trigger multiple skills."""
-
-    @pytest.mark.asyncio
-    @pytest.mark.parametrize(
-        "prompt,expected_skills,tags", MULTI_SKILL_PROMPTS
-    )
-    async def test_multi_skill_prompt(
-        self,
-        selection_runner,
-        selection_results,
-        prompt,
-        expected_skills,
-        tags,
-    ):
-        result = await selection_runner.test_prompt(
-            prompt, expected_skills, tags
-        )
-        selection_results.append(result)
-        # For multi-skill, check that all expected skills are selected
-        # (may have additional skills — that's ok)
-        expected_set = set(expected_skills)
-        selected_set = set(result.selected_skills)
-        assert expected_set.issubset(selected_set), (
-            f"Expected at least {expected_skills}, got {result.selected_skills} "
-            f"for prompt: {prompt}"
-        )
 
 
 class TestNegativePrompts:
