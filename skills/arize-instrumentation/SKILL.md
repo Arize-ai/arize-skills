@@ -165,11 +165,7 @@ After implementation:
 2. **Use the `arize-trace` skill** to confirm traces arrived. If empty, retry shortly. Verify spans have expected `openinference.span.kind`, `input.value`/`output.value`, and parent-child relationships.
 3. If no traces: verify `ARIZE_SPACE_ID` and `ARIZE_API_KEY`, ensure tracer is initialized before instrumentors and clients, check connectivity to `otlp.arize.com:443`; for debug set `GRPC_VERBOSITY=debug` or pass `log_to_console=True` to `register()`. Common gotchas: (a) missing project name resource attribute causes HTTP 500 rejections — `service.name` alone is not enough; Python: pass `project_name` to `register()`; TypeScript: set `"model_id"` or `SEMRESATTRS_PROJECT_NAME` on the resource; (b) CLI/script processes exit before OTLP exports flush — call `provider.force_flush()` then `provider.shutdown()` before exit.
 4. If the app uses tools: confirm CHAIN and TOOL spans appear with `input.value` / `output.value` so tool calls and results are visible.
-
-## Related Skills
-
-- **arize-trace**: After instrumenting, use `arize-trace` to verify traces are arriving and inspect span structure
-- **arize-prompt-optimization**: Use collected traces to improve prompts → `arize-prompt-optimization`
+5. **Next steps**: use the `arize-prompt-optimization` skill to improve prompts using the collected traces.
 
 ## Reference links
 
