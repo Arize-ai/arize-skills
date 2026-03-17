@@ -1,11 +1,6 @@
 name: Skill Selection Tests
 
 on:
-  push:
-    paths:
-      - "skills/**"
-      - "tests/**"
-      - ".github/workflows/skill-selection-tests.yml"
   pull_request:
     paths:
       - "skills/**"
