@@ -66,7 +66,7 @@ The `version` value must be URL-encoded (e.g., trailing `=` → `%3D`).
 
 ## Time Range
 
-`startA` and `endA` (epoch milliseconds) are **required** for trace/span/session links — omitting them defaults to the last 7 days and will show "no recent data" if the trace falls outside that window.
+CRITICAL: `startA` and `endA` (epoch milliseconds) are **required** for trace/span/session links — omitting them defaults to the last 7 days and will show "no recent data" if the trace falls outside that window.
 
 **Priority order:**
 1. **User-provided URL** — extract and reuse `startA`/`endA` directly.
