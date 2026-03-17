@@ -28,6 +28,15 @@ jobs:
       - name: Install test dependencies
         run: pip install -r tests/requirements.txt
 
+      - name: Check required secrets
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          if [ -z "$ANTHROPIC_API_KEY" ]; then
+            echo "::error::ANTHROPIC_API_KEY secret is not set. Go to Settings > Secrets and variables > Actions to add it."
+            exit 1
+          fi
+
       - name: Run skill selection tests
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
