@@ -227,18 +227,28 @@ Look for patterns across failures:
 
 ### Choose a primary metric to optimize
 
-Pick **one** primary metric before running the meta-prompt. Optimizing for multiple metrics at once often makes things worse.
+Before proceeding, discover what metrics are actually in the data and present them to the user:
 
-| Use case | Primary metric |
-|----------|---------------|
-| RAG / Q&A | `faithfulness` (does output stay grounded in context?) |
-| Classification | `correctness` (label accuracy) |
-| Summarization | `relevance` + `conciseness` |
-| Agent task completion | `task_success` (did the agent complete the goal?) |
-| Safety / content moderation | `safety` / `toxicity` |
-| Format compliance | `format_correctness` |
+```bash
+# List all available evaluation metrics and their failure counts
+jq -r '
+  [.[] | .evaluations // {} | to_entries[]] |
+  group_by(.key) |
+  map({
+    metric: .[0].key,
+    failures: map(select(.value.label == "incorrect")) | length,
+    total: length
+  }) |
+  sort_by(-.failures)[] |
+  "\(.metric): \(.failures)/\(.total) failures"
+' runs.json
+```
 
-If multiple metrics are available, pick the one with the most failures (`jq '[.[] | select(.evaluations.YOUR_METRIC.label == "incorrect")] | length' runs.json`) as the primary optimization target. Check for regressions on secondary metrics after each iteration.
+Present the results and ask: **"Which metric do you want to optimize for? Pick one from the list, or describe something else (e.g. 'responses are too verbose', 'tone is too formal')."** Recommend the one with the highest failure rate as a starting point, but let the user decide.
+
+If the user provides a free-form goal instead of a named metric, treat it as the optimization target and use it to guide failure analysis and the meta-prompt.
+
+Focus on **one metric at a time** — optimizing for multiple at once often makes things worse. Check secondary metrics for regressions after each iteration.
 
 ## Phase 3: Optimize the Prompt
 
@@ -455,80 +465,13 @@ When optimizing prompts that use template variables:
 - Never rename variables -- the runtime substitution depends on exact names
 - If adding few-shot examples, use literal values, not variable placeholders
 
-## Workflows
-
-### Optimize a prompt from a failing trace
-
-1. Find failing traces:
-   ```bash
-   ax traces export PROJECT_ID --filter "status_code = 'ERROR'" -l 5 --output-dir .arize-tmp-traces
-   ```
-2. Export a specific trace:
-   ```bash
-   ax spans export PROJECT_ID --trace-id TRACE_ID --output-dir .arize-tmp-traces
-   ```
-3. Extract the prompt from the LLM span:
-   ```bash
-   jq '[.[] | select(.attributes.openinference.span.kind == "LLM")][0] | {
-     messages: .attributes.llm.input_messages,
-     template: .attributes.llm.prompt_template,
-     output: .attributes.output.value,
-     error: .attributes.exception.message
-   }' trace_*/spans.json
-   ```
-4. Identify what failed from the error message or output
-5. Fill in the optimization meta-prompt (Phase 3) with the prompt and error context
-6. Apply the revised prompt
-
-### Optimize using a dataset and experiment
-
-1. Find the dataset and experiment:
-   ```bash
-   ax datasets list
-   ax experiments list --dataset-id DATASET_ID
-   ```
-2. Export both:
-   ```bash
-   ax datasets export DATASET_ID
-   ax experiments export EXPERIMENT_ID
-   ```
-3. Prepare the joined data for the meta-prompt
-4. Run the optimization meta-prompt
-5. Create a new experiment with the revised prompt to measure improvement
-
-### Debug a prompt that produces wrong format
-
-1. Export spans where the output format is wrong:
-   ```bash
-   ax spans export PROJECT_ID \
-     --filter "attributes.openinference.span.kind = 'LLM' AND annotation.format.label = 'incorrect'" \
-     -l 10 --stdout > bad_format.json
-   ```
-2. Look at what the LLM is producing vs what was expected
-3. Add explicit format instructions to the prompt (JSON schema, examples, delimiters)
-4. Common fix: add a few-shot example showing the exact desired output format
-
-### Reduce hallucination in a RAG prompt
-
-1. Find traces where the model hallucinated:
-   ```bash
-   ax spans export PROJECT_ID \
-     --filter "annotation.faithfulness.label = 'unfaithful'" \
-     -l 20 --output-dir .arize-tmp-traces
-   ```
-2. Export and inspect the retriever + LLM spans together:
-   ```bash
-   ax spans export PROJECT_ID --trace-id TRACE_ID --output-dir .arize-tmp-traces
-   jq '[.[] | {kind: .attributes.openinference.span.kind, name, input: .attributes.input.value, output: .attributes.output.value}]' trace_*/spans.json
-   ```
-3. Check if the retrieved context actually contained the answer
-4. Add grounding instructions to the system prompt: "Only use information from the provided context. If the answer is not in the context, say so."
-
 ## Related Skills
 
-- **arize-trace**: Export production traces to find failing spans and extract current prompts → use `arize-trace`
-- **arize-dataset**: Create a labeled dataset from failed traces for systematic evaluation → use `arize-dataset`
-- **arize-experiment**: Run experiments to measure prompt performance and compare versions → use `arize-experiment`
+For workflow steps that involve other skills, invoke that skill's full instructions rather than duplicating them here:
+
+- **arize-trace** — find and export failing/annotated spans, extract prompts from LLM spans, inspect trace trees
+- **arize-dataset** — create or export labeled datasets from failed traces for systematic evaluation
+- **arize-experiment** — create experiments, run them against a dataset, export results, compare versions
 
 ## Troubleshooting
 
