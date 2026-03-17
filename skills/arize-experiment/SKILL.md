@@ -63,7 +63,7 @@ ax --version; Write-Host "--- env ---"; Write-Host "ARIZE_API_KEY: $(if ($env:AR
 
 Both are needed for most commands. Resolve each:
 
-1. User provides it in the conversation -- use directly via `--space-id` / `--project` flags.
+1. User provides it in the conversation -- note that space ID and project are resolved via the API key profile, not CLI flags.
 2. Env var is set (`ARIZE_SPACE_ID`, `ARIZE_DEFAULT_PROJECT`) -- use silently.
 3. If missing, **AskQuestion** once. Tell the user:
    - Space ID is in the Arize URL: `/spaces/{SPACE_ID}/...`
@@ -186,9 +186,9 @@ ax experiments create --name "claude-test" --dataset-id DATASET_ID --file runs.c
 
 | Flag | Type | Required | Description |
 |------|------|----------|-------------|
-| `--name, -n` | string | yes (prompted) | Experiment name |
-| `--dataset-id` | string | yes (prompted) | Dataset to run the experiment against |
-| `--file, -f` | path | yes (prompted) | Data file with runs: CSV, JSON, JSONL, or Parquet |
+| `--name, -n` | string | yes | Experiment name |
+| `--dataset-id` | string | yes | Dataset to run the experiment against |
+| `--file, -f` | path | yes | Data file with runs: CSV, JSON, JSONL, or Parquet |
 | `-o, --output` | string | no | Output format |
 | `-p, --profile` | string | no | Configuration profile |
 
@@ -293,8 +293,29 @@ At least one of `label`, `score`, or `explanation` should be present per evaluat
    ```
 3. Find examples where results differ:
    ```bash
-   jq -s '.[0] as $a | .[1][] | {example_id, b_score: .evaluations.correctness.score, a_score: ($a[] | select(.example_id == .example_id) | .evaluations.correctness.score)}' a.json b.json
+   jq -s '.[0] as $a | .[1][] | . as $run |
+     {
+       example_id: $run.example_id,
+       b_score: $run.evaluations.correctness.score,
+       a_score: ($a[] | select(.example_id == $run.example_id) | .evaluations.correctness.score)
+     }' a.json b.json
    ```
+4. Score distribution per evaluator (pass/fail/partial counts):
+   ```bash
+   # Count by label for experiment A
+   jq '[.[] | .evaluations.correctness.label] | group_by(.) | map({label: .[0], count: length})' a.json
+   ```
+5. Find regressions (examples that passed in A but fail in B):
+   ```bash
+   jq -s '
+     [.[0][] | select(.evaluations.correctness.label == "correct")] as $passed_a |
+     [.[1][] | select(.evaluations.correctness.label != "correct") |
+       select(.example_id as $id | $passed_a | any(.example_id == $id))
+     ]
+   ' a.json b.json
+   ```
+
+**Statistical significance note:** Score comparisons are most reliable with ≥ 30 examples per evaluator. With fewer examples, treat the delta as directional only — a 5% difference on n=10 may be noise. Report sample size alongside scores: `jq 'length' a.json`.
 
 ### Download experiment results for analysis
 
@@ -317,6 +338,13 @@ ax experiments export EXPERIMENT_ID --stdout | jq '[.[] | select(.evaluations.co
 # Convert to CSV
 ax experiments export EXPERIMENT_ID --stdout | jq -r '.[] | [.example_id, .output, .evaluations.correctness.score] | @csv'
 ```
+
+## Related Skills
+
+- **arize-dataset**: Create or export the dataset this experiment runs against → use `arize-dataset` first
+- **arize-prompt-optimization**: Use experiment results to improve prompts → next step is `arize-prompt-optimization`
+- **arize-trace**: Inspect individual span traces for failing experiment runs → use `arize-trace`
+- **arize-link**: Generate clickable UI links to traces from experiment runs → use `arize-link`
 
 ## Troubleshooting
 
