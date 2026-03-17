@@ -7,6 +7,12 @@ description: Generate deep links to the Arize UI. Use when the user wants a clic
 
 Generate deep links to the Arize UI for traces, spans, sessions, datasets, labeling queues, evaluators, and annotation configs.
 
+## When to Use
+
+- User wants a link to a trace, span, session, dataset, labeling queue, evaluator, or annotation config
+- You have IDs from exported data or logs and need to link back to the UI
+- User asks to "open" or "view" any of the above in Arize
+
 ## Required Inputs
 
 Collect from the user or context (exported trace data, parsed URLs):
