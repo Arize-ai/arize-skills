@@ -25,24 +25,7 @@ Three things are needed: `ax` CLI, an API key (env var or profile), and a space 
 
 ### Install ax
 
-Verify `ax` is installed and working before proceeding:
-
-1. Check if `ax` is on PATH: `command -v ax` (Unix) or `where ax` (Windows)
-2. If not found, check common install locations:
-   - macOS/Linux: `test -x ~/.local/bin/ax && export PATH="$HOME/.local/bin:$PATH"`
-   - Windows: check `%APPDATA%\Python\Scripts\ax.exe` or `%LOCALAPPDATA%\Programs\Python\Scripts\ax.exe`
-3. If still not found, install it (requires shell access to install packages):
-   - Preferred: `uv tool install arize-ax-cli`
-   - Alternative: `pipx install arize-ax-cli`
-   - Fallback: `pip install arize-ax-cli`
-4. After install, if `ax` is not on PATH:
-   - macOS/Linux: `export PATH="$HOME/.local/bin:$PATH"`
-   - Windows (PowerShell): `$env:PATH = "$env:APPDATA\Python\Scripts;$env:PATH"`
-5. If `ax --version` fails with an SSL/certificate error:
-   - macOS: `export SSL_CERT_FILE=/etc/ssl/cert.pem`
-   - Linux: `export SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt`
-   - Windows (PowerShell): `$env:SSL_CERT_FILE = "C:\Program Files\Common Files\SSL\cert.pem"` (or use `python -c "import certifi; print(certifi.where())"` to find the cert bundle)
-6. `ax --version` must succeed before proceeding. If it doesn't, stop and ask the user for help.
+If `ax` is not installed, not on PATH, or below version `0.3.0`, see ax-setup.md.
 
 ### Verify environment
 
@@ -388,7 +371,7 @@ ax spans export PROJECT_ID --trace-id TRACE_ID --stdout | jq '.[]'
 
 | Problem | Solution |
 |---------|----------|
-| `ax: command not found` | Check `~/.local/bin/ax`; if missing: `uv tool install arize-ax-cli` (requires shell access to install packages). Then `export PATH="$HOME/.local/bin:$PATH"` |
+| `ax: command not found` | See ax-setup.md |
 | `SSL: CERTIFICATE_VERIFY_FAILED` | macOS: `export SSL_CERT_FILE=/etc/ssl/cert.pem`. Linux: `export SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt`. Windows: `$env:SSL_CERT_FILE = (python -c "import certifi; print(certifi.where())")` |
 | `No such command` on a subcommand that should exist | The installed `ax` is outdated. Reinstall: `uv tool install --force --reinstall arize-ax-cli` (requires shell access to install packages) |
 | `No profile found` | Follow "Resolve credentials" in Prerequisites to auto-discover or prompt for the API key |
