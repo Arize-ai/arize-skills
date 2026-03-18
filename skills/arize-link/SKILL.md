@@ -97,4 +97,4 @@ Prefer tight windows; 90-day windows load slowly.
 
 ## Examples
 
-See EXAMPLES.md for a complete set of concrete URLs for every link type.
+See examples.md for a complete set of concrete URLs for every link type.
