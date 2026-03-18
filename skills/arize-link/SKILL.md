@@ -1,100 +1,100 @@
 ---
 name: arize-link
-description: Generate deep links to traces, spans, and sessions in the Arize UI. Use when the user wants a clickable URL to open a specific trace, span, or session.
+description: Generate deep links to the Arize UI. Use when the user wants a clickable URL to open a specific trace, span, session, dataset, labeling queue, evaluator, or annotation config.
 ---
 
 # Arize Link
 
-Generate deep links to the Arize UI for traces, spans, and sessions.
+Generate deep links to the Arize UI for traces, spans, sessions, datasets, labeling queues, evaluators, and annotation configs.
 
 ## When to Use
 
-- User wants a link to a specific trace, span, or session
-- You have trace/span/session IDs from exported data or logs and need to link back to the UI
-- User asks to "open" or "view" a trace/span/session in Arize
+- User wants a link to a trace, span, session, dataset, labeling queue, evaluator, or annotation config
+- You have IDs from exported data or logs and need to link back to the UI
+- User asks to "open" or "view" any of the above in Arize
 
 ## Required Inputs
 
-Collect these from the user or from context (e.g., exported trace data, parsed URLs):
+Collect from the user or context (exported trace data, parsed URLs):
 
-- **org_id** -- Base64-encoded organization ID (from URL path or user)
-- **space_id** -- Base64-encoded space ID (from URL path or user)
-- **project_id** -- Base64-encoded project/model ID (from URL path or user)
-- One of:
-  - **trace_id** (and optionally **span_id**) for trace/span links
-  - **session_id** for session links
+| Always required | Resource-specific |
+|---|---|
+| `org_id` (base64) | `project_id` + `trace_id` [+ `span_id`] — trace/span |
+| `space_id` (base64) | `project_id` + `session_id` — session |
+| | `dataset_id` — dataset |
+| | `queue_id` — specific queue (omit for list) |
+| | `evaluator_id` [+ `version`] — evaluator |
 
-## URL Construction
+**All path IDs must be base64-encoded** (characters: `A-Za-z0-9+/=`). A raw numeric ID produces a valid-looking URL that 404s. If the user provides a number, ask them to copy the ID directly from their Arize browser URL (`https://app.arize.com/organizations/{org_id}/spaces/{space_id}/…`). If you have a raw internal ID (e.g. `Organization:1:abC1`), base64-encode it before inserting into the URL.
 
-Base URL: `https://app.arize.com` (override for on-prem if the user specifies a custom base URL)
+## URL Templates
 
-### Trace Link
+Base URL: `https://app.arize.com` (override for on-prem)
 
-Opens the trace slideover showing all spans in the trace.
-
+**Trace** (add `&selectedSpanId={span_id}` to highlight a specific span):
 ```
-{base_url}/organizations/{org_id}/spaces/{space_id}/projects/{project_id}?selectedTraceId={trace_id}&queryFilterA=&selectedTab=llmTracing&timeZoneA=America%2FLos_Angeles&startA={start_epoch_ms}&endA={end_epoch_ms}&envA=tracing&modelType=generative_llm
-```
-
-If a **span_id** is also available, add `&selectedSpanId={span_id}` to highlight that span within the trace.
-
-### Span Link
-
-Opens a specific span within a trace. Both trace_id and span_id are required.
-
-```
-{base_url}/organizations/{org_id}/spaces/{space_id}/projects/{project_id}?selectedTraceId={trace_id}&selectedSpanId={span_id}&queryFilterA=&selectedTab=llmTracing&timeZoneA=America%2FLos_Angeles&startA={start_epoch_ms}&endA={end_epoch_ms}&envA=tracing&modelType=generative_llm
+{base_url}/organizations/{org_id}/spaces/{space_id}/projects/{project_id}?selectedTraceId={trace_id}&queryFilterA=&selectedTab=llmTracing&timeZoneA=America%2FLos_Angeles&startA={start_ms}&endA={end_ms}&envA=tracing&modelType=generative_llm
 ```
 
-### Session Link
-
-Opens the session view for a conversation/interaction flow.
-
+**Session:**
 ```
-{base_url}/organizations/{org_id}/spaces/{space_id}/projects/{project_id}?selectedSessionId={session_id}&queryFilterA=&selectedTab=llmTracing&timeZoneA=America%2FLos_Angeles&startA={start_epoch_ms}&endA={end_epoch_ms}&envA=tracing&modelType=generative_llm
+{base_url}/organizations/{org_id}/spaces/{space_id}/projects/{project_id}?selectedSessionId={session_id}&queryFilterA=&selectedTab=llmTracing&timeZoneA=America%2FLos_Angeles&startA={start_ms}&endA={end_ms}&envA=tracing&modelType=generative_llm
+```
+
+**Dataset** (`selectedTab`: `examples` or `experiments`):
+```
+{base_url}/organizations/{org_id}/spaces/{space_id}/datasets/{dataset_id}?selectedTab=examples
+```
+
+**Queue list / specific queue:**
+```
+{base_url}/organizations/{org_id}/spaces/{space_id}/queues
+{base_url}/organizations/{org_id}/spaces/{space_id}/queues/{queue_id}
+```
+
+**Evaluator** (omit `?version=…` for latest):
+```
+{base_url}/organizations/{org_id}/spaces/{space_id}/evaluators/{evaluator_id}
+{base_url}/organizations/{org_id}/spaces/{space_id}/evaluators/{evaluator_id}?version={version_url_encoded}
+```
+The `version` value must be URL-encoded (e.g., trailing `=` → `%3D`).
+
+**Annotation configs:**
+```
+{base_url}/organizations/{org_id}/spaces/{space_id}/annotation-configs
 ```
 
 ## Time Range
 
-**CRITICAL**: `startA` and `endA` are **required** query parameters. Without them, the Arize UI defaults to the last 7 days and will show a "Your model doesn't have any recent data" error if the trace/span falls outside that window.
+CRITICAL: `startA` and `endA` (epoch milliseconds) are **required** for trace/span/session links — omitting them defaults to the last 7 days and will show "no recent data" if the trace falls outside that window.
 
-- **startA**: Start of the time window as epoch milliseconds
-- **endA**: End of the time window as epoch milliseconds
+**Priority order:**
+1. **User-provided URL** — extract and reuse `startA`/`endA` directly.
+2. **Span `start_time`** — pad ±1 day (or ±1 hour for a tighter window).
+3. **Fallback** — last 90 days (`now - 90d` to `now`).
 
-### How to Determine the Time Range
-
-Use these sources in priority order:
-
-1. **User-provided URL**: If the user shared an Arize URL, extract `startA` and `endA` from it and reuse them. This is the most reliable approach since it preserves the user's original time window.
-
-2. **Exported span data**: If you have span data (e.g., from `ax spans export`), use the span's `start_time` field to calculate a range that covers the data:
-   ```bash
-   # Convert span start_time to epoch ms, then pad ±1 day
-   python -c "
-   from datetime import datetime, timedelta
-   t = datetime.fromisoformat('2026-03-07T05:39:15.822147Z'.replace('Z','+00:00'))
-   start = int((t - timedelta(days=1)).timestamp() * 1000)
-   end = int((t + timedelta(days=1)).timestamp() * 1000)
-   print(f'startA={start}&endA={end}')
-   "
-   ```
-
-3. **Default fallback**: Use the last 90 days. Calculate:
-   - `startA`: `(now - 90 days)` as epoch milliseconds
-   - `endA`: current time as epoch milliseconds
+Prefer tight windows; 90-day windows load slowly.
 
 ## Instructions
 
-1. Gather the required IDs from the user or from available context (URLs, exported trace data, conversation history).
-2. Determine `startA` and `endA` epoch milliseconds using the priority order above.
-3. Substitute values into the appropriate URL template above.
-4. Present the URL as a clickable markdown link.
+1. Gather IDs from user, exported data, or URL context.
+2. Verify all path IDs are base64-encoded.
+3. Determine `startA`/`endA` using the priority order above.
+4. Substitute into the appropriate template and present as a clickable markdown link.
 
-## Example Output
+## Troubleshooting
 
-Given: org_id=`QWNjb3VudE9yZ2FuaXphdGlvbjoxOmFiQzE=`, space_id=`U3BhY2U6MTp4eVo5`, project_id=`TW9kZWw6MTpkZUZn`, trace_id=`0123456789abcdef0123456789abcdef`
+| Problem | Solution |
+|---|---|
+| "No data" / empty view | Trace outside time window — widen `startA`/`endA` (±1h → ±1d → 90d). |
+| 404 | ID wrong or not base64. Re-check `org_id`, `space_id`, `project_id` from the browser URL. |
+| Span not highlighted | `span_id` may belong to a different trace. Verify against exported span data. |
+| `org_id` unknown | `ax` CLI doesn't expose it. Ask user to copy from `https://app.arize.com/organizations/{org_id}/spaces/{space_id}/…`. |
 
-Trace link:
-```
-https://app.arize.com/organizations/QWNjb3VudE9yZ2FuaXphdGlvbjoxOmFiQzE=/spaces/U3BhY2U6MTp4eVo5/projects/TW9kZWw6MTpkZUZn?selectedTraceId=0123456789abcdef0123456789abcdef&queryFilterA=&selectedTab=llmTracing&timeZoneA=America%2FLos_Angeles&startA=1700000000000&endA=1700086400000&envA=tracing&modelType=generative_llm
-```
+## Related Skills
+
+- **arize-trace**: Export spans to get `trace_id`, `span_id`, and `start_time`.
+
+## Examples
+
+See examples.md for a complete set of concrete URLs for every link type.
