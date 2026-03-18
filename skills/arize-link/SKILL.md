@@ -18,7 +18,7 @@ Generate deep links to the Arize UI for traces, spans, and sessions.
 Collect these from the user or from context (e.g., exported trace data, parsed URLs):
 
 - **org_id** -- Base64-encoded organization ID (from URL path or user)
-- **space_id** -- Base64-encoded space ID (from URL path or user)
+- **space_id** -- Base64-encoded space ID (run `ax spaces list -o json` to discover it, or from URL path or user)
 - **project_id** -- Base64-encoded project/model ID (from URL path or user)
 - One of:
   - **trace_id** (and optionally **span_id**) for trace/span links
