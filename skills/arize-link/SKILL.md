@@ -94,3 +94,7 @@ Prefer tight windows; 90-day windows load slowly.
 ## Related Skills
 
 - **arize-trace**: Export spans to get `trace_id`, `span_id`, and `start_time`.
+
+## Examples
+
+See EXAMPLES.md for a complete set of concrete URLs for every link type.
