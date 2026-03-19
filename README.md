@@ -150,6 +150,43 @@ ax --version && ax profiles show 2>&1
 - **npx path:** `npx skills update`
 - **git clone path:** `cd arize-skills && git pull` (symlinks update automatically)
 
+## Testing Skills
+
+`tests/run_skill.py` is an interactive test harness that runs a skill end-to-end using the Claude Agent SDK. It creates a temporary workspace, passes in your Arize credentials, and streams the agent's output.
+
+```bash
+python tests/run_skill.py --skill arize-trace --prompt "Export trace abc123"
+```
+
+> [!WARNING]
+> **Configure `.claude/settings.json` before running the test harness**
+>
+> The test harness uses Claude Code's `bypassPermissions` mode, which **skips all interactive
+> approval prompts**. This is safe because the agent runs in a sandboxed temporary workspace —
+> but **only** if your `settings.json` has a denylist blocking dangerous shell commands.
+>
+> **Without this, `bypassPermissions` gives the agent unrestricted shell access.**
+>
+> Add the following to `.claude/settings.json` in this repo (create it if it doesn't exist):
+>
+> ```json
+> {
+>   "permissions": {
+>     "deny": [
+>       "Bash(rm -rf*)",
+>       "Bash(curl*)",
+>       "Bash(wget*)",
+>       "Bash(ssh*)",
+>       "Bash(scp*)",
+>       "Bash(git push*)",
+>       "Bash(sudo*)",
+>       "Bash(chmod*)",
+>       "Bash(chown*)"
+>     ]
+>   }
+> }
+> ```
+
 ## Links
 
 - [Arize Documentation](https://docs.arize.com)
