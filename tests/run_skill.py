@@ -131,6 +131,15 @@ async def run_streaming(
     options = ClaudeAgentOptions(
         system_prompt=system_prompt,
         allowed_tools=["Bash", "Read", "Write", "Edit", "Glob", "Grep"],
+        # bypassPermissions is safe here because:
+        #   1. The agent runs in a temporary workspace (tempfile.mkdtemp) that is
+        #      cleaned up after execution.
+        #   2. Dangerous bash commands (rm -rf, curl, etc.) are blocked via the
+        #      Claude Code settings.json denylist — see the README warning.
+        #   3. Arize credentials are passed explicitly via `env`; no production
+        #      secrets leak through the ambient environment.
+        # WARNING: Do NOT use bypassPermissions without a properly configured
+        # settings.json. See README for required restrictions.
         permission_mode="bypassPermissions",
         cwd=workspace,
         env=arize_env,

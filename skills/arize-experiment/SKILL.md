@@ -20,24 +20,7 @@ Three things are needed: `ax` CLI, an API key (env var or profile), and a space 
 
 ### Install ax
 
-Verify `ax` is installed and working before proceeding:
-
-1. Check if `ax` is on PATH: `command -v ax` (Unix) or `where ax` (Windows)
-2. If not found, check common install locations:
-   - macOS/Linux: `test -x ~/.local/bin/ax && export PATH="$HOME/.local/bin:$PATH"`
-   - Windows: check `%APPDATA%\Python\Scripts\ax.exe` or `%LOCALAPPDATA%\Programs\Python\Scripts\ax.exe`
-3. If still not found, install it (requires shell access to install packages):
-   - Preferred: `uv tool install arize-ax-cli`
-   - Alternative: `pipx install arize-ax-cli`
-   - Fallback: `pip install arize-ax-cli`
-4. After install, if `ax` is not on PATH:
-   - macOS/Linux: `export PATH="$HOME/.local/bin:$PATH"`
-   - Windows (PowerShell): `$env:PATH = "$env:APPDATA\Python\Scripts;$env:PATH"`
-5. If `ax --version` fails with an SSL/certificate error:
-   - macOS: `export SSL_CERT_FILE=/etc/ssl/cert.pem`
-   - Linux: `export SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt`
-   - Windows (PowerShell): `$env:SSL_CERT_FILE = "C:\Program Files\Common Files\SSL\cert.pem"` (or use `python -c "import certifi; print(certifi.where())"` to find the cert bundle)
-6. `ax --version` must succeed before proceeding. If it doesn't, stop and ask the user for help.
+If `ax` is not installed, not on PATH, or below version `0.7.1`, see ax-setup.md.
 
 ### Verify environment
 
@@ -45,28 +28,28 @@ Run a quick check for credentials:
 
 **macOS/Linux (bash):**
 ```bash
-ax --version && echo "--- env ---" && echo "ARIZE_API_KEY: ${ARIZE_API_KEY:-(not set)}" && echo "ARIZE_SPACE_ID: ${ARIZE_SPACE_ID:-(not set)}" && echo "--- profiles ---" && ax profiles show 2>&1
+ax --version && echo "--- env ---" && if [ -n "$ARIZE_API_KEY" ]; then echo "ARIZE_API_KEY: (set)"; else echo "ARIZE_API_KEY: (not set)"; fi && echo "ARIZE_SPACE_ID: ${ARIZE_SPACE_ID:-(not set)}" && echo "--- profiles ---" && ax profiles show 2>&1
 ```
 
 **Windows (PowerShell):**
 ```powershell
-ax --version; Write-Host "--- env ---"; Write-Host "ARIZE_API_KEY: $env:ARIZE_API_KEY"; Write-Host "ARIZE_SPACE_ID: $env:ARIZE_SPACE_ID"; Write-Host "--- profiles ---"; ax profiles show 2>&1
+ax --version; Write-Host "--- env ---"; Write-Host "ARIZE_API_KEY: $(if ($env:ARIZE_API_KEY) { '(set)' } else { '(not set)' })"; Write-Host "ARIZE_SPACE_ID: $env:ARIZE_SPACE_ID"; Write-Host "--- profiles ---"; ax profiles show 2>&1
 ```
 
 **Read the output and proceed immediately** if either the env var or the profile has an API key. Only ask the user if **both** are missing. Resolve failures:
 
 - No API key in env **and** no profile → **AskQuestion**: "Arize API key (https://app.arize.com/admin > API Keys)"
-- Space ID unknown → **AskQuestion**, or run `ax projects list -o json --limit 100` and search for a match
+- Space ID unknown → run `ax spaces list -o json` to list all accessible spaces and pick the right one, or **AskQuestion** if the user prefers to provide it directly
 - Project unclear → ask, or run `ax projects list -o json --limit 100` and present as selectable options
 
 ### Space ID and Project
 
 Both are needed for most commands. Resolve each:
 
-1. User provides it in the conversation -- use directly via `--space-id` / `--project` flags.
+1. User provides it in the conversation -- note that space ID and project are resolved via the API key profile, not CLI flags.
 2. Env var is set (`ARIZE_SPACE_ID`, `ARIZE_DEFAULT_PROJECT`) -- use silently.
 3. If missing, **AskQuestion** once. Tell the user:
-   - Space ID is in the Arize URL: `/spaces/{SPACE_ID}/...`
+   - Run `ax spaces list -o json` to discover your space ID, or find it in the Arize URL: `/spaces/{SPACE_ID}/...`
    - Project is the project name as shown in the Arize UI.
    - For convenience, recommend setting env vars so they don't get asked again:
      `export ARIZE_SPACE_ID="U3BhY2U6..."` and `export ARIZE_DEFAULT_PROJECT="my-project"`
@@ -186,9 +169,9 @@ ax experiments create --name "claude-test" --dataset-id DATASET_ID --file runs.c
 
 | Flag | Type | Required | Description |
 |------|------|----------|-------------|
-| `--name, -n` | string | yes (prompted) | Experiment name |
-| `--dataset-id` | string | yes (prompted) | Dataset to run the experiment against |
-| `--file, -f` | path | yes (prompted) | Data file with runs: CSV, JSON, JSONL, or Parquet |
+| `--name, -n` | string | yes | Experiment name |
+| `--dataset-id` | string | yes | Dataset to run the experiment against |
+| `--file, -f` | path | yes | Data file with runs: CSV, JSON, JSONL, or Parquet |
 | `-o, --output` | string | no | Output format |
 | `-p, --profile` | string | no | Configuration profile |
 
@@ -293,8 +276,29 @@ At least one of `label`, `score`, or `explanation` should be present per evaluat
    ```
 3. Find examples where results differ:
    ```bash
-   jq -s '.[0] as $a | .[1][] | {example_id, b_score: .evaluations.correctness.score, a_score: ($a[] | select(.example_id == .example_id) | .evaluations.correctness.score)}' a.json b.json
+   jq -s '.[0] as $a | .[1][] | . as $run |
+     {
+       example_id: $run.example_id,
+       b_score: $run.evaluations.correctness.score,
+       a_score: ($a[] | select(.example_id == $run.example_id) | .evaluations.correctness.score)
+     }' a.json b.json
    ```
+4. Score distribution per evaluator (pass/fail/partial counts):
+   ```bash
+   # Count by label for experiment A
+   jq '[.[] | .evaluations.correctness.label] | group_by(.) | map({label: .[0], count: length})' a.json
+   ```
+5. Find regressions (examples that passed in A but fail in B):
+   ```bash
+   jq -s '
+     [.[0][] | select(.evaluations.correctness.label == "correct")] as $passed_a |
+     [.[1][] | select(.evaluations.correctness.label != "correct") |
+       select(.example_id as $id | $passed_a | any(.example_id == $id))
+     ]
+   ' a.json b.json
+   ```
+
+**Statistical significance note:** Score comparisons are most reliable with ≥ 30 examples per evaluator. With fewer examples, treat the delta as directional only — a 5% difference on n=10 may be noise. Report sample size alongside scores: `jq 'length' a.json`.
 
 ### Download experiment results for analysis
 
@@ -318,11 +322,18 @@ ax experiments export EXPERIMENT_ID --stdout | jq '[.[] | select(.evaluations.co
 ax experiments export EXPERIMENT_ID --stdout | jq -r '.[] | [.example_id, .output, .evaluations.correctness.score] | @csv'
 ```
 
+## Related Skills
+
+- **arize-dataset**: Create or export the dataset this experiment runs against → use `arize-dataset` first
+- **arize-prompt-optimization**: Use experiment results to improve prompts → next step is `arize-prompt-optimization`
+- **arize-trace**: Inspect individual span traces for failing experiment runs → use `arize-trace`
+- **arize-link**: Generate clickable UI links to traces from experiment runs → use `arize-link`
+
 ## Troubleshooting
 
 | Problem | Solution |
 |---------|----------|
-| `ax: command not found` | Check `~/.local/bin/ax`; if missing: `uv tool install arize-ax-cli` (requires shell access to install packages) |
+| `ax: command not found` | See ax-setup.md |
 | `401 Unauthorized` | API key may not have access to this space. Verify the key and space ID are correct. Keys are scoped per space -- get the right one from https://app.arize.com/admin > API Keys. |
 | `No profile found` | Run `ax profiles show --expand` to check; set `ARIZE_API_KEY` env var or write `~/.arize/config.toml` |
 | `Experiment not found` | Verify experiment ID with `ax experiments list` |

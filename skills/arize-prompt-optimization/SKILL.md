@@ -50,24 +50,7 @@ Three things are needed: `ax` CLI, an API key (env var or profile), and a projec
 
 ### Install ax
 
-Verify `ax` is installed and working before proceeding:
-
-1. Check if `ax` is on PATH: `command -v ax` (Unix) or `where ax` (Windows)
-2. If not found, check common install locations:
-   - macOS/Linux: `test -x ~/.local/bin/ax && export PATH="$HOME/.local/bin:$PATH"`
-   - Windows: check `%APPDATA%\Python\Scripts\ax.exe` or `%LOCALAPPDATA%\Programs\Python\Scripts\ax.exe`
-3. If still not found, install it (requires shell access to install packages):
-   - Preferred: `uv tool install arize-ax-cli`
-   - Alternative: `pipx install arize-ax-cli`
-   - Fallback: `pip install arize-ax-cli`
-4. After install, if `ax` is not on PATH:
-   - macOS/Linux: `export PATH="$HOME/.local/bin:$PATH"`
-   - Windows (PowerShell): `$env:PATH = "$env:APPDATA\Python\Scripts;$env:PATH"`
-5. If `ax --version` fails with an SSL/certificate error:
-   - macOS: `export SSL_CERT_FILE=/etc/ssl/cert.pem`
-   - Linux: `export SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt`
-   - Windows (PowerShell): `$env:SSL_CERT_FILE = "C:\Program Files\Common Files\SSL\cert.pem"` (or use `python -c "import certifi; print(certifi.where())"` to find the cert bundle)
-6. `ax --version` must succeed before proceeding. If it doesn't, stop and ask the user for help.
+If `ax` is not installed, not on PATH, or below version `0.7.1`, see ax-setup.md.
 
 ### Verify environment
 
@@ -75,18 +58,18 @@ Run a quick check for credentials:
 
 **macOS/Linux (bash):**
 ```bash
-ax --version && echo "--- env ---" && echo "ARIZE_API_KEY: ${ARIZE_API_KEY:-(not set)}" && echo "ARIZE_SPACE_ID: ${ARIZE_SPACE_ID:-(not set)}" && echo "ARIZE_DEFAULT_PROJECT: ${ARIZE_DEFAULT_PROJECT:-(not set)}" && echo "--- profiles ---" && ax profiles show 2>&1
+ax --version && echo "--- env ---" && if [ -n "$ARIZE_API_KEY" ]; then echo "ARIZE_API_KEY: (set)"; else echo "ARIZE_API_KEY: (not set)"; fi && echo "ARIZE_SPACE_ID: ${ARIZE_SPACE_ID:-(not set)}" && echo "ARIZE_DEFAULT_PROJECT: ${ARIZE_DEFAULT_PROJECT:-(not set)}" && echo "--- profiles ---" && ax profiles show 2>&1
 ```
 
 **Windows (PowerShell):**
 ```powershell
-ax --version; Write-Host "--- env ---"; Write-Host "ARIZE_API_KEY: $env:ARIZE_API_KEY"; Write-Host "ARIZE_SPACE_ID: $env:ARIZE_SPACE_ID"; Write-Host "ARIZE_DEFAULT_PROJECT: $env:ARIZE_DEFAULT_PROJECT"; Write-Host "--- profiles ---"; ax profiles show 2>&1
+ax --version; Write-Host "--- env ---"; Write-Host "ARIZE_API_KEY: $(if ($env:ARIZE_API_KEY) { '(set)' } else { '(not set)' })"; Write-Host "ARIZE_SPACE_ID: $env:ARIZE_SPACE_ID"; Write-Host "ARIZE_DEFAULT_PROJECT: $env:ARIZE_DEFAULT_PROJECT"; Write-Host "--- profiles ---"; ax profiles show 2>&1
 ```
 
 **Read the output and proceed immediately** if either the env var or the profile has an API key. Only ask the user if **both** are missing. Resolve failures:
 
 - No API key in env **and** no profile → **AskQuestion**: "Arize API key (https://app.arize.com/admin > API Keys)"
-- Space ID unknown → **AskQuestion**, or run `ax projects list -o json --limit 100` and search for a match
+- Space ID unknown → run `ax spaces list -o json` to list all accessible spaces and pick the right one, or **AskQuestion** if the user prefers to provide it directly
 - Project unclear → ask, or run `ax projects list -o json --limit 100` and present as selectable options
 
 ### Default Project
@@ -479,7 +462,7 @@ When optimizing prompts that use template variables:
 
 | Problem | Solution |
 |---------|----------|
-| `ax: command not found` | **macOS/Linux:** check `~/.local/bin/ax`. **Windows:** check if `ax` is on PATH. If missing: `uv tool install arize-ax-cli` (requires shell access to install packages) |
+| `ax: command not found` | See ax-setup.md |
 | `No profile found` | Create `~/.arize/config.toml` with `api_key = "${ARIZE_API_KEY}"` (see Prerequisites) |
 | No `input_messages` on span | Check span kind -- Chain/Agent spans store prompts on child LLM spans, not on themselves |
 | Prompt template is `null` | Not all instrumentations emit `prompt_template`. Use `input_messages` or `input.value` instead |

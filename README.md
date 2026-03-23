@@ -110,6 +110,9 @@ ax --version && ax profiles show 2>&1
 | [arize-instrumentation](skills/arize-instrumentation/SKILL.md) | Add Arize AX tracing to an app. Two-phase flow: analyze codebase, then implement instrumentation (uses [Agent-Assisted Tracing](https://arize.com/docs/ax/alyx/tracing-assistant)). |
 | [arize-dataset](skills/arize-dataset/SKILL.md) | Create, manage, and download datasets and examples. |
 | [arize-experiment](skills/arize-experiment/SKILL.md) | Run and analyze experiments against datasets. |
+| [arize-evaluator](skills/arize-evaluator/SKILL.md) | Create LLM-as-judge evaluators, run evaluation tasks, and set up continuous monitoring. |
+| [arize-ai-provider-integration](skills/arize-ai-provider-integration/SKILL.md) | Create and manage LLM provider credentials (OpenAI, Anthropic, Azure, Bedrock, Vertex, and more). |
+| [arize-annotation](skills/arize-annotation/SKILL.md) | Create and manage annotation configs (categorical, continuous, freeform); bulk-annotate project spans via the Python SDK. |
 | [arize-prompt-optimization](skills/arize-prompt-optimization/SKILL.md) | Optimize prompts using trace data, experiments, and meta-prompting. |
 | [arize-link](skills/arize-link/SKILL.md) | Generate deep links to traces, spans, and sessions in the Arize UI. |
 
@@ -149,6 +152,43 @@ ax --version && ax profiles show 2>&1
 
 - **npx path:** `npx skills update`
 - **git clone path:** `cd arize-skills && git pull` (symlinks update automatically)
+
+## Testing Skills
+
+`tests/run_skill.py` is an interactive test harness that runs a skill end-to-end using the Claude Agent SDK. It creates a temporary workspace, passes in your Arize credentials, and streams the agent's output.
+
+```bash
+python tests/run_skill.py --skill arize-trace --prompt "Export trace abc123"
+```
+
+> [!WARNING]
+> **Configure `.claude/settings.json` before running the test harness**
+>
+> The test harness uses Claude Code's `bypassPermissions` mode, which **skips all interactive
+> approval prompts**. This is safe because the agent runs in a sandboxed temporary workspace —
+> but **only** if your `settings.json` has a denylist blocking dangerous shell commands.
+>
+> **Without this, `bypassPermissions` gives the agent unrestricted shell access.**
+>
+> Add the following to `.claude/settings.json` in this repo (create it if it doesn't exist):
+>
+> ```json
+> {
+>   "permissions": {
+>     "deny": [
+>       "Bash(rm -rf*)",
+>       "Bash(curl*)",
+>       "Bash(wget*)",
+>       "Bash(ssh*)",
+>       "Bash(scp*)",
+>       "Bash(git push*)",
+>       "Bash(sudo*)",
+>       "Bash(chmod*)",
+>       "Bash(chown*)"
+>     ]
+>   }
+> }
+> ```
 
 ## Links
 

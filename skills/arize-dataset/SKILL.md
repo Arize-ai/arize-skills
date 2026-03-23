@@ -20,24 +20,7 @@ Three things are needed: `ax` CLI, an API key (env var or profile), and a space 
 
 ### Install ax
 
-Verify `ax` is installed and working before proceeding:
-
-1. Check if `ax` is on PATH: `command -v ax` (Unix) or `where ax` (Windows)
-2. If not found, check common install locations:
-   - macOS/Linux: `test -x ~/.local/bin/ax && export PATH="$HOME/.local/bin:$PATH"`
-   - Windows: check `%APPDATA%\Python\Scripts\ax.exe` or `%LOCALAPPDATA%\Programs\Python\Scripts\ax.exe`
-3. If still not found, install it (requires shell access to install packages):
-   - Preferred: `uv tool install arize-ax-cli`
-   - Alternative: `pipx install arize-ax-cli`
-   - Fallback: `pip install arize-ax-cli`
-4. After install, if `ax` is not on PATH:
-   - macOS/Linux: `export PATH="$HOME/.local/bin:$PATH"`
-   - Windows (PowerShell): `$env:PATH = "$env:APPDATA\Python\Scripts;$env:PATH"`
-5. If `ax --version` fails with an SSL/certificate error:
-   - macOS: `export SSL_CERT_FILE=/etc/ssl/cert.pem`
-   - Linux: `export SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt`
-   - Windows (PowerShell): `$env:SSL_CERT_FILE = "C:\Program Files\Common Files\SSL\cert.pem"` (or use `python -c "import certifi; print(certifi.where())"` to find the cert bundle)
-6. `ax --version` must succeed before proceeding. If it doesn't, stop and ask the user for help.
+If `ax` is not installed, not on PATH, or below version `0.7.1`, see ax-setup.md.
 
 ### Verify environment
 
@@ -45,18 +28,18 @@ Run a quick check for credentials:
 
 **macOS/Linux (bash):**
 ```bash
-ax --version && echo "--- env ---" && echo "ARIZE_API_KEY: ${ARIZE_API_KEY:-(not set)}" && echo "ARIZE_SPACE_ID: ${ARIZE_SPACE_ID:-(not set)}" && echo "--- profiles ---" && ax profiles show 2>&1
+ax --version && echo "--- env ---" && if [ -n "$ARIZE_API_KEY" ]; then echo "ARIZE_API_KEY: (set)"; else echo "ARIZE_API_KEY: (not set)"; fi && echo "ARIZE_SPACE_ID: ${ARIZE_SPACE_ID:-(not set)}" && echo "--- profiles ---" && ax profiles show 2>&1
 ```
 
 **Windows (PowerShell):**
 ```powershell
-ax --version; Write-Host "--- env ---"; Write-Host "ARIZE_API_KEY: $env:ARIZE_API_KEY"; Write-Host "ARIZE_SPACE_ID: $env:ARIZE_SPACE_ID"; Write-Host "--- profiles ---"; ax profiles show 2>&1
+ax --version; Write-Host "--- env ---"; Write-Host "ARIZE_API_KEY: $(if ($env:ARIZE_API_KEY) { '(set)' } else { '(not set)' })"; Write-Host "ARIZE_SPACE_ID: $env:ARIZE_SPACE_ID"; Write-Host "--- profiles ---"; ax profiles show 2>&1
 ```
 
 **Read the output and proceed immediately** if either the env var or the profile has an API key. Only ask the user if **both** are missing. Resolve failures:
 
 - No API key in env **and** no profile → **AskQuestion**: "Arize API key (https://app.arize.com/admin > API Keys)"
-- Space ID unknown → **AskQuestion**, or run `ax projects list -o json --limit 100` and search for a match
+- Space ID unknown → run `ax spaces list -o json` to list all accessible spaces and pick the right one, or **AskQuestion** if the user prefers to provide it directly
 - Project unclear → ask, or run `ax projects list -o json --limit 100` and present as selectable options
 
 ### Space ID and Project
@@ -66,7 +49,7 @@ Both are needed for most commands. Resolve each:
 1. User provides it in the conversation -- use directly via `--space-id` / `--project` flags.
 2. Env var is set (`ARIZE_SPACE_ID`, `ARIZE_DEFAULT_PROJECT`) -- use silently.
 3. If missing, **AskQuestion** once. Tell the user:
-   - Space ID is in the Arize URL: `/spaces/{SPACE_ID}/...`
+   - Run `ax spaces list -o json` to discover your space ID, or find it in the Arize URL: `/spaces/{SPACE_ID}/...`
    - Project is the project name as shown in the Arize UI.
    - For convenience, recommend setting env vars so they don't get asked again:
      `export ARIZE_SPACE_ID="U3BhY2U6..."` and `export ARIZE_DEFAULT_PROJECT="my-project"`
@@ -126,7 +109,7 @@ ax datasets get DATASET_ID -o json
 
 ## Export Dataset: `ax datasets export`
 
-Download all examples to a file. By default uses the REST API; pass `--all` to use Arrow Flight for bulk transfer.
+Download all examples to a file. Use `--all` for datasets larger than 500 examples (unlimited bulk export).
 
 ```bash
 ax datasets export DATASET_ID
@@ -145,17 +128,23 @@ ax datasets export DATASET_ID --stdout | jq '.[0]'
 |------|------|---------|-------------|
 | `DATASET_ID` | string | required | Positional argument |
 | `--version-id` | string | latest | Export a specific dataset version |
-| `--all` | bool | false | Use Arrow Flight for bulk export (see below) |
+| `--all` | bool | false | Unlimited bulk export (use for datasets > 500 examples) |
 | `--output-dir` | string | `.` | Output directory |
 | `--stdout` | bool | false | Print JSON to stdout instead of file |
 | `-p, --profile` | string | default | Configuration profile |
 
-### REST vs Flight (`--all`)
+**Agent auto-escalation rule:** If an export returns exactly 500 examples, the result is likely truncated — re-run with `--all` to get the full dataset.
 
-- **REST** (default): Lower friction -- no Arrow/Flight dependency, standard HTTPS ports, works through any corporate proxy or firewall. Limited to 500 examples per page.
-- **Flight** (`--all`): Required for datasets with more than 500 examples. Uses gRPC+TLS on a separate host/port (`flight.arize.com:443`) which some corporate networks may block.
+**Export completeness verification:** After exporting, confirm the row count matches what the server reports:
+```bash
+# Get the server-reported count from dataset metadata
+ax datasets get DATASET_ID -o json | jq '.versions[-1] | {version: .id, examples: .example_count}'
 
-**Agent auto-escalation rule:** If a REST export returns exactly 500 examples, the result is likely truncated. Re-run with `--all` to get the full dataset.
+# Compare to what was exported
+jq 'length' dataset_*/examples.json
+
+# If counts differ, re-export with --all
+```
 
 Output is a JSON array of example objects. Each example has system fields (`id`, `created_at`, `updated_at`) plus all user-defined fields:
 
@@ -187,9 +176,9 @@ ax datasets create --name "My Dataset" --space-id SPACE_ID --file data.parquet
 
 | Flag | Type | Required | Description |
 |------|------|----------|-------------|
-| `--name, -n` | string | yes (prompted) | Dataset name |
-| `--space-id` | string | yes (prompted) | Space to create the dataset in |
-| `--file, -f` | path | yes (prompted) | Data file: CSV, JSON, JSONL, or Parquet |
+| `--name, -n` | string | yes | Dataset name |
+| `--space-id` | string | yes | Space to create the dataset in |
+| `--file, -f` | path | yes | Data file: CSV, JSON, JSONL, or Parquet |
 | `-o, --output` | string | no | Output format for the returned dataset metadata |
 | `-p, --profile` | string | no | Configuration profile |
 
@@ -199,8 +188,13 @@ ax datasets create --name "My Dataset" --space-id SPACE_ID --file data.parquet
 |--------|-----------|-------|
 | CSV | `.csv` | Column headers become field names |
 | JSON | `.json` | Array of objects |
-| JSON Lines | `.jsonl` | One object per line |
-| Parquet | `.parquet` | Column names become field names |
+| JSON Lines | `.jsonl` | One object per line (NOT a JSON array) |
+| Parquet | `.parquet` | Column names become field names; preserves types |
+
+**Format gotchas:**
+- **CSV**: Loses type information — dates become strings, `null` becomes empty string. Use JSON/Parquet to preserve types.
+- **JSONL**: Each line is a separate JSON object. A JSON array (`[{...}, {...}]`) in a `.jsonl` file will fail — use `.json` extension instead.
+- **Parquet**: Preserves column types. Requires `pandas`/`pyarrow` to read locally: `pd.read_parquet("examples.parquet")`.
 
 ## Append Examples: `ax datasets append`
 
@@ -248,8 +242,21 @@ Exactly one of `--json` or `--file` is required.
 ### Validation
 
 - Each example must be a JSON object with at least one user-defined field
-- Fields `id`, `created_at`, `updated_at` are auto-generated -- do not include them
 - Maximum 100,000 examples per request
+
+**Schema validation before append:** If the dataset already has examples, inspect its schema before appending to avoid silent field mismatches:
+
+```bash
+# Check existing field names in the dataset
+ax datasets export DATASET_ID --stdout | jq '.[0] | keys'
+
+# Verify your new data has matching field names
+echo '[{"question": "..."}]' | jq '.[0] | keys'
+
+# Both outputs should show the same user-defined fields
+```
+
+Fields are free-form: extra fields in new examples are added, and missing fields become null. However, typos in field names (e.g., `queston` vs `question`) create new columns silently -- verify spelling before appending.
 
 ## Delete Dataset: `ax datasets delete`
 
@@ -268,6 +275,18 @@ ax datasets delete DATASET_ID --force   # skip confirmation prompt
 
 ## Workflows
 
+### Find a dataset by name
+
+Users often refer to datasets by name rather than ID. Resolve a name to an ID before running other commands:
+
+```bash
+# Find dataset ID by name
+ax datasets list -o json | jq '.[] | select(.name == "eval-set-v1") | .id'
+
+# If the list is paginated, fetch more
+ax datasets list -o json --limit 100 | jq '.[] | select(.name | test("eval-set")) | {id, name}'
+```
+
 ### Create a dataset from file for evaluation
 
 1. Prepare a CSV/JSON/Parquet file with your evaluation columns (e.g., `input`, `expected_output`)
@@ -281,13 +300,8 @@ ax datasets delete DATASET_ID --force   # skip confirmation prompt
 # Find the dataset
 ax datasets list
 
-# Append inline (e.g., from an LLM-generated payload)
-ax datasets append DATASET_ID --json '[
-  {"question": "What is gravity?", "answer": "A fundamental force..."},
-  {"question": "What is light?", "answer": "Electromagnetic radiation..."}
-]'
-
-# Or append from a file
+# Append inline or from a file (see Append Examples section for full syntax)
+ax datasets append DATASET_ID --json '[{"question": "...", "answer": "..."}]'
 ax datasets append DATASET_ID --file additional_examples.csv
 ```
 
@@ -339,11 +353,17 @@ Examples are free-form JSON objects. There is no fixed schema -- columns are wha
 | *(any user field)* | any JSON type | user | String, number, boolean, null, nested object, array |
 
 
+## Related Skills
+
+- **arize-trace**: Export production spans to understand what data to put in datasets → use `arize-trace`
+- **arize-experiment**: Run evaluations against this dataset → next step is `arize-experiment`
+- **arize-prompt-optimization**: Use dataset + experiment results to improve prompts → use `arize-prompt-optimization`
+
 ## Troubleshooting
 
 | Problem | Solution |
 |---------|----------|
-| `ax: command not found` | Check `~/.local/bin/ax`; if missing: `uv tool install arize-ax-cli` (requires shell access to install packages) |
+| `ax: command not found` | See ax-setup.md |
 | `401 Unauthorized` | API key may not have access to this space. Verify the key and space ID are correct. Keys are scoped per space -- get the right one from https://app.arize.com/admin > API Keys. |
 | `No profile found` | Run `ax profiles show --expand` to check; set `ARIZE_API_KEY` env var or write `~/.arize/config.toml` |
 | `Dataset not found` | Verify dataset ID with `ax datasets list` |
