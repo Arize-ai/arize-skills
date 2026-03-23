@@ -27,6 +27,8 @@ Three things are needed: `ax` CLI, an API key (env var or profile), and a space 
 
 If `ax` is not installed, not on PATH, or below version `0.3.0`, see ax-setup.md.
 
+For the rest of the workflow, prefer the resolved executable path from ax-setup.md if PATH is ambiguous. Do not assume every environment exposes the working `ax` binary as plain `ax`.
+
 ### Verify environment
 
 Run a quick check for credentials:
@@ -44,10 +46,14 @@ ax --version; Write-Host "--- env ---"; Write-Host "ARIZE_API_KEY: $(if ($env:AR
 **Read the output and proceed immediately** if either the env var or the profile has an API key. Only ask the user if **both** are missing. Resolve failures:
 
 - No API key in env **and** no profile → **AskQuestion**: "Arize API key (https://app.arize.com/admin > API Keys)"
-- Space ID unknown → run `ax spaces list -o json` to list all accessible spaces and pick the right one, or **AskQuestion** if the user prefers to provide it directly
+- Space ID unknown → first probe whether `ax spaces list` exists. If it does, run `ax spaces list -o json`. If it does not, run `ax projects list -l 100 -o json` and infer candidate spaces from returned `space_id` values, or **AskQuestion** if the user prefers to provide it directly.
 - Project unclear → run `ax projects list -l 100 -o json` (add `--space-id` if known), present the names, and ask the user to pick one
 
 **IMPORTANT:** `--space-id` is required when using a human-readable project name as the `PROJECT` positional argument. It is not needed when using a base64-encoded project ID. If you hit `401 Unauthorized` or limit errors when using a project name, resolve it to a base64 ID first (see "Resolving project for export" in Concepts).
+
+**Deterministic verification rule:** If you already know a specific `trace_id` and can resolve a base64 project ID, prefer `ax spans export PROJECT_ID --trace-id TRACE_ID` for verification. Use `ax traces export` mainly for exploration or when you need the trace lookup phase.
+
+**Capability rule:** Before relying on a specific `ax` command shown in this skill, check the installed CLI's help output and adapt if that subcommand is unavailable or behaves differently.
 
 ## Export Spans: `ax spans export`
 
@@ -89,6 +95,12 @@ ax spans export PROJECT_ID --session-id SESSION_ID --output-dir .arize-tmp-trace
 | `--all` | false | Unlimited bulk export via Arrow Flight (see below) |
 
 Output is a JSON array of span objects. File naming: `{type}_{id}_{timestamp}/spans.json`.
+
+When you have both a project ID and trace ID, this is the most reliable verification path:
+
+```bash
+ax spans export PROJECT_ID --trace-id TRACE_ID --output-dir .arize-tmp-traces
+```
 
 ### Bulk export with `--all`
 
@@ -240,6 +252,13 @@ event.attributes CONTAINS 'TimeoutError'
 ```bash
 ax spans export PROJECT_ID --trace-id TRACE_ID --stdout | jq '.[]'
 ```
+
+## Troubleshooting rules
+
+- If `ax traces export` fails before querying spans because of project-name resolution, retry with a base64 project ID.
+- If `ax spaces list` is unsupported, treat `ax projects list -o json` as the fallback discovery surface.
+- If a user-provided `--space-id` is rejected by the CLI but the API key still lists projects without it, report the mismatch instead of silently swapping identifiers.
+- If exporter verification is the goal and the CLI path is unreliable, use the app's runtime/exporter logs plus the latest local `trace_id` to distinguish local instrumentation success from Arize-side ingestion failure.
 
 
 ## Span Column Reference (OpenInference Semantic Conventions)
