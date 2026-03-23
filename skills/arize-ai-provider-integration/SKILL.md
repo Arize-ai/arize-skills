@@ -275,7 +275,7 @@ Omit `--force` to get a confirmation prompt instead of deleting immediately.
 
 ## Related Skills
 
-- **arize-eval**: Create LLM-as-judge evaluators that use an AI integration → use `arize-eval`
+- **arize-evaluator**: Create LLM-as-judge evaluators that use an AI integration → use `arize-evaluator`
 - **arize-experiment**: Run experiments that use evaluators backed by an AI integration → use `arize-experiment`
 
 ---

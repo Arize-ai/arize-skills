@@ -68,35 +68,22 @@ A **task** is how you run one or more evaluators against real data. Tasks are at
 
 ### AI Integrations
 
-AI integrations store the LLM provider credentials the evaluator uses. Always check for existing ones before creating.
+AI integrations store the LLM provider credentials the evaluator uses. For full CRUD — listing, creating for all providers (OpenAI, Anthropic, Azure, Bedrock, Vertex, Gemini, NVIDIA NIM, custom), updating, and deleting — use the **arize-ai-provider-integration** skill.
+
+Quick reference for the common case (OpenAI):
 
 ```bash
-# List
+# Check for an existing integration first
 ax ai-integrations list --space-id SPACE_ID
 
-# Create (OpenAI example)
+# Create if none exists
 ax ai-integrations create \
   --name "My OpenAI Integration" \
   --provider openAI \
   --api-key "sk-..."
-
-# Get / Update / Delete
-ax ai-integrations get INT_ID
-ax ai-integrations update INT_ID --name "New Name"
-ax ai-integrations delete INT_ID --force
 ```
 
-**Supported providers:** `openAI`, `azureOpenAI`, `awsBedrock`, `vertexAI`, `anthropic`, `custom`, `nvidiaNim`, `gemini`
-
-**Provider-specific required flags:**
-
-| Provider | Extra flags |
-|----------|-------------|
-| `azureOpenAI` | `--base-url <azure-endpoint>` |
-| `awsBedrock` | `--role-arn <arn>` |
-| `vertexAI` | `--project-id <gcp-project>`, `--location <region>` |
-| `anthropic` | `--api-key <key>` |
-| `custom` | `--base-url <endpoint>` |
+Copy the returned integration ID — it is required for `ax evaluators create --ai-integration-id`.
 
 ### Evaluators
 
@@ -278,7 +265,7 @@ Example:
 ax ai-integrations list --space-id SPACE_ID -o json
 ```
 
-If a suitable integration exists, note its ID. If not, create one (see CRUD above). Ask the user which provider/model they want for the judge.
+If a suitable integration exists, note its ID. If not, create one using the **arize-ai-provider-integration** skill. Ask the user which provider/model they want for the judge.
 
 ### Step 4: Create the evaluator
 
@@ -555,6 +542,7 @@ Reconcile the prompt labels and the Choices panel so they stay in sync. Mismatch
 
 ## Related Skills
 
+- **arize-ai-provider-integration**: Full CRUD for LLM provider integrations (create, update, delete credentials)
 - **arize-trace**: Export spans to discover column paths and time ranges
 - **arize-experiment**: Create experiments and export runs for experiment column mappings
 - **arize-dataset**: Export dataset examples to find input fields when runs omit them
