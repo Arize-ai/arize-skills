@@ -6,6 +6,11 @@
       "sourceType": "github",
       "computedHash": "c82ec06dc2479a648d8b443509d979e285c36b314bbfc2168abb8e4c9b724fee"
     },
+    "arize-evaluator": {
+      "source": "Arize-ai/arize-skills",
+      "sourceType": "github",
+      "computedHash": "7ddc90341a37bcebf29ad35089094d2f82aac3c1a0a5c4872cc118d2c22545a2"
+    },
     "arize-experiment": {
       "source": "Arize-ai/arize-skills",
       "sourceType": "github",
