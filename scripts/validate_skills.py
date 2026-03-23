@@ -121,6 +121,7 @@ def main():
         for entry in os.listdir(SKILLS_DIR)
         if os.path.isdir(os.path.join(SKILLS_DIR, entry))
         and not entry.startswith(".")
+        and entry != "shared"
     )
 
     if not skill_dirs:
