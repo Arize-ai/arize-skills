@@ -20,7 +20,7 @@ Verify `ax` is installed and working before proceeding:
    - macOS: `export SSL_CERT_FILE=/etc/ssl/cert.pem`
    - Linux: `export SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt`
    - Any OS with Python available: `python -c "import certifi; print(certifi.where())"` and use that path
-7. Check the version: `ax --version` must show `0.3.0` or higher. If the version is lower, upgrade it:
+7. Check the version: `ax --version` must show `0.7.1` or higher. If the version is lower, upgrade it:
    - `uv tool install --force --reinstall arize-ax-cli`
    - `pipx upgrade arize-ax-cli`
    - `pip install --upgrade arize-ax-cli`

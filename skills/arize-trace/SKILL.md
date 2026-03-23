@@ -25,7 +25,7 @@ Three things are needed: `ax` CLI, an API key (env var or profile), and a space 
 
 ### Install ax
 
-If `ax` is not installed, not on PATH, or below version `0.3.0`, see ax-setup.md.
+If `ax` is not installed, not on PATH, or below version `0.7.1`, see ax-setup.md.
 
 For the rest of the workflow, prefer the resolved executable path from ax-setup.md if PATH is ambiguous. Do not assume every environment exposes the working `ax` binary as plain `ax`.
 
