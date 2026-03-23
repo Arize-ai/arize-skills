@@ -175,6 +175,11 @@ function Install-Skill {
 
     if ($Copy) {
         Copy-Item -Recurse -Path $SkillSrc -Destination $Target
+        # Replace any symlink stubs with the actual shared files
+        $SharedDir = Join-Path (Split-Path -Parent $SkillSrc) "shared"
+        if (Test-Path $SharedDir) {
+            Copy-Item -Path "$SharedDir\*" -Destination $Target -Force
+        }
         Write-Host "  Copied  $skillName -> $Target"
     } else {
         # On Windows, directory symlinks require special handling
