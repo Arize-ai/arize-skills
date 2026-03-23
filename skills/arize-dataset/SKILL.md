@@ -38,7 +38,7 @@ ax --version; Write-Host "--- env ---"; Write-Host "ARIZE_API_KEY: $(if ($env:AR
 
 **Read the output and proceed immediately** if either the env var or the profile has an API key. Only ask the user if **both** are missing. Resolve failures:
 
-- No API key in env **and** no profile → **AskQuestion**: "Arize API key (https://app.arize.com/admin > API Keys)"
+- No API key in env **and** no profile → **AskQuestion**: "Arize API key (https://app.arize.com/admin > API Keys)", then save it immediately using ax-profiles.md
 - Space ID unknown → run `ax spaces list -o json` to list all accessible spaces and pick the right one, or **AskQuestion** if the user prefers to provide it directly
 - Project unclear → ask, or run `ax projects list -o json --limit 100` and present as selectable options
 
@@ -364,8 +364,8 @@ Examples are free-form JSON objects. There is no fixed schema -- columns are wha
 | Problem | Solution |
 |---------|----------|
 | `ax: command not found` | See ax-setup.md |
-| `401 Unauthorized` | API key may not have access to this space. Verify the key and space ID are correct. Keys are scoped per space -- get the right one from https://app.arize.com/admin > API Keys. |
-| `No profile found` | Run `ax profiles show --expand` to check; set `ARIZE_API_KEY` env var or write `~/.arize/config.toml` |
+| `401 Unauthorized` | API key is wrong, expired, or doesn't have access to this space. Fix the profile using ax-profiles.md. |
+| `No profile found` | No profile is configured. See ax-profiles.md to create one. |
 | `Dataset not found` | Verify dataset ID with `ax datasets list` |
 | `File format error` | Supported: CSV, JSON, JSONL, Parquet |
 | `platform-managed column` | Remove `id`, `created_at`, `updated_at` from create/append payloads |
@@ -376,12 +376,7 @@ Examples are free-form JSON objects. There is no fixed schema -- columns are wha
 
 ## Save Credentials for Future Use
 
-At the **end of the session**, if the user manually provided any of the following during this conversation (via AskQuestion response, pasted text, or inline values) **and** those values were NOT already loaded from a saved profile or environment variable, offer to save them for future use.
-
-| Credential | Where it gets saved |
-|------------|---------------------|
-| API key | `ax` profile at `~/.arize/config.toml` |
-| Space ID | **macOS/Linux:** shell config (`~/.zshrc` or `~/.bashrc`) as `export ARIZE_SPACE_ID="..."`. **Windows:** user environment variable via `[System.Environment]::SetEnvironmentVariable('ARIZE_SPACE_ID', '...', 'User')` |
+At the **end of the session**, if the user manually provided any credentials during this conversation **and** those values were NOT already loaded from a saved profile or environment variable, offer to save them.
 
 **Skip this entirely if:**
 - The API key was already loaded from an existing profile or `ARIZE_API_KEY` env var
@@ -392,35 +387,6 @@ At the **end of the session**, if the user manually provided any of the followin
 
 **If the user says yes:**
 
-1. **API key** — Check if `~/.arize/config.toml` exists. If it does, read it and update the `[auth]` section. If not, create it with this minimal content:
+1. **API key** — See ax-profiles.md. Run `ax profiles show` to check the current state, then use `ax profiles create` or `ax profiles update` with the appropriate flags to save the key (and region if relevant).
 
-   ```toml
-   [profile]
-   name = "default"
-
-   [auth]
-   api_key = "THE_API_KEY"
-
-   [output]
-   format = "table"
-   ```
-
-   Verify with: `ax profiles show`
-
-2. **Space ID** — Persist the space ID as an environment variable:
-
-   **macOS/Linux** — Detect the user's shell config file (`~/.zshrc` for zsh, `~/.bashrc` for bash). Append:
-
-   ```bash
-   export ARIZE_SPACE_ID="THE_SPACE_ID"
-   ```
-
-   Tell the user to run `source ~/.zshrc` (or restart their terminal) for it to take effect.
-
-   **Windows (PowerShell)** — Set a persistent user environment variable:
-
-   ```powershell
-   [System.Environment]::SetEnvironmentVariable('ARIZE_SPACE_ID', 'THE_SPACE_ID', 'User')
-   ```
-
-   Tell the user to restart their terminal for it to take effect.
+2. **Space ID** — See ax-profiles.md (Space ID section) to persist it as an environment variable.

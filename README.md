@@ -75,10 +75,17 @@ export ARIZE_API_KEY="your-api-key"       # from https://app.arize.com/admin > A
 export ARIZE_SPACE_ID="U3BhY2U6..."       # base64 space ID from your Arize URL
 ```
 
-**Option B — Interactive profile** (persistent):
+**Option B — Profile with flags** (persistent, agent-friendly):
 ```bash
-ax profiles create
+# Create a new profile
+ax profiles create --api-key YOUR_API_KEY
+
+# Update an existing profile (patches only what you specify)
+ax profiles update --api-key NEW_API_KEY
+ax profiles update --region us-east-1b
 ```
+
+Running `ax profiles create` without flags launches an interactive wizard instead.
 
 **Option C — Direct TOML file** (scripted/non-interactive):
 ```bash
@@ -93,8 +100,6 @@ api_key = "your-api-key"
 format = "table"
 EOF
 ```
-
-> **Note:** `ax profiles create` is interactive-only — no `--api-key` flag exists. For CI/CD or scripted setup, use Option A or C.
 
 ### Verify
 
