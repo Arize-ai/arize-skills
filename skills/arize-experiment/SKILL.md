@@ -175,6 +175,18 @@ ax experiments create --name "claude-test" --dataset-id DATASET_ID --file runs.c
 | `-o, --output` | string | no | Output format |
 | `-p, --profile` | string | no | Configuration profile |
 
+### `--file` requires a real file path
+
+`ax experiments create` does **not** accept `/dev/stdin` or pipes. Write data to a temp file first:
+
+```bash
+cat > /tmp/runs.json << 'EOF'
+[{"example_id": "ex_001", "output": "Paris"}]
+EOF
+ax experiments create --name "my-experiment" --dataset-id DATASET_ID --file /tmp/runs.json
+rm /tmp/runs.json
+```
+
 ### Required columns in the runs file
 
 | Column | Type | Required | Description |

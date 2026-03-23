@@ -182,39 +182,19 @@ ax datasets create --name "My Dataset" --space-id SPACE_ID --file data.parquet
 | `-o, --output` | string | no | Output format for the returned dataset metadata |
 | `-p, --profile` | string | no | Configuration profile |
 
-### IMPORTANT: `--file` requires a real file path
+### `--file` requires a real file path
 
-`ax datasets create` does **not** accept `/dev/stdin`, pipes, or process substitution. You **must** write data to a named temp file first, then pass that path to `--file`.
+`ax datasets create` does **not** accept `/dev/stdin` or pipes. Write data to a temp file first:
 
-**Correct pattern when generating data inline:**
 ```bash
-# Step 1: write to a temp file
 cat > /tmp/dataset.json << 'EOF'
-[
-  {"question": "What is 2+2?", "answer": "4"},
-  {"question": "What is the capital of France?", "answer": "Paris"}
-]
+[{"question": "What is 2+2?", "answer": "4"}]
 EOF
-
-# Step 2: create the dataset from the file
-ax datasets create \
-  --name "my-dataset" \
-  --space-id SPACE_ID \
-  --file /tmp/dataset.json
-
-# Step 3: clean up
+ax datasets create --name "my-dataset" --space-id SPACE_ID --file /tmp/dataset.json
 rm /tmp/dataset.json
 ```
 
-**Wrong (will fail):**
-```bash
-# DO NOT do this — /dev/stdin is not a supported file type
-ax datasets create --name "my-dataset" --space-id SPACE_ID --file /dev/stdin << 'EOF'
-[...]
-EOF
-```
-
-If you already have a dataset and only want to add rows, use `ax datasets append --json '[...]'` instead — it accepts inline JSON without a file.
+To add rows to an existing dataset, use `ax datasets append --json '[...]'` instead — no file needed.
 
 ### Supported file formats
 
