@@ -226,3 +226,19 @@ See the full setup at [Agent-Assisted Tracing Setup](https://arize.com/docs/ax/a
 | Arize AX Docs | https://arize.com/docs/ax |
 | Full integration list | https://arize.com/docs/ax/integrations |
 | Doc index (llms.txt) | https://arize.com/docs/llms.txt |
+
+## Save Credentials for Future Use
+
+At the **end of the session**, if the user manually provided any credentials during this conversation **and** those values were NOT already loaded from a saved profile or environment variable, offer to save them.
+
+**Skip this entirely if:**
+- The API key was already loaded from an existing profile or `ARIZE_API_KEY` env var
+- The space ID was already set via `ARIZE_SPACE_ID` env var
+
+**How to offer:** Use **AskQuestion**: *"Would you like to save your Arize credentials so you don't have to enter them next time?"* with options `"Yes, save them"` / `"No thanks"`.
+
+**If the user says yes:**
+
+1. **API key** — See ax-profiles.md. Run `ax profiles show` to check the current state, then use `ax profiles create` or `ax profiles update` with the appropriate flags to save the key (and region if relevant).
+
+2. **Space ID** — See ax-profiles.md (Space ID section) to persist it as an environment variable.
