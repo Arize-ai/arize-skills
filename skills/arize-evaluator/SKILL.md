@@ -146,8 +146,6 @@ ax evaluators update EVALUATOR_ID \
 ax evaluators delete EVALUATOR_ID
 ```
 
-**Classification choices (label → numeric score):** `ax evaluators create` does not pass categorical choices. Until https://github.com/Arize-ai/arize/pull/66401 is merged and the behavior is available in your environment, treat **Choices** as **UI-only**: after creating the evaluator with the CLI, open the evaluator in the Arize app and set Choices so each label matches the strings your template tells the model to return (e.g. `correct` / `incorrect` with scores `1` / `0`). Do not assume REST or SDK `classification_choices` on create works end-to-end until that PR has landed.
-
 **Key flags for `create`:**
 
 | Flag | Required | Description |
@@ -526,7 +524,7 @@ Single quotes prevent the shell from interpolating `{variable}` placeholders. Do
 
 ### 7. Validate that choices match your template labels
 
-If you create via CLI, you must still set **Choices** in the UI (see note above on https://github.com/Arize-ai/arize/pull/66401 for when API/SDK may cover this). Reconcile the prompt labels and the Choices panel so they stay in sync. Mismatches cause runs to produce no valid scores.
+Reconcile the prompt labels and the Choices panel so they stay in sync. Mismatches cause runs to produce no valid scores.
 
 ---
 
