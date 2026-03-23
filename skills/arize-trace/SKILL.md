@@ -45,8 +45,8 @@ ax --version; Write-Host "--- env ---"; Write-Host "ARIZE_API_KEY: $(if ($env:AR
 
 **Read the output and proceed immediately** if either the env var or the profile has an API key. Only ask the user if **both** are missing. Resolve failures:
 
-- No API key in env **and** no profile → **AskQuestion**: "Arize API key (https://app.arize.com/admin > API Keys)"
-- Space ID unknown → first probe whether `ax spaces list` exists. If it does, run `ax spaces list -o json`. If it does not, run `ax projects list -l 100 -o json` and infer candidate spaces from returned `space_id` values, or **AskQuestion** if the user prefers to provide it directly.
+- No API key in env **and** no profile → **AskQuestion**: "Arize API key (https://app.arize.com/admin > API Keys)", then save it immediately using ax-profiles.md
+- Space ID unknown → run `ax spaces list -o json` to list all accessible spaces and pick the right one, or **AskQuestion** if the user prefers to provide it directly
 - Project unclear → run `ax projects list -l 100 -o json` (add `--space-id` if known), present the names, and ask the user to pick one
 
 **IMPORTANT:** `--space-id` is required when using a human-readable project name as the `PROJECT` positional argument. It is not needed when using a base64-encoded project ID. If you hit `401 Unauthorized` or limit errors when using a project name, resolve it to a base64 ID first (see "Resolving project for export" in Concepts).
@@ -393,8 +393,8 @@ ax spans export PROJECT_ID --trace-id TRACE_ID --stdout | jq '.[]'
 | `ax: command not found` | See ax-setup.md |
 | `SSL: CERTIFICATE_VERIFY_FAILED` | macOS: `export SSL_CERT_FILE=/etc/ssl/cert.pem`. Linux: `export SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt`. Windows: `$env:SSL_CERT_FILE = (python -c "import certifi; print(certifi.where())")` |
 | `No such command` on a subcommand that should exist | The installed `ax` is outdated. Reinstall: `uv tool install --force --reinstall arize-ax-cli` (requires shell access to install packages) |
-| `No profile found` | Follow "Resolve credentials" in Prerequisites to auto-discover or prompt for the API key |
-| `401 Unauthorized` with valid API key | You are likely using a project name without `--space-id`. Add `--space-id SPACE_ID`, or resolve to a base64 project ID first: `ax projects list --space-id SPACE_ID -l 100 -o json` and use the project's `id`. |
+| `No profile found` | No profile is configured. See ax-profiles.md to create one. |
+| `401 Unauthorized` with valid API key | You are likely using a project name without `--space-id`. Add `--space-id SPACE_ID`, or resolve to a base64 project ID first: `ax projects list --space-id SPACE_ID -l 100 -o json` and use the project's `id`. If the key itself is wrong or expired, fix the profile using ax-profiles.md. |
 | `No spans found` | Expand `--days` (default 30), verify project ID |
 | `Filter error` or `invalid filter expression` | Check column name spelling (e.g., `attributes.openinference.span.kind` not `span_kind`), wrap string values in single quotes, use `CONTAINS` for free-text fields |
 | `unknown attribute` in filter | The attribute path is wrong or not indexed. Try browsing a small sample first to see actual column names: `ax spans export PROJECT_ID -l 5 --stdout \| jq '.[0] \| keys'` |
@@ -407,17 +407,19 @@ ax spans export PROJECT_ID --trace-id TRACE_ID --stdout | jq '.[]'
 - **arize-prompt-optimization**: Use trace data to improve prompts → use `arize-prompt-optimization`
 - **arize-link**: Turn trace IDs from exported data into clickable Arize UI URLs → use `arize-link`
 
-## Save Credentials
+## Save Credentials for Future Use
 
-At session end, if the user manually provided an API key, space ID, or project ID (not loaded from an existing profile), offer to save them to `~/.arize/config.toml`. Use **AskQuestion** with "Yes, save them" / "No thanks". Skip if all values were already in the profile.
+At the **end of the session**, if the user manually provided any credentials during this conversation **and** those values were NOT already loaded from a saved profile or environment variable, offer to save them.
 
-Read the existing file (or create it), add/update only the new fields, and write it back:
+**Skip this entirely if:**
+- The API key was already loaded from an existing profile or `ARIZE_API_KEY` env var
+- The space ID was already set via `ARIZE_SPACE_ID` env var
+- The user only used base64 project IDs (no space ID was needed)
 
-```toml
-[auth]
-api_key = "THE_API_KEY"
+**How to offer:** Use **AskQuestion**: *"Would you like to save your Arize credentials so you don't have to enter them next time?"* with options `"Yes, save them"` / `"No thanks"`.
 
-[defaults]
-space_id = "THE_SPACE_ID"
-project = "THE_PROJECT_NAME"
-```
+**If the user says yes:**
+
+1. **API key** — See ax-profiles.md. Run `ax profiles show` to check the current state, then use `ax profiles create` or `ax profiles update` with the appropriate flags to save the key (and region if relevant).
+
+2. **Space ID** — See ax-profiles.md (Space ID section) to persist it as an environment variable.

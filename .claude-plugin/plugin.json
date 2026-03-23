@@ -1,7 +1,7 @@
 {
   "name": "arize-skills",
   "version": "0.1.0",
-  "description": "Skills for Arize observability: trace export, dataset management, experiment workflows, instrumentation, prompt optimization, and deep linking via the ax CLI.",
+  "description": "Skills for Arize observability: trace export, dataset management, experiment workflows, evaluators, annotations, AI provider integrations, instrumentation, prompt optimization, and deep linking via the ax CLI.",
   "author": {
     "name": "Arize AI",
     "url": "https://arize.com"

@@ -68,7 +68,7 @@ ax --version; Write-Host "--- env ---"; Write-Host "ARIZE_API_KEY: $(if ($env:AR
 
 **Read the output and proceed immediately** if either the env var or the profile has an API key. Only ask the user if **both** are missing. Resolve failures:
 
-- No API key in env **and** no profile → **AskQuestion**: "Arize API key (https://app.arize.com/admin > API Keys)"
+- No API key in env **and** no profile → **AskQuestion**: "Arize API key (https://app.arize.com/admin > API Keys)", then save it immediately using ax-profiles.md
 - Space ID unknown → run `ax spaces list -o json` to list all accessible spaces and pick the right one, or **AskQuestion** if the user prefers to provide it directly
 - Project unclear → ask, or run `ax projects list -o json --limit 100` and present as selectable options
 
@@ -463,7 +463,7 @@ When optimizing prompts that use template variables:
 | Problem | Solution |
 |---------|----------|
 | `ax: command not found` | See ax-setup.md |
-| `No profile found` | Create `~/.arize/config.toml` with `api_key = "${ARIZE_API_KEY}"` (see Prerequisites) |
+| `No profile found` | No profile is configured. See ax-profiles.md to create one. |
 | No `input_messages` on span | Check span kind -- Chain/Agent spans store prompts on child LLM spans, not on themselves |
 | Prompt template is `null` | Not all instrumentations emit `prompt_template`. Use `input_messages` or `input.value` instead |
 | Variables lost after optimization | Verify the revised prompt preserves all `{var}` placeholders from the original |

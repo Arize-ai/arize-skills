@@ -552,30 +552,16 @@ Reconcile the prompt labels and the Choices panel so they stay in sync. Mismatch
 
 ## Save Credentials for Future Use
 
-At the **end of the session**, if the user manually provided an API key or space ID **and** those values were NOT already loaded from a saved profile or environment variable, offer to save them.
+At the **end of the session**, if the user manually provided any credentials during this conversation **and** those values were NOT already loaded from a saved profile or environment variable, offer to save them.
 
-| Credential | Where it gets saved |
-|------------|---------------------|
-| API key | `ax` profile at `~/.arize/config.toml` |
-| Space ID | **macOS/Linux:** `~/.zshrc` or `~/.bashrc` as `export ARIZE_SPACE_ID="..."`. **Windows:** `[System.Environment]::SetEnvironmentVariable('ARIZE_SPACE_ID', '...', 'User')` |
+**Skip this entirely if:**
+- The API key was already loaded from an existing profile or `ARIZE_API_KEY` env var
+- The space ID was already set via `ARIZE_SPACE_ID` env var
 
-**Skip** if the key or space ID was already in env or profile.
+**How to offer:** Use **AskQuestion**: *"Would you like to save your Arize credentials so you don't have to enter them next time?"* with options `"Yes, save them"` / `"No thanks"`.
 
-**AskQuestion:** *"Would you like to save your Arize credentials so you don't have to enter them next time?"* — `"Yes, save them"` / `"No thanks"`.
+**If the user says yes:**
 
-**If yes:**
+1. **API key** — See ax-profiles.md. Run `ax profiles show` to check the current state, then use `ax profiles create` or `ax profiles update` with the appropriate flags to save the key (and region if relevant).
 
-1. **API key** — Create or update `~/.arize/config.toml`:
-   ```toml
-   [profile]
-   name = "default"
-
-   [auth]
-   api_key = "THE_API_KEY"
-
-   [output]
-   format = "table"
-   ```
-   Verify: `ax profiles show`
-
-2. **Space ID** — Append `export ARIZE_SPACE_ID="THE_SPACE_ID"` to `~/.zshrc` or `~/.bashrc`. Tell the user to `source ~/.zshrc` or restart the terminal.
+2. **Space ID** — See ax-profiles.md (Space ID section) to persist it as an environment variable.
