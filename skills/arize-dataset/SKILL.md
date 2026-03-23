@@ -182,6 +182,40 @@ ax datasets create --name "My Dataset" --space-id SPACE_ID --file data.parquet
 | `-o, --output` | string | no | Output format for the returned dataset metadata |
 | `-p, --profile` | string | no | Configuration profile |
 
+### IMPORTANT: `--file` requires a real file path
+
+`ax datasets create` does **not** accept `/dev/stdin`, pipes, or process substitution. You **must** write data to a named temp file first, then pass that path to `--file`.
+
+**Correct pattern when generating data inline:**
+```bash
+# Step 1: write to a temp file
+cat > /tmp/dataset.json << 'EOF'
+[
+  {"question": "What is 2+2?", "answer": "4"},
+  {"question": "What is the capital of France?", "answer": "Paris"}
+]
+EOF
+
+# Step 2: create the dataset from the file
+ax datasets create \
+  --name "my-dataset" \
+  --space-id SPACE_ID \
+  --file /tmp/dataset.json
+
+# Step 3: clean up
+rm /tmp/dataset.json
+```
+
+**Wrong (will fail):**
+```bash
+# DO NOT do this — /dev/stdin is not a supported file type
+ax datasets create --name "my-dataset" --space-id SPACE_ID --file /dev/stdin << 'EOF'
+[...]
+EOF
+```
+
+If you already have a dataset and only want to add rows, use `ax datasets append --json '[...]'` instead — it accepts inline JSON without a file.
+
 ### Supported file formats
 
 | Format | Extension | Notes |
@@ -290,6 +324,7 @@ ax datasets list -o json --limit 100 | jq '.[] | select(.name | test("eval-set")
 ### Create a dataset from file for evaluation
 
 1. Prepare a CSV/JSON/Parquet file with your evaluation columns (e.g., `input`, `expected_output`)
+   - If generating data inline, write it to a real temp file first (see **IMPORTANT** note in the Create section — `/dev/stdin` is not supported)
 2. `ax datasets create --name "eval-set-v1" --space-id SPACE_ID --file eval_data.csv`
 3. Verify: `ax datasets get DATASET_ID`
 4. Use the dataset ID to run experiments
@@ -367,7 +402,7 @@ Examples are free-form JSON objects. There is no fixed schema -- columns are wha
 | `401 Unauthorized` | API key is wrong, expired, or doesn't have access to this space. Fix the profile using ax-profiles.md. |
 | `No profile found` | No profile is configured. See ax-profiles.md to create one. |
 | `Dataset not found` | Verify dataset ID with `ax datasets list` |
-| `File format error` | Supported: CSV, JSON, JSONL, Parquet |
+| `File format error` | Supported: CSV, JSON, JSONL, Parquet. Do NOT use `/dev/stdin` — write data to a real temp file first |
 | `platform-managed column` | Remove `id`, `created_at`, `updated_at` from create/append payloads |
 | `reserved column` | Remove `time`, `count`, or any `source_record_*` field |
 | `Provide either --json or --file` | Append requires exactly one input source |
