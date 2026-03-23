@@ -51,9 +51,13 @@ To use a named profile with any `ax` command, add `-p NAME`:
 ax spans export PROJECT_ID -p work
 ```
 
-## 4. Where to get the API key
+## 4. Getting the API key
 
-Go to **https://app.arize.com/admin > API Keys**. API keys are scoped per space — make sure you're using the key for the correct space.
+Never try to find or guess the API key yourself. Use **AskQuestion** to ask the user:
+
+> *"Please provide your Arize API key. You can find it at https://app.arize.com/admin > API Keys. Note: keys are scoped per space, so make sure you copy the key for the correct space."*
+
+Once the user provides it, proceed with `ax profiles create` or `ax profiles update` as described above.
 
 ## 5. Verify
 
