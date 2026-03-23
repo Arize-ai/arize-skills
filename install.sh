@@ -211,7 +211,7 @@ install_skill() {
   fi
 
   if [[ "$COPY_MODE" == true ]]; then
-    cp -r "$skill_src" "$target"
+    cp -rL "$skill_src" "$target"
     echo "  Copied  $skill_name -> $target"
   else
     ln -sfn "$skill_src" "$target"
