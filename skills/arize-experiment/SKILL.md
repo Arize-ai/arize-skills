@@ -20,7 +20,7 @@ Three things are needed: `ax` CLI, an API key (env var or profile), and a space 
 
 ### Install ax
 
-If `ax` is not installed, not on PATH, or below version `0.7.1`, see ax-setup.md.
+If `ax` is not installed, not on PATH, or below version `0.8.0`, see ax-setup.md.
 
 ### Verify environment
 
@@ -175,16 +175,17 @@ ax experiments create --name "claude-test" --dataset-id DATASET_ID --file runs.c
 | `-o, --output` | string | no | Output format |
 | `-p, --profile` | string | no | Configuration profile |
 
-### `--file` requires a real file path
+### Passing data via stdin
 
-`ax experiments create` does **not** accept `/dev/stdin` or pipes. Write data to a temp file first:
+Use `--file -` to pipe data directly — no temp file needed:
 
 ```bash
-cat > /tmp/runs.json << 'EOF'
+echo '[{"example_id": "ex_001", "output": "Paris"}]' | ax experiments create --name "my-experiment" --dataset-id DATASET_ID --file -
+
+# Or with a heredoc
+ax experiments create --name "my-experiment" --dataset-id DATASET_ID --file - << 'EOF'
 [{"example_id": "ex_001", "output": "Paris"}]
 EOF
-ax experiments create --name "my-experiment" --dataset-id DATASET_ID --file /tmp/runs.json
-rm /tmp/runs.json
 ```
 
 ### Required columns in the runs file

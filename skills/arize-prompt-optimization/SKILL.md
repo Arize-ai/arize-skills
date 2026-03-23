@@ -50,7 +50,7 @@ Three things are needed: `ax` CLI, an API key (env var or profile), and a projec
 
 ### Install ax
 
-If `ax` is not installed, not on PATH, or below version `0.7.1`, see ax-setup.md.
+If `ax` is not installed, not on PATH, or below version `0.8.0`, see ax-setup.md.
 
 ### Verify environment
 
