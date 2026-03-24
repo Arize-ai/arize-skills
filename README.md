@@ -49,7 +49,8 @@ The installer detects installed agents and optionally installs the `ax` CLI. Use
 ### Option 3: Claude Code plugin
 
 ```
-/plugin add https://github.com/Arize-ai/arize-skills
+/plugin marketplace add Arize-ai/arize-skills
+/plugin install arize-skills@Arize-ai-arize-skills 
 ```
 
 ## Prerequisites
