@@ -82,9 +82,9 @@ For **session** granularity, the same trace-level grouping happens first, then t
 
 ### The `{conversation}` template variable
 
-Session-level evaluators unlock a special `{conversation}` template variable. It renders as a JSON array of `{input, output}` turns across all traces in the session, built from `attributes.input.value` / `attributes.llm.input_messages` (input side) and `attributes.output.value` / `attributes.llm.output_messages` (output side).
+At session granularity, `{conversation}` is a special template variable that renders as a JSON array of `{input, output}` turns across all traces in the session, built from `attributes.input.value` / `attributes.llm.input_messages` (input side) and `attributes.output.value` / `attributes.llm.output_messages` (output side).
 
-Using `{conversation}` with span or trace granularity causes an error — it is session-only.
+At span or trace granularity, `{conversation}` is treated as a regular template variable and resolved via column mappings like any other.
 
 ### Multi-evaluator tasks
 
