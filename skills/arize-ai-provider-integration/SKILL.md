@@ -23,23 +23,18 @@ If `ax` is not installed, not on PATH, or below version `0.8.0`, see ax-setup.md
 
 ### Verify environment
 
-Run a quick check for credentials:
+Check the `ax` CLI and profile:
 
-**macOS/Linux (bash):**
 ```bash
-test -f .env && set -a && source .env && set +a; true && ax --version && echo "--- env ---" && for v in ARIZE_API_KEY ARIZE_SPACE_ID OPENAI_API_KEY ANTHROPIC_API_KEY; do eval "val=\${$v:-}"; [ -n "$val" ] && echo "$v: (set)" || echo "$v: (not set)"; done && echo "--- profiles ---" && ax profiles show 2>&1
+ax --version && ax profiles show 2>&1
 ```
 
-**Windows (PowerShell):**
-```powershell
-$envFile = '.env'; if (Test-Path $envFile) { Get-Content $envFile | ForEach-Object { if ($_ -match '^([^#=]+)=(.*)$') { if (-not [Environment]::GetEnvironmentVariable($Matches[1].Trim())) { [Environment]::SetEnvironmentVariable($Matches[1].Trim(), $Matches[2].Trim(), 'Process') } } } }; ax --version; Write-Host "--- env ---"; 'ARIZE_API_KEY','ARIZE_SPACE_ID','OPENAI_API_KEY','ANTHROPIC_API_KEY' | ForEach-Object { Write-Host "$_: $(if ([Environment]::GetEnvironmentVariable($_)) { '(set)' } else { '(not set)' })" }; Write-Host "--- profiles ---"; ax profiles show 2>&1
-```
+**Proceed immediately** if the profile has an API key. Resolve failures:
 
-**Read the output and proceed immediately** if either the env var or the profile has an API key. Only ask the user if **both** are missing. Resolve failures:
-
-- No API key in env **and** no profile → **AskQuestion**: "Arize API key (https://app.arize.com/admin > API Keys)"
-- Space ID unknown → run `ax spaces list -o json` to list all accessible spaces and pick the right one, or **AskQuestion** if the user prefers to provide it directly
-- Provider key not set (OPENAI_API_KEY / ANTHROPIC_API_KEY) → **AskQuestion**: "OpenAI/Anthropic API key (needed for AI integrations)"
+- **No profile API key** → check for a `.env` file in the project root (`cat .env 2>/dev/null`). If it contains `ARIZE_API_KEY`, bootstrap the profile: `ax profiles create --api-key <key>` (or `ax profiles update --api-key <key>` if a profile already exists). Re-run `ax profiles show` to confirm.
+- **No `.env` and no profile** → **AskQuestion**: "Arize API key (https://app.arize.com/admin > API Keys)", then save it with `ax profiles create --api-key <key>`.
+- **Space ID unknown** → check `.env` for `ARIZE_SPACE_ID`. If not found, run `ax spaces list -o json` to list all accessible spaces, or **AskQuestion**.
+- **Provider keys** → when creating an AI integration and the user hasn't provided a provider key, check `.env` for `OPENAI_API_KEY` / `ANTHROPIC_API_KEY`. If not found, **AskQuestion**: "OpenAI/Anthropic API key (needed for AI integrations)".
 
 ---
 
