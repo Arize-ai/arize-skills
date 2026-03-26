@@ -2,6 +2,10 @@
 
 Consult this only when an `ax` command fails. Do NOT run these checks proactively.
 
+## Check version first
+
+If `ax` is installed (not `command not found`), always run `ax --version` before investigating further. The version must be `0.8.0` or higher — many errors are caused by an outdated install. If the version is too old, see **Version too old** below.
+
 ## `ax: command not found`
 
 **macOS/Linux:**
