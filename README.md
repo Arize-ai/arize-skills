@@ -69,7 +69,28 @@ pip install arize-ax-cli
 
 ### Authentication
 
-**Option A — `.env` file** (recommended):
+**Option A — `ax` CLI profile** (recommended):
+
+Set up your API key once and it persists across all sessions and projects:
+```bash
+# Interactive wizard
+ax profiles create
+
+# Or pass the key directly
+ax profiles create --api-key YOUR_API_KEY
+
+# Update an existing profile (patches only what you specify)
+ax profiles update --api-key NEW_API_KEY
+ax profiles update --region us-east-1b
+```
+
+You'll also need a space ID. Find yours in the Arize URL (`/spaces/{SPACE_ID}/...`) or run `ax spaces list -o json`, then persist it:
+```bash
+# macOS/Linux — add to ~/.zshrc or ~/.bashrc
+export ARIZE_SPACE_ID="U3BhY2U6..."
+```
+
+**Option B — `.env` file** (project-scoped credentials + provider keys):
 
 Copy the example and fill in your keys:
 ```bash
@@ -88,23 +109,11 @@ ARIZE_SPACE_ID=U3BhY2U6...              # base64 space ID from your Arize URL
 
 Skills automatically load this file during their prerequisite check. The `.env` file is gitignored — never commit it.
 
-**Option B — Environment variables** (CI/CD, quick start):
+**Option C — Environment variables** (CI/CD):
 ```bash
 export ARIZE_API_KEY="your-api-key"       # from https://app.arize.com/admin > API Keys
 export ARIZE_SPACE_ID="U3BhY2U6..."       # base64 space ID from your Arize URL
 ```
-
-**Option C — Profile with flags** (persistent, agent-friendly):
-```bash
-# Create a new profile
-ax profiles create --api-key YOUR_API_KEY
-
-# Update an existing profile (patches only what you specify)
-ax profiles update --api-key NEW_API_KEY
-ax profiles update --region us-east-1b
-```
-
-Running `ax profiles create` without flags launches an interactive wizard instead.
 
 **Option D — Direct TOML file** (scripted/non-interactive):
 ```bash
