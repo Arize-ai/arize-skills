@@ -15,26 +15,13 @@ description: "INVOKE THIS SKILL when creating, reading, updating, or deleting Ar
 
 ## Prerequisites
 
-Three things are needed: `ax` CLI, an API key (env var or profile), and a space ID.
+Proceed directly with the task — run the `ax` command you need. Do NOT check versions, env vars, or profiles upfront.
 
-### Install ax
-
-If `ax` is not installed, not on PATH, or below version `0.8.0`, see ax-setup.md.
-
-### Verify environment
-
-Check the `ax` CLI and profile:
-
-```bash
-ax --version && ax profiles show 2>&1
-```
-
-**Proceed immediately** if the profile has an API key. Resolve failures:
-
-- **No profile API key** → check for a `.env` file in the project root (`cat .env 2>/dev/null`). If it contains `ARIZE_API_KEY`, bootstrap the profile: `ax profiles create --api-key <key>` (or `ax profiles update --api-key <key>` if a profile already exists). Re-run `ax profiles show` to confirm.
-- **No `.env` and no profile** → **AskQuestion**: "Arize API key (https://app.arize.com/admin > API Keys)", then save it with `ax profiles create --api-key <key>`.
-- **Space ID unknown** → check `.env` for `ARIZE_SPACE_ID`. If not found, run `ax spaces list -o json` to list all accessible spaces, or **AskQuestion**.
-- **Provider keys** → when creating an AI integration and the user hasn't provided a provider key, check `.env` for `OPENAI_API_KEY` / `ANTHROPIC_API_KEY`. If not found, **AskQuestion**: "OpenAI/Anthropic API key (needed for AI integrations)".
+If an `ax` command fails, troubleshoot based on the error:
+- `command not found` or version error → see ax-setup.md
+- `401 Unauthorized` / missing API key → run `ax profiles show` to inspect the current profile. If the profile is missing or the API key is wrong: check `.env` for `ARIZE_API_KEY` and use it to create/update the profile via ax-profiles.md. If `.env` has no key either, ask the user for their Arize API key (https://app.arize.com/admin > API Keys)
+- Space ID unknown → check `.env` for `ARIZE_SPACE_ID`, or run `ax spaces list -o json`, or ask the user
+- LLM provider call fails (missing OPENAI_API_KEY / ANTHROPIC_API_KEY) → check `.env`, load if present, otherwise ask the user
 
 ---
 

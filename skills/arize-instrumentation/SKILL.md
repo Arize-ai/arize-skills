@@ -32,9 +32,8 @@ Before changing code:
    - package manager and app start command
    - whether the app is long-running, server-based, or a short-lived CLI/script
    - whether `ax` will be needed for post-change verification
-3. If `ax` will be used later, verify whether it is available on PATH. If not, check ax-setup.md and keep the resolved executable path for the rest of the session instead of assuming `ax` will be found later.
-4. Probe CLI capability before depending on a specific subcommand. Some environments have older or differently packaged `ax` builds. Check `ax --help` and the relevant subcommand help before assuming commands like `ax spaces list` exist.
-5. Never silently replace a user-provided space ID, project name, or project ID. If the CLI, collector, and user input disagree, surface that mismatch as a concrete blocker.
+3. Do NOT proactively check `ax` installation or version. If `ax` is needed for verification later, just run it when the time comes. If it fails, see ax-setup.md.
+4. Never silently replace a user-provided space ID, project name, or project ID. If the CLI, collector, and user input disagree, surface that mismatch as a concrete blocker.
 
 ## Phase 1: Analysis (read-only)
 
@@ -102,7 +101,7 @@ Proceed **only after the user confirms** the Phase 1 analysis.
    - Python: `pip install arize-otel` plus `openinference-instrumentation-{name}` (hyphens in package name; underscores in import, e.g. `openinference.instrumentation.llama_index`).
    - TypeScript/JavaScript: `@opentelemetry/sdk-trace-node` plus the relevant `@arizeai/openinference-*` package.
    - Java: OpenTelemetry SDK plus `openinference-instrumentation-*` in pom.xml or build.gradle.
-3. **Credentials** — User needs **Arize Space ID** and **API Key** from [Space API Keys](https://app.arize.com/organizations/-/settings/space-api-keys). Check `ax profiles show` for a configured profile. If no profile API key, check `.env` for `ARIZE_API_KEY` and bootstrap the profile with `ax profiles create --api-key <key>`. For space ID, check `.env` for `ARIZE_SPACE_ID`. If not found, run `ax spaces list -o json` to discover it.
+3. **Credentials** — User needs **Arize Space ID** and **API Key** from [Space API Keys](https://app.arize.com/organizations/-/settings/space-api-keys). These will be used in the instrumentation code. If the user hasn't provided them, check `.env` for `ARIZE_API_KEY` and `ARIZE_SPACE_ID`. If not found, ask the user.
 4. **Centralized instrumentation** — Create a single module (e.g. `instrumentation.py`, `instrumentation.ts`) and initialize tracing **before** any LLM client is created.
 5. **Existing OTel** — If there is already a TracerProvider, add Arize as an **additional** exporter (e.g. BatchSpanProcessor with Arize OTLP). Do not replace existing setup unless the user asks.
 

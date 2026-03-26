@@ -1,5 +1,7 @@
 # ax Profile Setup
 
+Consult this when authentication fails (401, missing profile, missing API key). Do NOT run these checks proactively.
+
 Use this when there is no profile, or a profile has incorrect settings (wrong API key, wrong region, etc.).
 
 ## 1. Inspect the current state
