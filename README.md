@@ -115,20 +115,6 @@ export ARIZE_API_KEY="your-api-key"       # from https://app.arize.com/admin > A
 export ARIZE_SPACE_ID="U3BhY2U6..."       # base64 space ID from your Arize URL
 ```
 
-**Option D — Direct TOML file** (scripted/non-interactive):
-```bash
-mkdir -p ~/.arize && cat > ~/.arize/config.toml << 'EOF'
-[profile]
-name = "default"
-
-[auth]
-api_key = "your-api-key"
-
-[output]
-format = "table"
-EOF
-```
-
 ### Verify
 
 ```bash
