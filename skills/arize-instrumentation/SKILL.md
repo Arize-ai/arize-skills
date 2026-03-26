@@ -104,7 +104,7 @@ Proceed **only after the user confirms** the Phase 1 analysis.
    - Java: OpenTelemetry SDK plus `openinference-instrumentation-*` in pom.xml or build.gradle.
 3. **Credentials** — Load credentials from `.env` if present, then check env vars and profiles:
    ```bash
-   if [ -f .env ]; then set -a; . .env; set +a; fi && for v in ARIZE_API_KEY ARIZE_SPACE_ID; do eval "val=\${$v:-}"; [ -n "$val" ] && echo "$v: (set)" || echo "$v: (not set)"; done
+   test -f .env && set -a && source .env && set +a; true && for v in ARIZE_API_KEY ARIZE_SPACE_ID; do eval "val=\${$v:-}"; [ -n "$val" ] && echo "$v: (set)" || echo "$v: (not set)"; done
    ```
    User needs **Arize Space ID** and **API Key** from [Space API Keys](https://app.arize.com/organizations/-/settings/space-api-keys). Set as `ARIZE_SPACE_ID` and `ARIZE_API_KEY`. If the space ID is unknown, run `ax spaces list -o json` to discover it.
 4. **Centralized instrumentation** — Create a single module (e.g. `instrumentation.py`, `instrumentation.ts`) and initialize tracing **before** any LLM client is created.

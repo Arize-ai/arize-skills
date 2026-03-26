@@ -27,7 +27,7 @@ Run a quick check for credentials:
 
 **macOS/Linux (bash):**
 ```bash
-if [ -f .env ]; then set -a; . .env; set +a; fi && ax --version && echo "--- env ---" && for v in ARIZE_API_KEY ARIZE_SPACE_ID OPENAI_API_KEY ANTHROPIC_API_KEY; do eval "val=\${$v:-}"; [ -n "$val" ] && echo "$v: (set)" || echo "$v: (not set)"; done && echo "--- profiles ---" && ax profiles show 2>&1
+test -f .env && set -a && source .env && set +a; true && ax --version && echo "--- env ---" && for v in ARIZE_API_KEY ARIZE_SPACE_ID OPENAI_API_KEY ANTHROPIC_API_KEY; do eval "val=\${$v:-}"; [ -n "$val" ] && echo "$v: (set)" || echo "$v: (not set)"; done && echo "--- profiles ---" && ax profiles show 2>&1
 ```
 
 **Windows (PowerShell):**

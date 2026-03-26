@@ -19,7 +19,7 @@ If `ax` is not installed, not on PATH, or below version `0.8.0`, see ax-setup.md
 
 **macOS/Linux:**
 ```bash
-if [ -f .env ]; then set -a; . .env; set +a; fi && ax --version && echo "--- env ---" && for v in ARIZE_API_KEY ARIZE_SPACE_ID; do eval "val=\${$v:-}"; [ -n "$val" ] && echo "$v: (set)" || echo "$v: (not set)"; done && echo "--- profiles ---" && ax profiles show 2>&1
+test -f .env && set -a && source .env && set +a; true && ax --version && echo "--- env ---" && for v in ARIZE_API_KEY ARIZE_SPACE_ID; do eval "val=\${$v:-}"; [ -n "$val" ] && echo "$v: (set)" || echo "$v: (not set)"; done && echo "--- profiles ---" && ax profiles show 2>&1
 ```
 
 **Windows (PowerShell):**
