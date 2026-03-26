@@ -22,7 +22,7 @@ If an `ax` command fails, troubleshoot based on the error:
 - `command not found` or version error → see ax-setup.md
 - `401 Unauthorized` / missing API key → run `ax profiles show` to inspect the current profile. If the profile is missing or the API key is wrong: check `.env` for `ARIZE_API_KEY` and use it to create/update the profile via ax-profiles.md. If `.env` has no key either, ask the user for their Arize API key (https://app.arize.com/admin > API Keys)
 - Space ID unknown → check `.env` for `ARIZE_SPACE_ID`, or run `ax spaces list -o json`, or ask the user
-- Project unclear → ask, or run `ax projects list -o json --limit 100` and present as selectable options
+- Project unclear → check `.env` for `ARIZE_DEFAULT_PROJECT`, or ask, or run `ax projects list -o json --limit 100` and present as selectable options
 
 ## List Datasets: `ax datasets list`
 
