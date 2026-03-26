@@ -69,13 +69,32 @@ pip install arize-ax-cli
 
 ### Authentication
 
-**Option A — Environment variables** (CI/CD, quick start):
+**Option A — `.env` file** (recommended):
+
+Copy the example and fill in your keys:
+```bash
+cp .env.example .env
+# Edit .env with your credentials
+```
+
+The `.env` file supports all credentials used by the skills:
+```bash
+ARIZE_API_KEY=your-api-key               # from https://app.arize.com/admin > API Keys
+ARIZE_SPACE_ID=U3BhY2U6...              # base64 space ID from your Arize URL
+# ARIZE_DEFAULT_PROJECT=my-project       # optional default project
+# OPENAI_API_KEY=sk-...                  # for AI integrations and evaluators
+# ANTHROPIC_API_KEY=sk-ant-...           # for AI integrations and evaluators
+```
+
+Skills automatically load this file during their prerequisite check. The `.env` file is gitignored — never commit it.
+
+**Option B — Environment variables** (CI/CD, quick start):
 ```bash
 export ARIZE_API_KEY="your-api-key"       # from https://app.arize.com/admin > API Keys
 export ARIZE_SPACE_ID="U3BhY2U6..."       # base64 space ID from your Arize URL
 ```
 
-**Option B — Profile with flags** (persistent, agent-friendly):
+**Option C — Profile with flags** (persistent, agent-friendly):
 ```bash
 # Create a new profile
 ax profiles create --api-key YOUR_API_KEY
@@ -87,7 +106,7 @@ ax profiles update --region us-east-1b
 
 Running `ax profiles create` without flags launches an interactive wizard instead.
 
-**Option C — Direct TOML file** (scripted/non-interactive):
+**Option D — Direct TOML file** (scripted/non-interactive):
 ```bash
 mkdir -p ~/.arize && cat > ~/.arize/config.toml << 'EOF'
 [profile]

@@ -84,3 +84,20 @@ Then `source ~/.zshrc` (or restart terminal).
 [System.Environment]::SetEnvironmentVariable('ARIZE_SPACE_ID', 'U3BhY2U6...', 'User')
 ```
 Restart terminal for it to take effect.
+
+## Save Credentials for Future Use
+
+At the **end of the session**, if the user manually provided any credentials during this conversation **and** those values were NOT already loaded from a saved profile or environment variable, offer to save them.
+
+**Skip this entirely if:**
+- The API key was already loaded from an existing profile or `ARIZE_API_KEY` env var
+- The space ID was already set via `ARIZE_SPACE_ID` env var
+- The user only used base64 project IDs (no space ID was needed)
+
+**How to offer:** Use **AskQuestion**: *"Would you like to save your Arize credentials so you don't have to enter them next time?"* with options `"Yes, save them"` / `"No thanks"`.
+
+**If the user says yes:**
+
+1. **API key** — Run `ax profiles show` to check the current state, then use `ax profiles create` or `ax profiles update` with the appropriate flags to save the key (and region if relevant).
+
+2. **Space ID** — See the Space ID section above to persist it as an environment variable.

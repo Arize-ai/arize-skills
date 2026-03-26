@@ -58,12 +58,12 @@ Run a quick check for credentials:
 
 **macOS/Linux (bash):**
 ```bash
-ax --version && echo "--- env ---" && if [ -n "$ARIZE_API_KEY" ]; then echo "ARIZE_API_KEY: (set)"; else echo "ARIZE_API_KEY: (not set)"; fi && echo "ARIZE_SPACE_ID: ${ARIZE_SPACE_ID:-(not set)}" && echo "ARIZE_DEFAULT_PROJECT: ${ARIZE_DEFAULT_PROJECT:-(not set)}" && echo "--- profiles ---" && ax profiles show 2>&1
+if [ -f .env ]; then set -a; . .env; set +a; fi && ax --version && echo "--- env ---" && for v in ARIZE_API_KEY ARIZE_SPACE_ID ARIZE_DEFAULT_PROJECT OPENAI_API_KEY ANTHROPIC_API_KEY; do eval "val=\${$v:-}"; [ -n "$val" ] && echo "$v: (set)" || echo "$v: (not set)"; done && echo "--- profiles ---" && ax profiles show 2>&1
 ```
 
 **Windows (PowerShell):**
 ```powershell
-ax --version; Write-Host "--- env ---"; Write-Host "ARIZE_API_KEY: $(if ($env:ARIZE_API_KEY) { '(set)' } else { '(not set)' })"; Write-Host "ARIZE_SPACE_ID: $env:ARIZE_SPACE_ID"; Write-Host "ARIZE_DEFAULT_PROJECT: $env:ARIZE_DEFAULT_PROJECT"; Write-Host "--- profiles ---"; ax profiles show 2>&1
+$envFile = '.env'; if (Test-Path $envFile) { Get-Content $envFile | ForEach-Object { if ($_ -match '^([^#=]+)=(.*)$') { if (-not [Environment]::GetEnvironmentVariable($Matches[1].Trim())) { [Environment]::SetEnvironmentVariable($Matches[1].Trim(), $Matches[2].Trim(), 'Process') } } } }; ax --version; Write-Host "--- env ---"; 'ARIZE_API_KEY','ARIZE_SPACE_ID','ARIZE_DEFAULT_PROJECT','OPENAI_API_KEY','ANTHROPIC_API_KEY' | ForEach-Object { Write-Host "$_: $(if ([Environment]::GetEnvironmentVariable($_)) { '(set)' } else { '(not set)' })" }; Write-Host "--- profiles ---"; ax profiles show 2>&1
 ```
 
 **Read the output and proceed immediately** if either the env var or the profile has an API key. Only ask the user if **both** are missing. Resolve failures:
@@ -71,6 +71,7 @@ ax --version; Write-Host "--- env ---"; Write-Host "ARIZE_API_KEY: $(if ($env:AR
 - No API key in env **and** no profile → **AskQuestion**: "Arize API key (https://app.arize.com/admin > API Keys)", then save it immediately using ax-profiles.md
 - Space ID unknown → run `ax spaces list -o json` to list all accessible spaces and pick the right one, or **AskQuestion** if the user prefers to provide it directly
 - Project unclear → ask, or run `ax projects list -o json --limit 100` and present as selectable options
+- Provider key not set (OPENAI_API_KEY / ANTHROPIC_API_KEY) → **AskQuestion**: "OpenAI/Anthropic API key (needed for evaluators and prompt optimization)"
 
 ### Default Project
 

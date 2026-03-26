@@ -102,7 +102,11 @@ Proceed **only after the user confirms** the Phase 1 analysis.
    - Python: `pip install arize-otel` plus `openinference-instrumentation-{name}` (hyphens in package name; underscores in import, e.g. `openinference.instrumentation.llama_index`).
    - TypeScript/JavaScript: `@opentelemetry/sdk-trace-node` plus the relevant `@arizeai/openinference-*` package.
    - Java: OpenTelemetry SDK plus `openinference-instrumentation-*` in pom.xml or build.gradle.
-3. **Credentials** — User needs **Arize Space ID** and **API Key** from [Space API Keys](https://app.arize.com/organizations/-/settings/space-api-keys). Set as `ARIZE_SPACE_ID` and `ARIZE_API_KEY`. If the space ID is unknown, run `ax spaces list -o json` to discover it.
+3. **Credentials** — Load credentials from `.env` if present, then check env vars and profiles:
+   ```bash
+   if [ -f .env ]; then set -a; . .env; set +a; fi && for v in ARIZE_API_KEY ARIZE_SPACE_ID; do eval "val=\${$v:-}"; [ -n "$val" ] && echo "$v: (set)" || echo "$v: (not set)"; done
+   ```
+   User needs **Arize Space ID** and **API Key** from [Space API Keys](https://app.arize.com/organizations/-/settings/space-api-keys). Set as `ARIZE_SPACE_ID` and `ARIZE_API_KEY`. If the space ID is unknown, run `ax spaces list -o json` to discover it.
 4. **Centralized instrumentation** — Create a single module (e.g. `instrumentation.py`, `instrumentation.ts`) and initialize tracing **before** any LLM client is created.
 5. **Existing OTel** — If there is already a TracerProvider, add Arize as an **additional** exporter (e.g. BatchSpanProcessor with Arize OTLP). Do not replace existing setup unless the user asks.
 
@@ -229,16 +233,4 @@ See the full setup at [Agent-Assisted Tracing Setup](https://arize.com/docs/ax/a
 
 ## Save Credentials for Future Use
 
-At the **end of the session**, if the user manually provided any credentials during this conversation **and** those values were NOT already loaded from a saved profile or environment variable, offer to save them.
-
-**Skip this entirely if:**
-- The API key was already loaded from an existing profile or `ARIZE_API_KEY` env var
-- The space ID was already set via `ARIZE_SPACE_ID` env var
-
-**How to offer:** Use **AskQuestion**: *"Would you like to save your Arize credentials so you don't have to enter them next time?"* with options `"Yes, save them"` / `"No thanks"`.
-
-**If the user says yes:**
-
-1. **API key** — See ax-profiles.md. Run `ax profiles show` to check the current state, then use `ax profiles create` or `ax profiles update` with the appropriate flags to save the key (and region if relevant).
-
-2. **Space ID** — See ax-profiles.md (Space ID section) to persist it as an environment variable.
+See ax-profiles.md § Save Credentials for Future Use.

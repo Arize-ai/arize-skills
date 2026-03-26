@@ -27,18 +27,19 @@ Run a quick check for credentials:
 
 **macOS/Linux (bash):**
 ```bash
-ax --version && echo "--- env ---" && if [ -n "$ARIZE_API_KEY" ]; then echo "ARIZE_API_KEY: (set)"; else echo "ARIZE_API_KEY: (not set)"; fi && echo "ARIZE_SPACE_ID: ${ARIZE_SPACE_ID:-(not set)}" && echo "--- profiles ---" && ax profiles show 2>&1
+if [ -f .env ]; then set -a; . .env; set +a; fi && ax --version && echo "--- env ---" && for v in ARIZE_API_KEY ARIZE_SPACE_ID OPENAI_API_KEY ANTHROPIC_API_KEY; do eval "val=\${$v:-}"; [ -n "$val" ] && echo "$v: (set)" || echo "$v: (not set)"; done && echo "--- profiles ---" && ax profiles show 2>&1
 ```
 
 **Windows (PowerShell):**
 ```powershell
-ax --version; Write-Host "--- env ---"; Write-Host "ARIZE_API_KEY: $(if ($env:ARIZE_API_KEY) { '(set)' } else { '(not set)' })"; Write-Host "ARIZE_SPACE_ID: $env:ARIZE_SPACE_ID"; Write-Host "--- profiles ---"; ax profiles show 2>&1
+$envFile = '.env'; if (Test-Path $envFile) { Get-Content $envFile | ForEach-Object { if ($_ -match '^([^#=]+)=(.*)$') { if (-not [Environment]::GetEnvironmentVariable($Matches[1].Trim())) { [Environment]::SetEnvironmentVariable($Matches[1].Trim(), $Matches[2].Trim(), 'Process') } } } }; ax --version; Write-Host "--- env ---"; 'ARIZE_API_KEY','ARIZE_SPACE_ID','OPENAI_API_KEY','ANTHROPIC_API_KEY' | ForEach-Object { Write-Host "$_: $(if ([Environment]::GetEnvironmentVariable($_)) { '(set)' } else { '(not set)' })" }; Write-Host "--- profiles ---"; ax profiles show 2>&1
 ```
 
 **Read the output and proceed immediately** if either the env var or the profile has an API key. Only ask the user if **both** are missing. Resolve failures:
 
 - No API key in env **and** no profile → **AskQuestion**: "Arize API key (https://app.arize.com/admin > API Keys)"
 - Space ID unknown → run `ax spaces list -o json` to list all accessible spaces and pick the right one, or **AskQuestion** if the user prefers to provide it directly
+- Provider key not set (OPENAI_API_KEY / ANTHROPIC_API_KEY) → **AskQuestion**: "OpenAI/Anthropic API key (needed for AI integrations)"
 
 ---
 
@@ -282,16 +283,4 @@ Omit `--force` to get a confirmation prompt instead of deleting immediately.
 
 ## Save Credentials for Future Use
 
-At the **end of the session**, if the user manually provided any credentials during this conversation **and** those values were NOT already loaded from a saved profile or environment variable, offer to save them.
-
-**Skip this entirely if:**
-- The API key was already loaded from an existing profile or `ARIZE_API_KEY` env var
-- The space ID was already set via `ARIZE_SPACE_ID` env var
-
-**How to offer:** Use **AskQuestion**: *"Would you like to save your Arize credentials so you don't have to enter them next time?"* with options `"Yes, save them"` / `"No thanks"`.
-
-**If the user says yes:**
-
-1. **API key** — See ax-profiles.md. Run `ax profiles show` to check the current state, then use `ax profiles create` or `ax profiles update` with the appropriate flags to save the key (and region if relevant).
-
-2. **Space ID** — See ax-profiles.md (Space ID section) to persist it as an environment variable.
+See ax-profiles.md § Save Credentials for Future Use.
