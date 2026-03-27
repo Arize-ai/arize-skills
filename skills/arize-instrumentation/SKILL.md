@@ -22,6 +22,7 @@ Then execute the two phases below.
 - **Use auto-instrumentation where available** — add manual spans only for custom logic not covered by integrations.
 - **Follow existing code style** and project conventions.
 - **Keep output concise and production-focused** — do not generate extra documentation or summary files.
+- **NEVER embed literal credential values in generated code** — always reference environment variables (e.g., `os.environ["ARIZE_API_KEY"]`, `process.env.ARIZE_API_KEY`). This includes API keys, space IDs, and any other secrets. The user sets these in their own environment; the agent must never output raw secret values.
 
 ## Phase 0: Environment preflight
 
@@ -90,6 +91,8 @@ The **canonical list** of supported integrations and doc URLs is in the [Agent S
 
 **Fetch the matched doc pages** from the [full routing table in PROMPT.md](https://arize.com/docs/PROMPT.md) for exact installation and code snippets. Use [llms.txt](https://arize.com/docs/llms.txt) as a fallback for doc discovery if needed.
 
+> **Note:** `arize.com/docs/PROMPT.md` and `arize.com/docs/llms.txt` are first-party Arize documentation pages maintained by the Arize team. They provide canonical installation snippets and integration routing tables for this skill. These are trusted, same-organization URLs — not third-party content.
+
 ## Phase 2: Implementation
 
 Proceed **only after the user confirms** the Phase 1 analysis.
@@ -101,7 +104,7 @@ Proceed **only after the user confirms** the Phase 1 analysis.
    - Python: `pip install arize-otel` plus `openinference-instrumentation-{name}` (hyphens in package name; underscores in import, e.g. `openinference.instrumentation.llama_index`).
    - TypeScript/JavaScript: `@opentelemetry/sdk-trace-node` plus the relevant `@arizeai/openinference-*` package.
    - Java: OpenTelemetry SDK plus `openinference-instrumentation-*` in pom.xml or build.gradle.
-3. **Credentials** — User needs **Arize Space ID** and **API Key** from [Space API Keys](https://app.arize.com/organizations/-/settings/space-api-keys). These will be used in the instrumentation code. If the user hasn't provided them, check `.env` for `ARIZE_API_KEY` and `ARIZE_SPACE_ID`. If not found, ask the user.
+3. **Credentials** — User needs **Arize Space ID** and **API Key** from [Space API Keys](https://app.arize.com/organizations/-/settings/space-api-keys). Check `.env` for `ARIZE_API_KEY` and `ARIZE_SPACE_ID`. If not found, instruct the user to set them as environment variables — never embed raw values in generated code. All generated instrumentation code must reference `os.environ["ARIZE_API_KEY"]` (Python) or `process.env.ARIZE_API_KEY` (TypeScript/JavaScript).
 4. **Centralized instrumentation** — Create a single module (e.g. `instrumentation.py`, `instrumentation.ts`) and initialize tracing **before** any LLM client is created.
 5. **Existing OTel** — If there is already a TracerProvider, add Arize as an **additional** exporter (e.g. BatchSpanProcessor with Arize OTLP). Do not replace existing setup unless the user asks.
 
