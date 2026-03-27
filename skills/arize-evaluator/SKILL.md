@@ -64,6 +64,34 @@ A **task** is how you run one or more evaluators against real data. Tasks are at
 
 ---
 
+## Data Granularity
+
+The `--data-granularity` flag controls what unit of data the evaluator scores. It defaults to `span` and only applies to **project tasks** (not dataset/experiment tasks — those evaluate experiment runs directly).
+
+| Level | What it evaluates | Use for | Result column prefix |
+|-------|-------------------|---------|---------------------|
+| `span` (default) | Individual spans | Q&A correctness, hallucination, relevance | `eval.{name}.label` / `.score` / `.explanation` |
+| `trace` | All spans in a trace, grouped by `context.trace_id` | Agent trajectory, task correctness — anything that needs the full call chain | `trace_eval.{name}.label` / `.score` / `.explanation` |
+| `session` | All traces in a session, grouped by `attributes.session.id` and ordered by start time | Multi-turn coherence, overall tone, conversation quality | `session_eval.{name}.label` / `.score` / `.explanation` |
+
+### How trace and session aggregation works
+
+For **trace** granularity, spans sharing the same `context.trace_id` are grouped together. Column values used by the evaluator template are comma-joined into a single string (each value truncated to 100K characters) before being passed to the judge model.
+
+For **session** granularity, the same trace-level grouping happens first, then traces are ordered by `start_time` and grouped by `attributes.session.id`. Session-level values are capped at 100K characters total.
+
+### The `{conversation}` template variable
+
+At session granularity, `{conversation}` is a special template variable that renders as a JSON array of `{input, output}` turns across all traces in the session, built from `attributes.input.value` / `attributes.llm.input_messages` (input side) and `attributes.output.value` / `attributes.llm.output_messages` (output side).
+
+At span or trace granularity, `{conversation}` is treated as a regular template variable and resolved via column mappings like any other.
+
+### Multi-evaluator tasks
+
+A task can contain evaluators at different granularities. At runtime the system uses the **highest** granularity (session > trace > span) for data fetching and automatically **splits into one child run per evaluator**. Per-evaluator `query_filter` in the task's evaluators JSON further narrows which spans are included (e.g., only tool-call spans within a session).
+
+---
+
 ## Basic CRUD
 
 ### AI Integrations
@@ -105,6 +133,7 @@ ax evaluators create \
   --model-name "gpt-4o" \
   --include-explanations \
   --use-function-calling \
+  --classification-choices '{"correct": 1, "incorrect": 0}' \
   --template 'You are an evaluator. Given the user question and the model response, decide if the response correctly answers the question.
 
 User question: {input}
@@ -120,6 +149,7 @@ ax evaluators create-version EVALUATOR_ID \
   --ai-integration-id INT_ID \
   --model-name "gpt-4o" \
   --include-explanations \
+  --classification-choices '{"correct": 1, "incorrect": 0}' \
   --template 'Updated prompt...
 
 {input} / {output} / {context}'
@@ -144,10 +174,13 @@ ax evaluators delete EVALUATOR_ID
 | `--ai-integration-id` | yes | AI integration ID (from above) |
 | `--model-name` | yes | Judge model (e.g. `gpt-4o`) |
 | `--template` | yes | Prompt with `{variable}` placeholders (single-quoted in bash) |
+| `--classification-choices` | yes | JSON object mapping choice labels to numeric scores e.g. `'{"correct": 1, "incorrect": 0}'` |
 | `--description` | no | Human-readable description |
 | `--include-explanations` | no | Include reasoning alongside the label |
 | `--use-function-calling` | no | Prefer structured function-call output |
 | `--invocation-params` | no | JSON of model params e.g. `'{"temperature": 0}'` |
+| `--data-granularity` | no | `span` (default), `trace`, or `session`. Only relevant for project tasks, not dataset/experiment tasks. See Data Granularity section. |
+| `--provider-params` | no | JSON object of provider-specific parameters |
 
 ### Tasks
 
@@ -281,6 +314,7 @@ ax evaluators create \
   --model-name "gpt-4o" \
   --include-explanations \
   --use-function-calling \
+  --classification-choices '{"factual": 1, "hallucinated": 0}' \
   --template 'You are an evaluator. Given the user question and the model response, decide if the response is factual or contains unsupported claims.
 
 User question: {input}
@@ -477,7 +511,7 @@ If the user insists on more than two choices, that's fine — but recommend bina
 
 ### 3. Be explicit about what the model must return
 
-The template must tell the judge model to respond with **only** the label string — nothing else. The label strings in the prompt must **exactly match** the classification choices configured in the UI (same spelling, same casing).
+The template must tell the judge model to respond with **only** the label string — nothing else. The label strings in the prompt must **exactly match** the labels in `--classification-choices` (same spelling, same casing).
 
 Good:
 ```
@@ -509,9 +543,9 @@ Single quotes prevent the shell from interpolating `{variable}` placeholders. Do
 --template "Judge this: {input} → {output}"
 ```
 
-### 7. Validate that choices match your template labels
+### 7. Always set `--classification-choices` to match your template labels
 
-Reconcile the prompt labels and the Choices panel so they stay in sync. Mismatches cause runs to produce no valid scores.
+The labels in `--classification-choices` must exactly match the labels referenced in `--template` (same spelling, same casing). Omitting `--classification-choices` causes task runs to fail with "missing rails and classification choices."
 
 ---
 
@@ -537,6 +571,8 @@ Reconcile the prompt labels and the Choices panel so they stay in sync. Mismatch
 | Scores look wrong | Add `--include-explanations` and inspect judge reasoning on a few samples |
 | Evaluator cancels on wrong span kind | Match `query_filter` and `column_mappings` to LLM vs CHAIN spans |
 | Time format error on `trigger-run` | Use `2026-03-21T09:00:00` — no trailing `Z` |
+| Run failed: "missing rails and classification choices" | Add `--classification-choices '{"label_a": 1, "label_b": 0}'` to `ax evaluators create` — labels must match the template |
+| Run `completed`, all spans skipped | Query filter matched spans but column mappings are wrong or template variables don't resolve — export a sample span and verify paths |
 
 ---
 
