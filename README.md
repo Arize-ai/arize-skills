@@ -23,10 +23,14 @@ This walks through a two-phase flow: analyze your codebase for LLM providers and
 ### Option 1: npx (recommended)
 
 ```bash
+# Interactive — choose skills, agent, and scope
+npx skills add Arize-ai/arize-skills
+
+# Non-interactive — install everything with auto-detected defaults
 npx skills add Arize-ai/arize-skills --skill "*" --yes
 ```
 
-This auto-detects your agent (Cursor, Claude Code, Codex, etc.) and symlinks skills into place.
+Both options auto-detect your agent (Cursor, Claude Code, Codex, etc.) and symlink skills into place.
 
 ### Option 2: git clone
 
