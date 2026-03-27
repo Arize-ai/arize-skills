@@ -73,15 +73,14 @@ pip install arize-ax-cli
 
 ### Authentication
 
-**Option A — Environment variables** (CI/CD, quick start):
-```bash
-export ARIZE_API_KEY="your-api-key"       # from https://app.arize.com/admin > API Keys
-export ARIZE_SPACE_ID="U3BhY2U6..."       # base64 space ID from your Arize URL
-```
+**Option A — `ax` CLI profile** (recommended):
 
-**Option B — Profile with flags** (persistent, agent-friendly):
+Set up your API key once and it persists across all sessions and projects:
 ```bash
-# Create a new profile
+# Interactive wizard
+ax profiles create
+
+# Or pass the key directly
 ax profiles create --api-key YOUR_API_KEY
 
 # Update an existing profile (patches only what you specify)
@@ -89,20 +88,35 @@ ax profiles update --api-key NEW_API_KEY
 ax profiles update --region us-east-1b
 ```
 
-Running `ax profiles create` without flags launches an interactive wizard instead.
-
-**Option C — Direct TOML file** (scripted/non-interactive):
+You'll also need a space ID. Find yours in the Arize URL (`/spaces/{SPACE_ID}/...`) or run `ax spaces list -o json`, then persist it:
 ```bash
-mkdir -p ~/.arize && cat > ~/.arize/config.toml << 'EOF'
-[profile]
-name = "default"
+# macOS/Linux — add to ~/.zshrc or ~/.bashrc
+export ARIZE_SPACE_ID="U3BhY2U6..."
+```
 
-[auth]
-api_key = "your-api-key"
+**Option B — `.env` file** (project-scoped credentials + provider keys):
 
-[output]
-format = "table"
-EOF
+Copy the example and fill in your keys:
+```bash
+cp .env.example .env
+# Edit .env with your credentials
+```
+
+The `.env` file supports all credentials used by the skills:
+```bash
+ARIZE_API_KEY=your-api-key               # from https://app.arize.com/admin > API Keys
+ARIZE_SPACE_ID=U3BhY2U6...              # base64 space ID from your Arize URL
+# ARIZE_DEFAULT_PROJECT=my-project       # optional default project
+# OPENAI_API_KEY=sk-...                  # for AI integrations and evaluators
+# ANTHROPIC_API_KEY=sk-ant-...           # for AI integrations and evaluators
+```
+
+Skills automatically load this file during their prerequisite check. The `.env` file is gitignored — never commit it.
+
+**Option C — Environment variables** (CI/CD):
+```bash
+export ARIZE_API_KEY="your-api-key"       # from https://app.arize.com/admin > API Keys
+export ARIZE_SPACE_ID="U3BhY2U6..."       # base64 space ID from your Arize URL
 ```
 
 ### Verify
