@@ -130,7 +130,9 @@ Use the Python SDK to bulk-apply annotations to **project spans** when you alrea
 import pandas as pd
 from arize import ArizeClient
 
-client = ArizeClient(api_key="your-api-key")
+import os
+
+client = ArizeClient(api_key=os.environ["ARIZE_API_KEY"])
 
 # Build a DataFrame with annotation columns
 # Required: context.span_id + at least one annotation.<name>.label or annotation.<name>.score
@@ -148,7 +150,7 @@ annotations_df = pd.DataFrame([
 ])
 
 response = client.spans.update_annotations(
-    space_id="your-space-id",
+    space_id=os.environ["ARIZE_SPACE_ID"],
     project_name="your-project",
     dataframe=annotations_df,
     validate=True,

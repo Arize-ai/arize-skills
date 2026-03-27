@@ -97,7 +97,7 @@ ax ai-integrations list --space-id SPACE_ID
 ax ai-integrations create \
   --name "My OpenAI Integration" \
   --provider openAI \
-  --api-key "sk-..."
+  --api-key $OPENAI_API_KEY
 ```
 
 Copy the returned integration ID — it is required for `ax evaluators create --ai-integration-id`.

@@ -101,7 +101,7 @@ If no suitable integration exists, create one. The required flags depend on the 
 ax ai-integrations create \
   --name "My OpenAI Integration" \
   --provider openAI \
-  --api-key "sk-..."
+  --api-key $OPENAI_API_KEY
 ```
 
 ### Anthropic
@@ -110,7 +110,7 @@ ax ai-integrations create \
 ax ai-integrations create \
   --name "My Anthropic Integration" \
   --provider anthropic \
-  --api-key "sk-ant-..."
+  --api-key $ANTHROPIC_API_KEY
 ```
 
 ### Azure OpenAI
@@ -119,7 +119,7 @@ ax ai-integrations create \
 ax ai-integrations create \
   --name "My Azure OpenAI Integration" \
   --provider azureOpenAI \
-  --api-key "AZURE_API_KEY" \
+  --api-key $AZURE_OPENAI_API_KEY \
   --base-url "https://my-resource.openai.azure.com/"
 ```
 
@@ -152,7 +152,7 @@ ax ai-integrations create \
 ax ai-integrations create \
   --name "My Gemini Integration" \
   --provider gemini \
-  --api-key "AIza..."
+  --api-key $GEMINI_API_KEY
 ```
 
 ### NVIDIA NIM
@@ -161,7 +161,7 @@ ax ai-integrations create \
 ax ai-integrations create \
   --name "My NVIDIA NIM Integration" \
   --provider nvidiaNim \
-  --api-key "nvapi-..." \
+  --api-key $NVIDIA_API_KEY \
   --base-url "https://integrate.api.nvidia.com/v1"
 ```
 
@@ -172,7 +172,7 @@ ax ai-integrations create \
   --name "My Custom Integration" \
   --provider custom \
   --base-url "https://my-llm-proxy.example.com/v1" \
-  --api-key "optional-key-if-needed"
+  --api-key $CUSTOM_LLM_API_KEY
 ```
 
 ### Supported Providers
@@ -217,7 +217,7 @@ ax ai-integrations get INT_ID
 ax ai-integrations update INT_ID --name "New Name"
 
 # Rotate the API key
-ax ai-integrations update INT_ID --api-key "sk-new-key..."
+ax ai-integrations update INT_ID --api-key $OPENAI_API_KEY
 
 # Change the model list
 ax ai-integrations update INT_ID --model-names "gpt-4o,gpt-4o-mini"
