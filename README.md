@@ -138,6 +138,7 @@ ax --version && ax profiles show 2>&1
 | [arize-annotation](skills/arize-annotation/SKILL.md) | Create and manage annotation configs (categorical, continuous, freeform); bulk-annotate project spans via the Python SDK. |
 | [arize-prompt-optimization](skills/arize-prompt-optimization/SKILL.md) | Optimize prompts using trace data, experiments, and meta-prompting. |
 | [arize-link](skills/arize-link/SKILL.md) | Generate deep links to traces, spans, and sessions in the Arize UI. |
+| [arize-code-evaluations](skills/arize-code-evaluations/SKILL.md) | Set up evaluators for Arize tracing spans — guides selection between built-in, LLM-as-a-judge, or custom CodeEvaluator subclasses. |
 
 ## Installer Flags
 
