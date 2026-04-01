@@ -125,6 +125,18 @@ export ARIZE_SPACE_ID="U3BhY2U6..."       # base64 space ID from your Arize URL
 ax --version && ax profiles show 2>&1
 ```
 
+### On-prem / self-hosted Arize
+
+Point the CLI at your deployment with a **single-endpoint** profile (hostname and HTTPS port, usually `443`). Replace the host with the value your operations team provides:
+
+```bash
+ax profiles create my-onprem --api-key <key> --single-host arize.yourcompany.com --single-port 443
+ax profiles use my-onprem
+ax profiles validate
+```
+
+For interactive setup, `ax profiles create` also offers **Advanced → Single endpoint**. More options (TOML, Flight/OTLP splits) are documented in the [arize-ax-cli README](https://github.com/Arize-ai/arize-ax-cli/blob/main/README.md#on-premise-deployments).
+
 ## Available Skills
 
 | Skill | Description |
