@@ -109,8 +109,8 @@ Copy the returned integration ID — it is required for `ax evaluators create --
 ```bash
 # List / Get
 ax evaluators list --space SPACE
-ax evaluators get NAME_OR_ID                    # accepts name or ID
-ax evaluators get NAME_OR_ID --space SPACE   # required when using name instead of ID
+ax evaluators get ID                    # accepts name or ID
+ax evaluators get NAME --space SPACE   # required when using name instead of ID
 ax evaluators list-versions NAME_OR_ID
 ax evaluators get-version VERSION_ID
 
@@ -176,6 +176,8 @@ ax evaluators delete NAME_OR_ID
 | `--provider-params` | no | JSON object of provider-specific parameters |
 
 ### Tasks
+
+> `PROJECT_NAME`, `DATASET_NAME`, and `evaluator_id` all accept a name or base64 ID.
 
 ```bash
 # List / Get
@@ -423,7 +425,7 @@ ax datasets list --space SPACE
 ax experiments list --dataset DATASET_NAME --space SPACE -o json
 ```
 
-Note the dataset name and the experiment name(s) to score. Use these names in subsequent commands — IDs are not required.
+Note the dataset name and the experiment name(s) to score. These accept names or IDs in subsequent commands — names are preferred.
 
 ### Step 2: Understand what to evaluate
 

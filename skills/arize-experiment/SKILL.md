@@ -32,7 +32,7 @@ Browse experiments, optionally filtered by dataset. Output goes to stdout.
 
 ```bash
 ax experiments list
-ax experiments list --dataset DATASET_NAME --space SPACE --limit 20
+ax experiments list --dataset DATASET_NAME --space SPACE --limit 20   # DATASET_NAME: name or ID (name preferred)
 ax experiments list --cursor CURSOR_TOKEN
 ax experiments list -o json
 ```
@@ -84,6 +84,7 @@ ax experiments get NAME_OR_ID --dataset DATASET_NAME --space SPACE   # required 
 Download all runs to a file. By default uses the REST API; pass `--all` to use Arrow Flight for bulk transfer.
 
 ```bash
+# EXPERIMENT_NAME, DATASET_NAME: name or ID (name preferred)
 ax experiments export EXPERIMENT_NAME --dataset DATASET_NAME --space SPACE
 # -> experiment_abc123_20260305_141500/runs.json
 

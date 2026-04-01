@@ -33,6 +33,7 @@ List all integrations accessible in a space:
 
 ```bash
 ax ai-integrations list --space SPACE
+ax ai-integrations list --space SPACE --name "openai"   # case-insensitive substring filter
 ```
 
 Paginate large result sets:
@@ -50,6 +51,7 @@ ax ai-integrations list --space SPACE --limit 20 --cursor CURSOR_TOKEN -o json
 | Flag | Description |
 |------|-------------|
 | `--space` | Space name or ID to filter integrations |
+| `--name` | Case-insensitive substring filter on integration name |
 | `--limit` | Max results (1–100, default 15) |
 | `--cursor` | Pagination token from a previous response |
 | `-o, --output` | Output format: `table` (default) or `json` |
