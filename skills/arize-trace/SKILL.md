@@ -28,8 +28,8 @@ Use `ax spans export` to download individual spans, or `ax traces export` to dow
 Proceed directly with the task — run the `ax` command you need. Do NOT check versions, env vars, or profiles upfront.
 
 If an `ax` command fails, troubleshoot based on the error:
-- `command not found` or version error → see ax-setup.md
-- `401 Unauthorized` / missing API key → run `ax profiles show` to inspect the current profile. If the profile is missing or the API key is wrong: check `.env` for `ARIZE_API_KEY` and use it to create/update the profile via ax-profiles.md. If `.env` has no key either, ask the user for their Arize API key (https://app.arize.com/admin > API Keys)
+- `command not found` or version error → see references/ax-setup.md
+- `401 Unauthorized` / missing API key → run `ax profiles show` to inspect the current profile. If the profile is missing or the API key is wrong: check `.env` for `ARIZE_API_KEY` and use it to create/update the profile via references/ax-profiles.md. If `.env` has no key either, ask the user for their Arize API key (https://app.arize.com/admin > API Keys)
 - Space unknown → check `.env` for `ARIZE_SPACE` (name or ID), or run `ax spaces list` to pick by name, or ask the user
 - Project unclear → run `ax projects list -l 100 -o json` (add `--space SPACE` if known), present the names, and ask the user to pick one
 
@@ -372,11 +372,11 @@ ax spans export PROJECT --trace-id TRACE_ID --stdout | jq '.[]'
 
 | Problem | Solution |
 |---------|----------|
-| `ax: command not found` | See ax-setup.md |
+| `ax: command not found` | See references/ax-setup.md |
 | `SSL: CERTIFICATE_VERIFY_FAILED` | macOS: `export SSL_CERT_FILE=/etc/ssl/cert.pem`. Linux: `export SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt`. Windows: `$env:SSL_CERT_FILE = (python -c "import certifi; print(certifi.where())")` |
 | `No such command` on a subcommand that should exist | The installed `ax` is outdated. Reinstall: `uv tool install --force --reinstall arize-ax-cli` (requires shell access to install packages) |
-| `No profile found` | No profile is configured. See ax-profiles.md to create one. |
-| `401 Unauthorized` with valid API key | For `ax traces export` with a project name, add `--space SPACE`. For `ax spans export`, try resolving to a base64 project ID: `ax projects list -l 100 -o json` and use the project's `id`. If the key itself is wrong or expired, fix the profile using ax-profiles.md. |
+| `No profile found` | No profile is configured. See references/ax-profiles.md to create one. |
+| `401 Unauthorized` with valid API key | For `ax traces export` with a project name, add `--space SPACE`. For `ax spans export`, try resolving to a base64 project ID: `ax projects list -l 100 -o json` and use the project's `id`. If the key itself is wrong or expired, fix the profile using references/ax-profiles.md. |
 | `No spans found` | Expand `--days` (default 30), verify project ID |
 | `Filter error` or `invalid filter expression` | Check column name spelling (e.g., `attributes.openinference.span.kind` not `span_kind`), wrap string values in single quotes, use `CONTAINS` for free-text fields |
 | `unknown attribute` in filter | The attribute path is wrong or not indexed. Try browsing a small sample first to see actual column names: `ax spans export PROJECT -l 5 --stdout \| jq '.[0] \| keys'` |
@@ -391,4 +391,4 @@ ax spans export PROJECT --trace-id TRACE_ID --stdout | jq '.[]'
 
 ## Save Credentials for Future Use
 
-See ax-profiles.md § Save Credentials for Future Use.
+See references/ax-profiles.md § Save Credentials for Future Use.

@@ -18,8 +18,8 @@ This skill focuses on **annotation configs** — the schema for human feedback �
 Proceed directly with the task — run the `ax` command you need. Do NOT check versions, env vars, or profiles upfront.
 
 If an `ax` command fails, troubleshoot based on the error:
-- `command not found` or version error → see ax-setup.md
-- `401 Unauthorized` / missing API key → run `ax profiles show` to inspect the current profile. If the profile is missing or the API key is wrong: check `.env` for `ARIZE_API_KEY` and use it to create/update the profile via ax-profiles.md. If `.env` has no key either, ask the user for their Arize API key (https://app.arize.com/admin > API Keys)
+- `command not found` or version error → see references/ax-setup.md
+- `401 Unauthorized` / missing API key → run `ax profiles show` to inspect the current profile. If the profile is missing or the API key is wrong: check `.env` for `ARIZE_API_KEY` and use it to create/update the profile via references/ax-profiles.md. If `.env` has no key either, ask the user for their Arize API key (https://app.arize.com/admin > API Keys)
 - Space unknown → check `.env` for `ARIZE_SPACE` (name or ID), or run `ax spaces list` to pick by name, or ask the user
 
 ---
@@ -181,7 +181,7 @@ response = client.spans.update_annotations(
 
 | Problem | Solution |
 |---------|----------|
-| `ax: command not found` | See ax-setup.md |
+| `ax: command not found` | See references/ax-setup.md |
 | `401 Unauthorized` | API key may not have access to this space. Verify at https://app.arize.com/admin > API Keys |
 | `Annotation config not found` | `ax annotation-configs list --space SPACE` (or use `ax annotation-configs get NAME_OR_ID --space SPACE`) |
 | `409 Conflict on create` | Name already exists in the space. Use a different name or get the existing config ID. |
@@ -202,4 +202,4 @@ response = client.spans.update_annotations(
 
 ## Save Credentials for Future Use
 
-See ax-profiles.md § Save Credentials for Future Use.
+See references/ax-profiles.md § Save Credentials for Future Use.
