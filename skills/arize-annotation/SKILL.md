@@ -5,6 +5,8 @@ description: "INVOKE THIS SKILL when creating, managing, or using annotation con
 
 # Arize Annotation Skill
 
+> **`SPACE`** — All `--space` flags and the `ARIZE_SPACE` env var accept a space **name** (e.g., `my-workspace`) or a base64 space **ID** (e.g., `U3BhY2U6...`). Find yours with `ax spaces list`.
+
 This skill focuses on **annotation configs** — the schema for human feedback — and on **programmatically annotating project spans** via the Python SDK. Human review in the Arize UI (including annotation queues, datasets, and experiments) still depends on these configs; there is no `ax` CLI for queues yet.
 
 **Direction:** Human labeling in Arize attaches values defined by configs to **spans**, **dataset examples**, **experiment-related records**, and **queue items** in the product UI. What is documented here: `ax annotation-configs` and bulk span updates with `ArizeClient.spans.update_annotations`.
@@ -18,7 +20,7 @@ Proceed directly with the task — run the `ax` command you need. Do NOT check v
 If an `ax` command fails, troubleshoot based on the error:
 - `command not found` or version error → see ax-setup.md
 - `401 Unauthorized` / missing API key → run `ax profiles show` to inspect the current profile. If the profile is missing or the API key is wrong: check `.env` for `ARIZE_API_KEY` and use it to create/update the profile via ax-profiles.md. If `.env` has no key either, ask the user for their Arize API key (https://app.arize.com/admin > API Keys)
-- Space ID unknown → check `.env` for `ARIZE_SPACE_ID`, or run `ax spaces list -o json`, or ask the user
+- Space unknown → check `.env` for `ARIZE_SPACE` (name or ID), or run `ax spaces list` to pick by name, or ask the user
 
 ---
 
@@ -54,9 +56,9 @@ Always ensure the relevant **annotation config** exists in the space before expe
 ### List
 
 ```bash
-ax annotation-configs list --space-id SPACE_ID
-ax annotation-configs list --space-id SPACE_ID -o json
-ax annotation-configs list --space-id SPACE_ID --limit 20
+ax annotation-configs list --space SPACE
+ax annotation-configs list --space SPACE -o json
+ax annotation-configs list --space SPACE --limit 20
 ```
 
 ### Create — Categorical
@@ -66,9 +68,10 @@ Categorical configs present a fixed set of labels for reviewers to choose from.
 ```bash
 ax annotation-configs create \
   --name "Correctness" \
-  --space-id SPACE_ID \
+  --space SPACE \
   --type categorical \
-  --values '[{"label": "correct", "score": 1}, {"label": "incorrect", "score": 0}]' \
+  --value correct \
+  --value incorrect \
   --optimization-direction maximize
 ```
 
@@ -86,10 +89,10 @@ Continuous configs let reviewers enter a numeric score within a defined range.
 ```bash
 ax annotation-configs create \
   --name "Quality Score" \
-  --space-id SPACE_ID \
+  --space SPACE \
   --type continuous \
-  --minimum-score 0 \
-  --maximum-score 10 \
+  --min-score 0 \
+  --max-score 10 \
   --optimization-direction maximize
 ```
 
@@ -100,22 +103,24 @@ Freeform configs collect open-ended text feedback. No additional flags needed be
 ```bash
 ax annotation-configs create \
   --name "Reviewer Notes" \
-  --space-id SPACE_ID \
+  --space SPACE \
   --type freeform
 ```
 
 ### Get
 
 ```bash
-ax annotation-configs get ANNOTATION_CONFIG_ID
-ax annotation-configs get ANNOTATION_CONFIG_ID -o json
+ax annotation-configs get NAME_OR_ID
+ax annotation-configs get NAME_OR_ID -o json
+ax annotation-configs get NAME_OR_ID --space SPACE   # required when using name instead of ID
 ```
 
 ### Delete
 
 ```bash
-ax annotation-configs delete ANNOTATION_CONFIG_ID
-ax annotation-configs delete ANNOTATION_CONFIG_ID --force   # skip confirmation
+ax annotation-configs delete NAME_OR_ID
+ax annotation-configs delete NAME_OR_ID --space SPACE   # required when using name instead of ID
+ax annotation-configs delete NAME_OR_ID --force   # skip confirmation
 ```
 
 **Note:** Deletion is irreversible. Any annotation queue associations to this config are also removed in the product (queues may remain; fix associations in the Arize UI if needed).
@@ -150,7 +155,7 @@ annotations_df = pd.DataFrame([
 ])
 
 response = client.spans.update_annotations(
-    space_id=os.environ["ARIZE_SPACE_ID"],
+    space_id=os.environ["ARIZE_SPACE"],
     project_name="your-project",
     dataframe=annotations_df,
     validate=True,
@@ -178,7 +183,7 @@ response = client.spans.update_annotations(
 |---------|----------|
 | `ax: command not found` | See ax-setup.md |
 | `401 Unauthorized` | API key may not have access to this space. Verify at https://app.arize.com/admin > API Keys |
-| `Annotation config not found` | `ax annotation-configs list --space-id SPACE_ID` |
+| `Annotation config not found` | `ax annotation-configs list --space SPACE` (or use `ax annotation-configs get NAME_OR_ID --space SPACE`) |
 | `409 Conflict on create` | Name already exists in the space. Use a different name or get the existing config ID. |
 | Human review / queues in UI | Use the Arize app; ensure configs exist — no `ax` annotation-queue CLI yet |
 | Span SDK errors or missing spans | Confirm `project_name`, `space_id`, and span IDs; use arize-trace to export spans |
