@@ -33,7 +33,12 @@ List all integrations accessible in a space:
 
 ```bash
 ax ai-integrations list --space SPACE
-ax ai-integrations list --space SPACE --name "openai"   # case-insensitive substring filter
+```
+
+Filter by name (case-insensitive substring match):
+
+```bash
+ax ai-integrations list --space SPACE --name "openai"
 ```
 
 Paginate large result sets:
