@@ -318,6 +318,11 @@ class SkillSelectionRunner:
                 if len(selected_skills) >= stop_after:
                     break
         except Exception as e:
+            # If we already captured the skill selection, the exception likely came
+            # from subprocess cleanup after early loop exit — not a real failure.
+            if selected_skills:
+                text_output = "\n".join(text_blocks)
+                return selected_skills, result_message, text_output
             stderr_text = "\n".join(stderr_lines) if stderr_lines else "(no stderr captured)"
             diagnostic = ""
             if not stderr_lines:

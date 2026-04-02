@@ -28,6 +28,14 @@ jobs:
       - name: Install test dependencies
         run: pip install -r tests/requirements.txt
 
+      - name: Install skills for Claude Code
+        run: |
+          mkdir -p .claude/skills
+          for skill_dir in skills/*/; do
+            skill_name=$(basename "$skill_dir")
+            cp -r "$skill_dir" ".claude/skills/$skill_name"
+          done
+
       - name: Check required secrets
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
