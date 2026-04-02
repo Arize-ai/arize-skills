@@ -119,6 +119,7 @@ ax --version && ax profiles show 2>&1
 | [arize-ai-provider-integration](skills/arize-ai-provider-integration/SKILL.md) | Create and manage LLM provider credentials (OpenAI, Anthropic, Azure, Bedrock, Vertex, and more). |
 | [arize-annotation](skills/arize-annotation/SKILL.md) | Create and manage annotation configs (categorical, continuous, freeform); bulk-annotate project spans via the Python SDK. |
 | [arize-prompt-optimization](skills/arize-prompt-optimization/SKILL.md) | Optimize prompts using trace data, experiments, and meta-prompting. |
+| [arize-align-evaluator](skills/arize-align-evaluator/SKILL.md) | Align LLM-as-judge evaluators against human ground truth labels. Measure agreement, diagnose bias, and iterate on evaluator templates. |
 | [arize-link](skills/arize-link/SKILL.md) | Generate deep links to traces, spans, and sessions in the Arize UI. |
 
 ## Installer Flags
