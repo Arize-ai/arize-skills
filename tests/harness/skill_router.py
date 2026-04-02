@@ -94,8 +94,42 @@ def _discover_skill_names() -> list[str]:
     return names
 
 
+def _build_routing_system_prompt() -> str:
+    """Build a system prompt that presents all skills and forces Skill tool usage."""
+    skills_dir = _REPO_ROOT / "skills"
+    skill_lines: list[str] = []
+    for skill_dir in sorted(skills_dir.iterdir()):
+        skill_md = skill_dir / "SKILL.md"
+        if not skill_md.is_file():
+            continue
+        text = skill_md.read_text()
+        match = re.search(r"^---\s*\n(.*?)\n---", text, re.DOTALL)
+        if not match:
+            continue
+        name = ""
+        description = ""
+        for line in match.group(1).splitlines():
+            if not name:
+                m = re.match(r"name:\s*(.+)", line)
+                if m:
+                    name = m.group(1).strip().strip("\"'")
+            if not description:
+                m = re.match(r"description:\s*(.+)", line)
+                if m:
+                    description = m.group(1).strip().strip("\"'")
+        if name and description:
+            skill_lines.append(f"- {name}: {description}")
+    return (
+        "You are an Arize platform skill router. "
+        "For every user message you MUST invoke the Skill tool with the most appropriate skill name. "
+        "Do NOT respond with text or use Bash — only invoke the Skill tool.\n\n"
+        "Available skills:\n" + "\n".join(skill_lines)
+    )
+
+
 # Discover at import time so ALL_SKILLS reflects the actual /skills/ directory
 ALL_SKILLS = _discover_skill_names()
+_ROUTING_SYSTEM_PROMPT = _build_routing_system_prompt()
 _TEST_TOOLS = [
     "Task",
     "TaskOutput",
@@ -289,6 +323,7 @@ class SkillSelectionRunner:
         max_turns = max(5, stop_after * 5)
 
         options = ClaudeAgentOptions(
+            system_prompt=_ROUTING_SYSTEM_PROMPT,
             permission_mode="default",
             setting_sources=["project"],
             # Typical list of tools (to exclude all unknown tools of the tester)
