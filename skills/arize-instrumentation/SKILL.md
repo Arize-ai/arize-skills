@@ -1,6 +1,6 @@
 ---
 name: arize-instrumentation
-description: "INVOKE THIS SKILL when adding Arize AX tracing or observability to an application, or when the user wants to set up monitoring, get visibility into LLM calls, or instrument their AI app for the first time. Follow the Agent-Assisted Tracing two-phase flow: analyze the codebase (read-only), then implement instrumentation after user confirmation. When the app uses LLM tool/function calling, add manual CHAIN + TOOL spans so traces show each tool's input and output. Leverages https://arize.com/docs/ax/alyx/tracing-assistant and https://arize.com/docs/PROMPT.md."
+description: "INVOKE THIS SKILL when the user has NOT yet set up tracing and wants to add Arize AX observability, monitoring, or instrumentation to their application for the first time. Also use when they ask how to get started with LLM observability or visibility. Do NOT use for inspecting or exporting existing traces — use arize-trace for that. Follow the Agent-Assisted Tracing two-phase flow: analyze the codebase (read-only), then implement instrumentation after user confirmation. When the app uses LLM tool/function calling, add manual CHAIN + TOOL spans so traces show each tool's input and output. Leverages https://arize.com/docs/ax/alyx/tracing-assistant and https://arize.com/docs/PROMPT.md."
 ---
 
 # Arize Instrumentation Skill
