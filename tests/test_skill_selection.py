@@ -119,6 +119,54 @@ SPECIFIC_PROMPTS = [
         ["arize-link"],
         ["specific", "link"],
     ),
+    # arize-evaluator
+    (
+        "Create an LLM-as-judge evaluator for hallucination detection",
+        ["arize-evaluator"],
+        ["specific", "evaluator"],
+    ),
+    (
+        "Run an evaluation task on my project spans using GPT-4",
+        ["arize-evaluator"],
+        ["specific", "evaluator"],
+    ),
+    (
+        "Set up continuous monitoring with an LLM judge on new spans",
+        ["arize-evaluator"],
+        ["specific", "evaluator"],
+    ),
+    # arize-annotation
+    (
+        "Create an annotation config for correctness labels",
+        ["arize-annotation"],
+        ["specific", "annotation"],
+    ),
+    (
+        "Add human feedback labels to my project spans using the Python SDK",
+        ["arize-annotation"],
+        ["specific", "annotation"],
+    ),
+    (
+        "Set up a categorical annotation config with pass/fail labels",
+        ["arize-annotation"],
+        ["specific", "annotation"],
+    ),
+    # arize-ai-provider-integration
+    (
+        "Register my OpenAI API key as an Arize AI integration",
+        ["arize-ai-provider-integration"],
+        ["specific", "ai-provider-integration"],
+    ),
+    (
+        "List all AI integrations in my Arize space",
+        ["arize-ai-provider-integration"],
+        ["specific", "ai-provider-integration"],
+    ),
+    (
+        "Create an Anthropic integration in Arize for my evaluators",
+        ["arize-ai-provider-integration"],
+        ["specific", "ai-provider-integration"],
+    ),
 ]
 
 # Single-skill: vague/ambiguous prompts (harder to route correctly)
@@ -198,6 +246,39 @@ VAGUE_PROMPTS = [
         "Open this in Arize",
         ["arize-link"],
         ["vague", "link"],
+    ),
+    # Should route to evaluator
+    (
+        "I want to automatically score my LLM responses for quality",
+        ["arize-evaluator"],
+        ["vague", "evaluator"],
+    ),
+    (
+        "Can you judge whether my model outputs are correct?",
+        ["arize-evaluator"],
+        ["vague", "evaluator"],
+    ),
+    # Should route to annotation
+    (
+        "I need human reviewers to label my model outputs",
+        ["arize-annotation"],
+        ["vague", "annotation"],
+    ),
+    (
+        "Set up a labeling schema so my team can rate responses",
+        ["arize-annotation"],
+        ["vague", "annotation"],
+    ),
+    # Should route to ai-provider-integration
+    (
+        "I want Arize to use my LLM provider credentials for evaluations",
+        ["arize-ai-provider-integration"],
+        ["vague", "ai-provider-integration"],
+    ),
+    (
+        "Connect my AWS Bedrock account to Arize",
+        ["arize-ai-provider-integration"],
+        ["vague", "ai-provider-integration"],
     ),
 ]
 
