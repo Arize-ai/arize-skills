@@ -23,10 +23,14 @@ This walks through a two-phase flow: analyze your codebase for LLM providers and
 ### Option 1: npx (recommended)
 
 ```bash
+# Interactive — choose skills, agent, and scope
+npx skills add Arize-ai/arize-skills
+
+# Non-interactive — install everything with auto-detected defaults
 npx skills add Arize-ai/arize-skills --skill "*" --yes
 ```
 
-This auto-detects your agent (Cursor, Claude Code, Codex, etc.) and symlinks skills into place.
+Both options auto-detect your agent (Cursor, Claude Code, Codex, etc.) and symlink skills into place.
 
 ### Option 2: git clone
 
@@ -69,38 +73,69 @@ pip install arize-ax-cli
 
 ### Authentication
 
-**Option A — Environment variables** (CI/CD, quick start):
+**Option A — `ax` CLI profile** (recommended):
+
+Set up your API key once and it persists across all sessions and projects:
+```bash
+# Interactive wizard
+ax profiles create
+
+# Or pass the key directly
+ax profiles create --api-key YOUR_API_KEY
+
+# Update an existing profile (patches only what you specify)
+ax profiles update --api-key NEW_API_KEY
+ax profiles update --region us-east-1b
+```
+
+You'll also need a space ID. Find yours in the Arize URL (`/spaces/{SPACE_ID}/...`) or run `ax spaces list -o json`, then persist it:
+```bash
+# macOS/Linux — add to ~/.zshrc or ~/.bashrc
+export ARIZE_SPACE_ID="U3BhY2U6..."
+```
+
+**Option B — `.env` file** (project-scoped credentials + provider keys):
+
+Copy the example and fill in your keys:
+```bash
+cp .env.example .env
+# Edit .env with your credentials
+```
+
+The `.env` file supports all credentials used by the skills:
+```bash
+ARIZE_API_KEY=your-api-key               # from https://app.arize.com/admin > API Keys
+ARIZE_SPACE_ID=U3BhY2U6...              # base64 space ID from your Arize URL
+# ARIZE_DEFAULT_PROJECT=my-project       # optional default project
+# OPENAI_API_KEY=sk-...                  # for AI integrations and evaluators
+# ANTHROPIC_API_KEY=sk-ant-...           # for AI integrations and evaluators
+```
+
+Skills automatically load this file during their prerequisite check. The `.env` file is gitignored — never commit it.
+
+**Option C — Environment variables** (CI/CD):
 ```bash
 export ARIZE_API_KEY="your-api-key"       # from https://app.arize.com/admin > API Keys
 export ARIZE_SPACE_ID="U3BhY2U6..."       # base64 space ID from your Arize URL
 ```
-
-**Option B — Interactive profile** (persistent):
-```bash
-ax profiles create
-```
-
-**Option C — Direct TOML file** (scripted/non-interactive):
-```bash
-mkdir -p ~/.arize && cat > ~/.arize/config.toml << 'EOF'
-[profile]
-name = "default"
-
-[auth]
-api_key = "your-api-key"
-
-[output]
-format = "table"
-EOF
-```
-
-> **Note:** `ax profiles create` is interactive-only — no `--api-key` flag exists. For CI/CD or scripted setup, use Option A or C.
 
 ### Verify
 
 ```bash
 ax --version && ax profiles show 2>&1
 ```
+
+### On-prem / self-hosted Arize
+
+Point the CLI at your deployment with a **single-endpoint** profile (hostname and HTTPS port, usually `443`). Replace the host with the value your operations team provides:
+
+```bash
+ax profiles create my-onprem --api-key <key> --single-host arize.yourcompany.com --single-port 443
+ax profiles use my-onprem
+ax profiles validate
+```
+
+For interactive setup, `ax profiles create` also offers **Advanced → Single endpoint**. More options (TOML, Flight/OTLP splits) are documented in the [arize-ax-cli README](https://github.com/Arize-ai/arize-ax-cli/blob/main/README.md#on-premise-deployments).
 
 ## Available Skills
 

@@ -214,6 +214,9 @@ Examples:
   python tests/run_skill.py arize-dataset "Create a dataset named test-data with 5 examples"
   python tests/run_skill.py arize-link "Get a link to trace abc123" --output-dir sessions/
   python tests/run_skill.py arize-trace "Debug my app" --model claude-sonnet-4-6
+  python tests/run_skill.py arize-evaluator "Create a hallucination evaluator for my-app"
+  python tests/run_skill.py arize-annotation "Create a thumbs-up/thumbs-down annotation config"
+  python tests/run_skill.py arize-ai-provider-integration "List all my AI provider integrations"
 """,
     )
     parser.add_argument("skill", help="Skill name (e.g. arize-trace, arize-dataset)")

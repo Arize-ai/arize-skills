@@ -10,7 +10,7 @@
     {
       "name": "arize-skills",
       "source": "./",
-      "description": "Trace export, dataset management, experiment workflows, instrumentation, prompt optimization, and deep linking via the ax CLI."
+      "description": "Trace export, dataset management, experiment workflows, evaluators, annotations, AI provider integrations, instrumentation, prompt optimization, and deep linking via the ax CLI."
     }
   ]
 }

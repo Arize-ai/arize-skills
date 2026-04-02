@@ -46,37 +46,14 @@ These columns carry the feedback data used for optimization:
 
 ## Prerequisites
 
-Three things are needed: `ax` CLI, an API key (env var or profile), and a project. A space ID is also needed when using project names.
+Proceed directly with the task — run the `ax` command you need. Do NOT check versions, env vars, or profiles upfront.
 
-### Install ax
-
-If `ax` is not installed, not on PATH, or below version `0.7.1`, see ax-setup.md.
-
-### Verify environment
-
-Run a quick check for credentials:
-
-**macOS/Linux (bash):**
-```bash
-ax --version && echo "--- env ---" && if [ -n "$ARIZE_API_KEY" ]; then echo "ARIZE_API_KEY: (set)"; else echo "ARIZE_API_KEY: (not set)"; fi && echo "ARIZE_SPACE_ID: ${ARIZE_SPACE_ID:-(not set)}" && echo "ARIZE_DEFAULT_PROJECT: ${ARIZE_DEFAULT_PROJECT:-(not set)}" && echo "--- profiles ---" && ax profiles show 2>&1
-```
-
-**Windows (PowerShell):**
-```powershell
-ax --version; Write-Host "--- env ---"; Write-Host "ARIZE_API_KEY: $(if ($env:ARIZE_API_KEY) { '(set)' } else { '(not set)' })"; Write-Host "ARIZE_SPACE_ID: $env:ARIZE_SPACE_ID"; Write-Host "ARIZE_DEFAULT_PROJECT: $env:ARIZE_DEFAULT_PROJECT"; Write-Host "--- profiles ---"; ax profiles show 2>&1
-```
-
-**Read the output and proceed immediately** if either the env var or the profile has an API key. Only ask the user if **both** are missing. Resolve failures:
-
-- No API key in env **and** no profile → **AskQuestion**: "Arize API key (https://app.arize.com/admin > API Keys)"
-- Space ID unknown → run `ax spaces list -o json` to list all accessible spaces and pick the right one, or **AskQuestion** if the user prefers to provide it directly
-- Project unclear → ask, or run `ax projects list -o json --limit 100` and present as selectable options
-
-### Default Project
-
-If `ARIZE_DEFAULT_PROJECT` is set (visible in the output above), use its value as the project for **all** commands in this session. Do NOT ask the user for a project ID -- just use it. Continue using this default until the user explicitly provides a different project.
-
-If `ARIZE_DEFAULT_PROJECT` is not set and no project is provided, ask the user for one.
+If an `ax` command fails, troubleshoot based on the error:
+- `command not found` or version error → see references/ax-setup.md
+- `401 Unauthorized` / missing API key → run `ax profiles show` to inspect the current profile. If the profile is missing or the API key is wrong: check `.env` for `ARIZE_API_KEY` and use it to create/update the profile via references/ax-profiles.md. If `.env` has no key either, ask the user for their Arize API key (https://app.arize.com/admin > API Keys)
+- Space ID unknown → check `.env` for `ARIZE_SPACE_ID`, or run `ax spaces list -o json`, or ask the user
+- Project unclear → check `.env` for `ARIZE_DEFAULT_PROJECT`, or ask, or run `ax projects list -o json --limit 100` and present as selectable options
+- LLM provider call fails (missing OPENAI_API_KEY / ANTHROPIC_API_KEY) → check `.env`, load if present, otherwise ask the user
 
 ## Phase 1: Extract the Current Prompt
 
@@ -462,8 +439,8 @@ When optimizing prompts that use template variables:
 
 | Problem | Solution |
 |---------|----------|
-| `ax: command not found` | See ax-setup.md |
-| `No profile found` | Create `~/.arize/config.toml` with `api_key = "${ARIZE_API_KEY}"` (see Prerequisites) |
+| `ax: command not found` | See references/ax-setup.md |
+| `No profile found` | No profile is configured. See references/ax-profiles.md to create one. |
 | No `input_messages` on span | Check span kind -- Chain/Agent spans store prompts on child LLM spans, not on themselves |
 | Prompt template is `null` | Not all instrumentations emit `prompt_template`. Use `input_messages` or `input.value` instead |
 | Variables lost after optimization | Verify the revised prompt preserves all `{var}` placeholders from the original |

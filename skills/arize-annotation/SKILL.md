@@ -13,24 +13,12 @@ This skill focuses on **annotation configs** — the schema for human feedback �
 
 ## Prerequisites
 
-Three things are needed: `ax` CLI, an API key (env var or profile), and a space ID.
+Proceed directly with the task — run the `ax` command you need. Do NOT check versions, env vars, or profiles upfront.
 
-If `ax` is not installed, not on PATH, or below version `0.7.1`, see ax-setup.md.
-
-**macOS/Linux:**
-```bash
-ax --version && echo "--- env ---" && if [ -n "$ARIZE_API_KEY" ]; then echo "ARIZE_API_KEY: (set)"; else echo "ARIZE_API_KEY: (not set)"; fi && echo "ARIZE_SPACE_ID: ${ARIZE_SPACE_ID:-(not set)}" && echo "--- profiles ---" && ax profiles show 2>&1
-```
-
-**Windows (PowerShell):**
-```powershell
-ax --version; Write-Host "--- env ---"; Write-Host "ARIZE_API_KEY: $(if ($env:ARIZE_API_KEY) { '(set)' } else { '(not set)' })"; Write-Host "ARIZE_SPACE_ID: $env:ARIZE_SPACE_ID"; Write-Host "--- profiles ---"; ax profiles show 2>&1
-```
-
-Proceed immediately if env var or profile has an API key. Only ask the user if both are missing.
-
-- No API key in env **and** no profile → **AskQuestion**: "Arize API key (https://app.arize.com/admin > API Keys)"
-- Space ID unknown → run `ax spaces list -o json` to list all accessible spaces, or **AskQuestion**
+If an `ax` command fails, troubleshoot based on the error:
+- `command not found` or version error → see references/ax-setup.md
+- `401 Unauthorized` / missing API key → run `ax profiles show` to inspect the current profile. If the profile is missing or the API key is wrong: check `.env` for `ARIZE_API_KEY` and use it to create/update the profile via references/ax-profiles.md. If `.env` has no key either, ask the user for their Arize API key (https://app.arize.com/admin > API Keys)
+- Space ID unknown → check `.env` for `ARIZE_SPACE_ID`, or run `ax spaces list -o json`, or ask the user
 
 ---
 
@@ -142,7 +130,9 @@ Use the Python SDK to bulk-apply annotations to **project spans** when you alrea
 import pandas as pd
 from arize import ArizeClient
 
-client = ArizeClient(api_key="your-api-key")
+import os
+
+client = ArizeClient(api_key=os.environ["ARIZE_API_KEY"])
 
 # Build a DataFrame with annotation columns
 # Required: context.span_id + at least one annotation.<name>.label or annotation.<name>.score
@@ -160,7 +150,7 @@ annotations_df = pd.DataFrame([
 ])
 
 response = client.spans.update_annotations(
-    space_id="your-space-id",
+    space_id=os.environ["ARIZE_SPACE_ID"],
     project_name="your-project",
     dataframe=annotations_df,
     validate=True,
@@ -186,7 +176,7 @@ response = client.spans.update_annotations(
 
 | Problem | Solution |
 |---------|----------|
-| `ax: command not found` | See ax-setup.md |
+| `ax: command not found` | See references/ax-setup.md |
 | `401 Unauthorized` | API key may not have access to this space. Verify at https://app.arize.com/admin > API Keys |
 | `Annotation config not found` | `ax annotation-configs list --space-id SPACE_ID` |
 | `409 Conflict on create` | Name already exists in the space. Use a different name or get the existing config ID. |
@@ -207,51 +197,4 @@ response = client.spans.update_annotations(
 
 ## Save Credentials for Future Use
 
-At the **end of the session**, if the user manually provided any of the following during this conversation (via AskQuestion response, pasted text, or inline values) **and** those values were NOT already loaded from a saved profile or environment variable, offer to save them for future use.
-
-| Credential | Where it gets saved |
-|------------|---------------------|
-| API key | `ax` profile at `~/.arize/config.toml` |
-| Space ID | **macOS/Linux:** shell config (`~/.zshrc` or `~/.bashrc`) as `export ARIZE_SPACE_ID="..."`. **Windows:** user environment variable via `[System.Environment]::SetEnvironmentVariable('ARIZE_SPACE_ID', '...', 'User')` |
-
-**Skip this entirely if:**
-- The API key was already loaded from an existing profile or `ARIZE_API_KEY` env var
-- The space ID was already set via `ARIZE_SPACE_ID` env var
-- The user only used base64 project IDs (no space ID was needed)
-
-**How to offer:** Use **AskQuestion**: *"Would you like to save your Arize credentials so you don't have to enter them next time?"* with options `"Yes, save them"` / `"No thanks"`.
-
-**If the user says yes:**
-
-1. **API key** — Check if `~/.arize/config.toml` exists. If it does, read it and update the `[auth]` section. If not, create it with this minimal content:
-
-   ```toml
-   [profile]
-   name = "default"
-
-   [auth]
-   api_key = "THE_API_KEY"
-
-   [output]
-   format = "table"
-   ```
-
-   Verify with: `ax profiles show`
-
-2. **Space ID** — Persist the space ID as an environment variable:
-
-   **macOS/Linux** — Detect the user's shell config file (`~/.zshrc` for zsh, `~/.bashrc` for bash). Append:
-
-   ```bash
-   export ARIZE_SPACE_ID="THE_SPACE_ID"
-   ```
-
-   Tell the user to run `source ~/.zshrc` (or restart their terminal) for it to take effect.
-
-   **Windows (PowerShell)** — Set a persistent user environment variable:
-
-   ```powershell
-   [System.Environment]::SetEnvironmentVariable('ARIZE_SPACE_ID', 'THE_SPACE_ID', 'User')
-   ```
-
-   Tell the user to restart their terminal for it to take effect.
+See references/ax-profiles.md § Save Credentials for Future Use.
