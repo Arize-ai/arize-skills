@@ -62,24 +62,24 @@ If an `ax` command fails, troubleshoot based on the error:
 ### Find LLM spans containing prompts
 
 ```bash
-# List LLM spans (where prompts live)
-ax spans list PROJECT --filter "attributes.openinference.span.kind = 'LLM'" --limit 10
+# Sample LLM spans (where prompts live)
+ax spans export PROJECT --filter "attributes.openinference.span.kind = 'LLM'" -l 10 --stdout
 
 # Filter by model
-ax spans list PROJECT --filter "attributes.llm.model_name = 'gpt-4o'" --limit 10
+ax spans export PROJECT --filter "attributes.llm.model_name = 'gpt-4o'" -l 10 --stdout
 
 # Filter by span name (e.g., a specific LLM call)
-ax spans list PROJECT --filter "name = 'ChatCompletion'" --limit 10
+ax spans export PROJECT --filter "name = 'ChatCompletion'" -l 10 --stdout
 ```
 
 ### Export a trace to inspect prompt structure
 
 ```bash
 # Export all spans in a trace
-ax spans export --trace-id TRACE_ID --project PROJECT
+ax spans export PROJECT --trace-id TRACE_ID
 
 # Export a single span
-ax spans export --span-id SPAN_ID --project PROJECT
+ax spans export PROJECT --span-id SPAN_ID
 ```
 
 ### Extract prompts from exported JSON
@@ -120,22 +120,22 @@ If the span has `attributes.llm.prompt_template.template`, the prompt uses varia
 
 ```bash
 # Find error spans -- these indicate prompt failures
-ax spans list PROJECT \
+ax spans export PROJECT \
   --filter "status_code = 'ERROR' AND attributes.openinference.span.kind = 'LLM'" \
-  --limit 20
+  -l 20 --stdout
 
 # Find spans with low eval scores
-ax spans list PROJECT \
+ax spans export PROJECT \
   --filter "annotation.correctness.label = 'incorrect'" \
-  --limit 20
+  -l 20 --stdout
 
 # Find spans with high latency (may indicate overly complex prompts)
-ax spans list PROJECT \
+ax spans export PROJECT \
   --filter "attributes.openinference.span.kind = 'LLM' AND latency_ms > 10000" \
-  --limit 20
+  -l 20 --stdout
 
 # Export error traces for detailed inspection
-ax spans export --trace-id TRACE_ID --project PROJECT
+ax spans export PROJECT --trace-id TRACE_ID
 ```
 
 ### From datasets and experiments
@@ -378,7 +378,7 @@ When optimizing prompts that use template variables:
    ```
 2. Export the trace:
    ```bash
-   ax spans export --trace-id TRACE_ID --project PROJECT
+   ax spans export PROJECT --trace-id TRACE_ID
    ```
 3. Extract the prompt from the LLM span:
    ```bash
@@ -413,9 +413,9 @@ When optimizing prompts that use template variables:
 
 1. Export spans where the output format is wrong:
    ```bash
-   ax spans list PROJECT \
+   ax spans export PROJECT \
      --filter "attributes.openinference.span.kind = 'LLM' AND annotation.format.label = 'incorrect'" \
-     --limit 10 -o json > bad_format.json
+     -l 10 --stdout > bad_format.json
    ```
 2. Look at what the LLM is producing vs what was expected
 3. Add explicit format instructions to the prompt (JSON schema, examples, delimiters)
@@ -425,13 +425,13 @@ When optimizing prompts that use template variables:
 
 1. Find traces where the model hallucinated:
    ```bash
-   ax spans list PROJECT \
+   ax spans export PROJECT \
      --filter "annotation.faithfulness.label = 'unfaithful'" \
-     --limit 20
+     -l 20 --stdout
    ```
 2. Export and inspect the retriever + LLM spans together:
    ```bash
-   ax spans export --trace-id TRACE_ID --project PROJECT
+   ax spans export PROJECT --trace-id TRACE_ID
    jq '[.[] | {kind: .attributes.openinference.span.kind, name, input: .attributes.input.value, output: .attributes.output.value}]' trace_*/spans.json
    ```
 3. Check if the retrieved context actually contained the answer
