@@ -240,7 +240,7 @@ ax tasks cancel-run RUN_ID --force
 
 | Status | Meaning |
 |--------|---------|
-| `completed`, 0 spans | No spans in eval index for that window — widen time range |
+| `completed`, 0 spans | The eval index lags 1–2 hours — spans ingested recently may not be indexed yet. Shift the window to data at least 2 hours old, or widen the time range to cover more historical data. |
 | `cancelled` ~1s | Integration credentials invalid |
 | `cancelled` ~3min | Found spans but LLM call failed — check model name or key |
 | `completed`, N > 0 | Success — check scores in UI |
@@ -315,12 +315,14 @@ Respond with exactly one of these labels: hallucinated, factual'
 
 ### Step 5: Ask — backfill, continuous, or both?
 
+**Recommended approach:** Always start with a small backfill (~100 historical spans) to validate the evaluator before turning on continuous monitoring. This lets you catch column mapping errors, wrong span kinds, and template issues on known data before scoring all future production spans. Only enable continuous after a backfill confirms correct scoring.
+
 Before creating the task, ask:
 
 > "Would you like to:
 > (a) Run a **backfill** on historical spans (one-time)?
 > (b) Set up **continuous** evaluation on new spans going forward?
-> (c) **Both** — backfill now and keep scoring new spans automatically?"
+> (c) **Both** — backfill first to validate, then keep scoring new spans automatically? (recommended)"
 
 ### Step 6: Determine column mappings from real span data
 
@@ -340,6 +342,8 @@ For each template variable (`{input}`, `{output}`, `{context}`), find the matchi
 | `tool_output` | `attributes.input.value` (fallback) | `attributes.output.value` |
 
 **Validate span kind alignment:** If the evaluator prompt assumes LLM final text but the task targets CHAIN spans (or vice versa), runs can cancel or score the wrong text. Make sure the `query_filter` on the task matches the span kind you mapped.
+
+**`query_filter` only works on indexed attributes:** The `query_filter` in the evaluators JSON is evaluated against the eval index, not the raw span store. Attributes under `attributes.metadata.*` or custom keys may not be indexed and will silently match nothing. Use well-known indexed attributes like `span_kind` or `attributes.llm.model_name` for filtering. If a filter returns 0 spans despite data existing, try removing the filter as a diagnostic step.
 
 **Full example `--evaluators` JSON:**
 
@@ -386,20 +390,25 @@ ax tasks create \
 
 ### Step 8: Trigger a backfill run (if requested)
 
+> **Eval index lag:** The eval index is built asynchronously from the primary trace store and can lag **1–2 hours**. For your first test run, use a time window ending at least 2 hours in the past. If you set `--data-end-time` to "now" on spans ingested in the last hour, the run will complete successfully but score 0 spans.
+
 First find what time range has data:
 ```bash
 ax spans export PROJECT_ID --space-id SPACE_ID -l 100 --days 1 --stdout   # try last 24h first
 ax spans export PROJECT_ID --space-id SPACE_ID -l 100 --days 7 --stdout   # widen if empty
 ```
 
-Use the `start_time` / `end_time` fields from real spans to set the window. Use the most recent data for your first test run.
+Use the `start_time` / `end_time` fields from real spans to set the window. For the first validation run, cap `--max-spans` at ~100 to get quick feedback:
 
 ```bash
 ax tasks trigger-run TASK_ID \
   --data-start-time "2026-03-20T00:00:00" \
   --data-end-time "2026-03-21T23:59:59" \
+  --max-spans 100 \
   --wait
 ```
+
+Review scores and explanations before widening to the full backfill or enabling continuous.
 
 ---
 
@@ -562,6 +571,7 @@ The labels in `--classification-choices` must exactly match the labels reference
 | Time format error on `trigger-run` | Use `2026-03-21T09:00:00` — no trailing `Z` |
 | Run failed: "missing rails and classification choices" | Add `--classification-choices '{"label_a": 1, "label_b": 0}'` to `ax evaluators create` — labels must match the template |
 | Run `completed`, all spans skipped | Query filter matched spans but column mappings are wrong or template variables don't resolve — export a sample span and verify paths |
+| `query_filter` set but 0 spans scored | The filter attribute may not be indexed in the eval index. `attributes.metadata.*` and custom attributes are often not indexed. Use `span_kind` or `attributes.llm.model_name` instead, or remove the filter to confirm spans exist in the window. |
 
 ---
 

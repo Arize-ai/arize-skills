@@ -17,7 +17,11 @@ Use `ax spans export` to download individual spans, or `ax traces export` to dow
 
 **Resolving project for export:** The `PROJECT` positional argument accepts either a project name or a base64 project ID. When using a name, `--space-id` is required. If you hit limit errors or `401 Unauthorized` when using a project name, resolve it to a base64 ID: run `ax projects list --space-id SPACE_ID -l 100 -o json`, find the project by `name`, and use its `id` as `PROJECT`.
 
+**Space name as ground truth:** If the user tells you their space name, use it directly — do not run `ax spaces list` first to look it up. `ax spaces list` paginates and only returns the first page (~15 spaces); the target space may be on a later page and never appear. Pass the user-provided name straight to `--space-id` or `ax projects list --space-id "<name>"`.
+
 **Exploratory export rule:** When exporting spans or traces **without** a specific `--trace-id`, `--span-id`, or `--session-id` (i.e., browsing/exploring a project), always start with `-l 50` to pull a small sample first. Summarize what you find, then pull more data only if the user asks or the task requires it. This avoids slow queries and overwhelming output on large projects.
+
+**Recency warning:** `ax traces export` and `ax spans export` return results in **arbitrary order, not by recency**. Running without `--start-time` will not give you the most recent traces. To fetch recent data (e.g., "last day's conversations"), always pass `--start-time` scoped to the relevant window.
 
 **Default output directory:** Always use `--output-dir .arize-tmp-traces` on every `ax spans export` call. The CLI automatically creates the directory and adds it to `.gitignore`.
 
@@ -28,7 +32,7 @@ Proceed directly with the task — run the `ax` command you need. Do NOT check v
 If an `ax` command fails, troubleshoot based on the error:
 - `command not found` or version error → see references/ax-setup.md
 - `401 Unauthorized` / missing API key → run `ax profiles show` to inspect the current profile. If the profile is missing or the API key is wrong: check `.env` for `ARIZE_API_KEY` and use it to create/update the profile via references/ax-profiles.md. If `.env` has no key either, ask the user for their Arize API key (https://app.arize.com/admin > API Keys)
-- Space ID unknown → check `.env` for `ARIZE_SPACE_ID`, or run `ax spaces list -o json`, or ask the user
+- Space ID unknown → check `.env` for `ARIZE_SPACE_ID`. If the user has given you a space name, use it directly — skip `ax spaces list` (it only returns the first page and may miss the target space). Otherwise run `ax spaces list -o json` or ask the user.
 - Project unclear → run `ax projects list -l 100 -o json` (add `--space-id` if known), present the names, and ask the user to pick one
 
 **IMPORTANT:** `--space-id` is required when using a human-readable project name as the `PROJECT` positional argument. It is not needed when using a base64-encoded project ID. If you hit `401 Unauthorized` or limit errors when using a project name, resolve it to a base64 ID first (see "Resolving project for export" in Concepts).
@@ -126,6 +130,8 @@ Arrow Flight connects to `flight.arize.com:443` via gRPC+TLS -- this is a differ
 - ax profile: `flight_host`, `flight_port`, `flight_scheme`
 - Environment variables: `ARIZE_FLIGHT_HOST`, `ARIZE_FLIGHT_PORT`, `ARIZE_FLIGHT_SCHEME`
 
+**Internal/private deployment note:** On internal Arize deployments, Arrow Flight may fail with auth errors even with a valid API key (the Flight endpoint may have additional network or auth restrictions). If `--all` fails, fall back to REST with batched time windows: loop over `--start-time`/`--end-time` ranges (e.g., day by day) using `-l 500` per batch.
+
 The `--all` flag is also available on `ax traces export`, `ax datasets export`, and `ax experiments export` with the same behavior (REST by default, Flight with `--all`).
 
 ## Export Traces: `ax traces export`
@@ -136,8 +142,10 @@ Export full traces -- all spans belonging to traces that match a filter. Uses a 
 2. **Phase 2:** Extract unique trace IDs, then fetch every span for those traces
 
 ```bash
-# Explore recent traces (start small with -l 50, pull more if needed)
-ax traces export PROJECT_ID -l 50 --output-dir .arize-tmp-traces
+# Explore recent traces — always pass --start-time; results are not ordered by recency without it
+ax traces export PROJECT_ID --space-id SPACE_ID \
+  --start-time "2026-04-05T00:00:00" \
+  -l 50 --output-dir .arize-tmp-traces
 
 # Export traces with error spans (REST, up to 500 spans in phase 1)
 ax traces export PROJECT_ID --filter "status_code = 'ERROR'" --stdout
@@ -166,6 +174,15 @@ ax traces export PROJECT_ID --space-id SPACE_ID --filter "status_code = 'ERROR'"
 
 - `ax spans export` exports individual spans matching a filter
 - `ax traces export` exports complete traces -- it finds spans matching the filter, then pulls ALL spans for those traces (including siblings and children that may not match the filter)
+
+### Time-series index lag
+
+Arize uses two storage tiers:
+
+- **Primary trace store** (indexed by `trace_id`) — spans are written here immediately on ingestion. `--trace-id` direct lookups (`ax spans export PROJECT_ID --trace-id TRACE_ID`) hit this store and are always up to date.
+- **Time-series query index** (used by `--days`, `--start-time`, `--end-time`) — built asynchronously from the primary store and lags **6–12 hours**. Queries scoped by time range will miss very recent traces.
+
+**Implication:** If you already have a `trace_id`, use `ax spans export PROJECT_ID --trace-id TRACE_ID` — it's faster and immediately consistent. Use time-range queries only for historical exploration, and set `--start-time` at least 12 hours in the past to guarantee results are indexed.
 
 ## Filter Syntax Reference
 
@@ -376,6 +393,7 @@ ax spans export PROJECT_ID --trace-id TRACE_ID --stdout | jq '.[]'
 | `No profile found` | No profile is configured. See references/ax-profiles.md to create one. |
 | `401 Unauthorized` with valid API key | You are likely using a project name without `--space-id`. Add `--space-id SPACE_ID`, or resolve to a base64 project ID first: `ax projects list --space-id SPACE_ID -l 100 -o json` and use the project's `id`. If the key itself is wrong or expired, fix the profile using references/ax-profiles.md. |
 | `No spans found` | Expand `--days` (default 30), verify project ID |
+| Results don't include recent traces | Time-range queries lag 6–12h. Use `--trace-id` for immediate lookups of known traces. For time-range queries, set `--start-time` at least 12h in the past to ensure spans are indexed. |
 | `Filter error` or `invalid filter expression` | Check column name spelling (e.g., `attributes.openinference.span.kind` not `span_kind`), wrap string values in single quotes, use `CONTAINS` for free-text fields |
 | `unknown attribute` in filter | The attribute path is wrong or not indexed. Try browsing a small sample first to see actual column names: `ax spans export PROJECT_ID -l 5 --stdout \| jq '.[0] \| keys'` |
 | `Timeout on large export` | Use `--days 7` to narrow the time range |
