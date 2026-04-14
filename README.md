@@ -50,7 +50,15 @@ cd arize-skills
 
 The installer detects installed agents and optionally installs the `ax` CLI. Use `--global` / `-Global` instead to install to `~/.<agent>/skills/`.
 
-### Option 3: Claude Code plugin
+### Option 3: ax CLI
+
+If you already have `ax` installed (v0.9.0+):
+
+```bash
+ax skills install
+```
+
+### Option 4: Claude Code plugin
 
 ```
 /plugin add https://github.com/Arize-ai/arize-skills
@@ -77,21 +85,28 @@ pip install arize-ax-cli
 
 Set up your API key once and it persists across all sessions and projects:
 ```bash
-# Interactive wizard
+# Interactive wizard (creates 'default' profile if no profiles exist)
 ax profiles create
 
-# Or pass the key directly
+# Or pass the key directly (optional profile name as positional arg)
 ax profiles create --api-key YOUR_API_KEY
+ax profiles create staging --api-key YOUR_STAGING_KEY
 
 # Update an existing profile (patches only what you specify)
 ax profiles update --api-key NEW_API_KEY
 ax profiles update --region us-east-1b
+
+# Other profile management
+ax profiles list
+ax profiles show
+ax profiles use staging
+ax profiles delete staging
 ```
 
-You'll also need a space ID. Find yours in the Arize URL (`/spaces/{SPACE_ID}/...`) or run `ax spaces list -o json`, then persist it:
+You'll also need a space name or ID. Find yours by running `ax spaces list -o json` (use the `name` or base64 `id`), then persist it:
 ```bash
 # macOS/Linux — add to ~/.zshrc or ~/.bashrc
-export ARIZE_SPACE_ID="U3BhY2U6..."
+export ARIZE_SPACE="my-workspace"        # name, or base64 ID like U3BhY2U6...
 ```
 
 **Option B — `.env` file** (project-scoped credentials + provider keys):
@@ -105,7 +120,7 @@ cp .env.example .env
 The `.env` file supports all credentials used by the skills:
 ```bash
 ARIZE_API_KEY=your-api-key               # from https://app.arize.com/admin > API Keys
-ARIZE_SPACE_ID=U3BhY2U6...              # base64 space ID from your Arize URL
+ARIZE_SPACE=my-workspace             # space name or base64 ID from ax spaces list
 # ARIZE_DEFAULT_PROJECT=my-project       # optional default project
 # OPENAI_API_KEY=sk-...                  # for AI integrations and evaluators
 # ANTHROPIC_API_KEY=sk-ant-...           # for AI integrations and evaluators
@@ -116,7 +131,7 @@ Skills automatically load this file during their prerequisite check. The `.env` 
 **Option C — Environment variables** (CI/CD):
 ```bash
 export ARIZE_API_KEY="your-api-key"       # from https://app.arize.com/admin > API Keys
-export ARIZE_SPACE_ID="U3BhY2U6..."       # base64 space ID from your Arize URL
+export ARIZE_SPACE="my-workspace"        # space name or base64 ID from ax spaces list
 ```
 
 ### Verify
