@@ -5,6 +5,8 @@ description: "INVOKE THIS SKILL when creating, reading, updating, or deleting Ar
 
 # Arize AI Integration Skill
 
+> **`SPACE`** — All `--space` flags and the `ARIZE_SPACE` env var accept a space **name** (e.g., `my-workspace`) or a base64 space **ID** (e.g., `U3BhY2U6...`). Find yours with `ax spaces list`.
+
 ## Concepts
 
 - **AI Integration** = stored LLM provider credentials registered in Arize; used by evaluators to call a judge model and by other Arize features that need to invoke an LLM on your behalf
@@ -15,30 +17,13 @@ description: "INVOKE THIS SKILL when creating, reading, updating, or deleting Ar
 
 ## Prerequisites
 
-Three things are needed: `ax` CLI, an API key (env var or profile), and a space ID.
+Proceed directly with the task — run the `ax` command you need. Do NOT check versions, env vars, or profiles upfront.
 
-### Install ax
-
-If `ax` is not installed, not on PATH, or below version `0.8.0`, see ax-setup.md.
-
-### Verify environment
-
-Run a quick check for credentials:
-
-**macOS/Linux (bash):**
-```bash
-ax --version && echo "--- env ---" && if [ -n "$ARIZE_API_KEY" ]; then echo "ARIZE_API_KEY: (set)"; else echo "ARIZE_API_KEY: (not set)"; fi && echo "ARIZE_SPACE_ID: ${ARIZE_SPACE_ID:-(not set)}" && echo "--- profiles ---" && ax profiles show 2>&1
-```
-
-**Windows (PowerShell):**
-```powershell
-ax --version; Write-Host "--- env ---"; Write-Host "ARIZE_API_KEY: $(if ($env:ARIZE_API_KEY) { '(set)' } else { '(not set)' })"; Write-Host "ARIZE_SPACE_ID: $env:ARIZE_SPACE_ID"; Write-Host "--- profiles ---"; ax profiles show 2>&1
-```
-
-**Read the output and proceed immediately** if either the env var or the profile has an API key. Only ask the user if **both** are missing. Resolve failures:
-
-- No API key in env **and** no profile → **AskQuestion**: "Arize API key (https://app.arize.com/admin > API Keys)"
-- Space ID unknown → run `ax spaces list -o json` to list all accessible spaces and pick the right one, or **AskQuestion** if the user prefers to provide it directly
+If an `ax` command fails, troubleshoot based on the error:
+- `command not found` or version error → see references/ax-setup.md
+- `401 Unauthorized` / missing API key → run `ax profiles show` to inspect the current profile. If the profile is missing or the API key is wrong: check `.env` for `ARIZE_API_KEY` and use it to create/update the profile via references/ax-profiles.md. If `.env` has no key either, ask the user for their Arize API key (https://app.arize.com/admin > API Keys)
+- Space unknown → check `.env` for `ARIZE_SPACE` (name or ID), or run `ax spaces list` to pick by name, or ask the user
+- LLM provider call fails (missing OPENAI_API_KEY / ANTHROPIC_API_KEY) → check `.env`, load if present, otherwise ask the user
 
 ---
 
@@ -47,32 +32,32 @@ ax --version; Write-Host "--- env ---"; Write-Host "ARIZE_API_KEY: $(if ($env:AR
 List all integrations accessible in a space:
 
 ```bash
-ax ai-integrations list --space-id SPACE_ID
+ax ai-integrations list --space SPACE
 ```
 
 Filter by name (case-insensitive substring match):
 
 ```bash
-ax ai-integrations list --space-id SPACE_ID --name "openai"
+ax ai-integrations list --space SPACE --name "openai"
 ```
 
 Paginate large result sets:
 
 ```bash
 # Get first page
-ax ai-integrations list --space-id SPACE_ID --limit 20 -o json
+ax ai-integrations list --space SPACE --limit 20 -o json
 
 # Get next page using cursor from previous response
-ax ai-integrations list --space-id SPACE_ID --limit 20 --cursor CURSOR_TOKEN -o json
+ax ai-integrations list --space SPACE --limit 20 --cursor CURSOR_TOKEN -o json
 ```
 
 **Key flags:**
 
 | Flag | Description |
 |------|-------------|
-| `--space-id` | Space to list integrations in |
+| `--space` | Space name or ID to filter integrations |
 | `--name` | Case-insensitive substring filter on integration name |
-| `--limit` | Max results (1–100, default 50) |
+| `--limit` | Max results (1–100, default 15) |
 | `--cursor` | Pagination token from a previous response |
 | `-o, --output` | Output format: `table` (default) or `json` |
 
@@ -94,8 +79,9 @@ ax ai-integrations list --space-id SPACE_ID --limit 20 --cursor CURSOR_TOKEN -o 
 ## Get a Specific Integration
 
 ```bash
-ax ai-integrations get INT_ID
-ax ai-integrations get INT_ID -o json
+ax ai-integrations get NAME_OR_ID
+ax ai-integrations get NAME_OR_ID -o json
+ax ai-integrations get NAME_OR_ID --space SPACE   # required when using name instead of ID
 ```
 
 Use this to inspect an integration's full configuration or to confirm its ID after creation.
@@ -107,7 +93,7 @@ Use this to inspect an integration's full configuration or to confirm its ID aft
 Before creating, always list integrations first — the user may already have a suitable one:
 
 ```bash
-ax ai-integrations list --space-id SPACE_ID
+ax ai-integrations list --space SPACE
 ```
 
 If no suitable integration exists, create one. The required flags depend on the provider.
@@ -118,7 +104,7 @@ If no suitable integration exists, create one. The required flags depend on the 
 ax ai-integrations create \
   --name "My OpenAI Integration" \
   --provider openAI \
-  --api-key "sk-..."
+  --api-key $OPENAI_API_KEY
 ```
 
 ### Anthropic
@@ -127,7 +113,7 @@ ax ai-integrations create \
 ax ai-integrations create \
   --name "My Anthropic Integration" \
   --provider anthropic \
-  --api-key "sk-ant-..."
+  --api-key $ANTHROPIC_API_KEY
 ```
 
 ### Azure OpenAI
@@ -136,31 +122,30 @@ ax ai-integrations create \
 ax ai-integrations create \
   --name "My Azure OpenAI Integration" \
   --provider azureOpenAI \
-  --api-key "AZURE_API_KEY" \
+  --api-key $AZURE_OPENAI_API_KEY \
   --base-url "https://my-resource.openai.azure.com/"
 ```
 
 ### AWS Bedrock
 
-AWS Bedrock uses IAM role-based auth instead of an API key. Provide the ARN of the role Arize should assume:
+AWS Bedrock uses IAM role-based auth. Provide the ARN of the role Arize should assume via `--provider-metadata`:
 
 ```bash
 ax ai-integrations create \
   --name "My Bedrock Integration" \
   --provider awsBedrock \
-  --role-arn "arn:aws:iam::123456789012:role/ArizeBedrockRole"
+  --provider-metadata '{"role_arn": "arn:aws:iam::123456789012:role/ArizeBedrockRole"}'
 ```
 
 ### Vertex AI
 
-Vertex AI uses GCP service account credentials. Provide the GCP project and region:
+Vertex AI uses GCP service account credentials. Provide the GCP project and region via `--provider-metadata`:
 
 ```bash
 ax ai-integrations create \
   --name "My Vertex AI Integration" \
   --provider vertexAI \
-  --project-id "my-gcp-project" \
-  --location "us-central1"
+  --provider-metadata '{"project_id": "my-gcp-project", "location": "us-central1"}'
 ```
 
 ### Gemini
@@ -169,7 +154,7 @@ ax ai-integrations create \
 ax ai-integrations create \
   --name "My Gemini Integration" \
   --provider gemini \
-  --api-key "AIza..."
+  --api-key $GEMINI_API_KEY
 ```
 
 ### NVIDIA NIM
@@ -178,7 +163,7 @@ ax ai-integrations create \
 ax ai-integrations create \
   --name "My NVIDIA NIM Integration" \
   --provider nvidiaNim \
-  --api-key "nvapi-..." \
+  --api-key $NVIDIA_API_KEY \
   --base-url "https://integrate.api.nvidia.com/v1"
 ```
 
@@ -189,7 +174,7 @@ ax ai-integrations create \
   --name "My Custom Integration" \
   --provider custom \
   --base-url "https://my-llm-proxy.example.com/v1" \
-  --api-key "optional-key-if-needed"
+  --api-key $CUSTOM_LLM_API_KEY
 ```
 
 ### Supported Providers
@@ -199,8 +184,8 @@ ax ai-integrations create \
 | `openAI` | `--api-key <key>` |
 | `anthropic` | `--api-key <key>` |
 | `azureOpenAI` | `--api-key <key>`, `--base-url <azure-endpoint>` |
-| `awsBedrock` | `--role-arn <arn>` |
-| `vertexAI` | `--project-id <gcp-project>`, `--location <region>` |
+| `awsBedrock` | `--provider-metadata '{"role_arn": "<arn>"}'` |
+| `vertexAI` | `--provider-metadata '{"project_id": "<gcp-project>", "location": "<region>"}'` |
 | `gemini` | `--api-key <key>` |
 | `nvidiaNim` | `--api-key <key>`, `--base-url <nim-endpoint>` |
 | `custom` | `--base-url <endpoint>` |
@@ -209,18 +194,21 @@ ax ai-integrations create \
 
 | Flag | Description |
 |------|-------------|
-| `--model-names` | Comma-separated list of allowed model names; omit to allow all models |
-| `--enable-default-models` / `--no-default-models` | Enable or disable the provider's default model list |
-| `--function-calling` / `--no-function-calling` | Enable or disable tool/function calling support |
+| `--model-name` | Allowed model name (repeat for multiple, e.g. `--model-name gpt-4o --model-name gpt-4o-mini`); omit to allow all models |
+| `--enable-default-models` | Enable the provider's default model list |
+| `--function-calling-enabled` | Enable tool/function calling support |
+| `--auth-type` | Authentication type: `default`, `proxy_with_headers`, or `bearer_token` |
+| `--headers` | Custom headers as JSON object or file path (for proxy auth) |
+| `--provider-metadata` | Provider-specific metadata as JSON object or file path |
 
 ### After creation
 
 Capture the returned integration ID (e.g., `TGxtSW50ZWdyYXRpb246MTI6YUJjRA==`) — it is needed for evaluator creation and other downstream commands. If you missed it, retrieve it:
 
 ```bash
-ax ai-integrations list --space-id SPACE_ID -o json
-# or, if you know the ID:
-ax ai-integrations get INT_ID
+ax ai-integrations list --space SPACE -o json
+# or by name/ID directly:
+ax ai-integrations get NAME_OR_ID
 ```
 
 ---
@@ -231,19 +219,19 @@ ax ai-integrations get INT_ID
 
 ```bash
 # Rename
-ax ai-integrations update INT_ID --name "New Name"
+ax ai-integrations update NAME_OR_ID --name "New Name"
 
 # Rotate the API key
-ax ai-integrations update INT_ID --api-key "sk-new-key..."
+ax ai-integrations update NAME_OR_ID --api-key $OPENAI_API_KEY
 
-# Change the model list
-ax ai-integrations update INT_ID --model-names "gpt-4o,gpt-4o-mini"
+# Change the model list (replaces all existing model names)
+ax ai-integrations update NAME_OR_ID --model-name gpt-4o --model-name gpt-4o-mini
 
 # Update base URL (for Azure, custom, or NIM)
-ax ai-integrations update INT_ID --base-url "https://new-endpoint.example.com/v1"
+ax ai-integrations update NAME_OR_ID --base-url "https://new-endpoint.example.com/v1"
 ```
 
-Any flag accepted by `create` can be passed to `update`.
+Add `--space SPACE` when using a name instead of ID. Any flag accepted by `create` can be passed to `update`.
 
 ---
 
@@ -252,7 +240,8 @@ Any flag accepted by `create` can be passed to `update`.
 **Warning:** Deletion is permanent. Evaluators that reference this integration will no longer be able to run.
 
 ```bash
-ax ai-integrations delete INT_ID --force
+ax ai-integrations delete NAME_OR_ID --force
+ax ai-integrations delete NAME_OR_ID --space SPACE --force   # required when using name instead of ID
 ```
 
 Omit `--force` to get a confirmation prompt instead of deleting immediately.
@@ -263,11 +252,11 @@ Omit `--force` to get a confirmation prompt instead of deleting immediately.
 
 | Problem | Solution |
 |---------|----------|
-| `ax: command not found` | See ax-setup.md |
+| `ax: command not found` | See references/ax-setup.md |
 | `401 Unauthorized` | API key may not have access to this space. Verify key and space ID at https://app.arize.com/admin > API Keys |
 | `No profile found` | Run `ax profiles show --expand`; set `ARIZE_API_KEY` env var or write `~/.arize/config.toml` |
-| `Integration not found` | Verify with `ax ai-integrations list --space-id SPACE_ID` |
-| `has_api_key: false` after create | Credentials were not saved — re-run `update` with the correct `--api-key` or `--role-arn` |
+| `Integration not found` | Verify with `ax ai-integrations list --space SPACE` |
+| `has_api_key: false` after create | Credentials were not saved — re-run `update` with the correct `--api-key` or `--provider-metadata` |
 | Evaluator runs fail with LLM errors | Check integration credentials with `ax ai-integrations get INT_ID`; rotate the API key if needed |
 | `provider` mismatch | Cannot change provider after creation — delete and recreate with the correct provider |
 
@@ -282,16 +271,4 @@ Omit `--force` to get a confirmation prompt instead of deleting immediately.
 
 ## Save Credentials for Future Use
 
-At the **end of the session**, if the user manually provided any credentials during this conversation **and** those values were NOT already loaded from a saved profile or environment variable, offer to save them.
-
-**Skip this entirely if:**
-- The API key was already loaded from an existing profile or `ARIZE_API_KEY` env var
-- The space ID was already set via `ARIZE_SPACE_ID` env var
-
-**How to offer:** Use **AskQuestion**: *"Would you like to save your Arize credentials so you don't have to enter them next time?"* with options `"Yes, save them"` / `"No thanks"`.
-
-**If the user says yes:**
-
-1. **API key** — See ax-profiles.md. Run `ax profiles show` to check the current state, then use `ax profiles create` or `ax profiles update` with the appropriate flags to save the key (and region if relevant).
-
-2. **Space ID** — See ax-profiles.md (Space ID section) to persist it as an environment variable.
+See references/ax-profiles.md § Save Credentials for Future Use.

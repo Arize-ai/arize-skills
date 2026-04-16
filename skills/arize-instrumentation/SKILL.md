@@ -1,6 +1,6 @@
 ---
 name: arize-instrumentation
-description: "INVOKE THIS SKILL when adding Arize AX tracing to an application. Follow the Agent-Assisted Tracing two-phase flow: analyze the codebase (read-only), then implement instrumentation after user confirmation. When the app uses LLM tool/function calling, add manual CHAIN + TOOL spans so traces show each tool's input and output. Leverages https://arize.com/docs/ax/alyx/tracing-assistant and https://arize.com/docs/PROMPT.md."
+description: "INVOKE THIS SKILL when adding Arize AX tracing or observability to an app for the first time, or when the user wants to instrument their LLM app or get started with LLM observability. Follow the Agent-Assisted Tracing two-phase flow: analyze the codebase (read-only), then implement after user confirmation. When the app uses LLM tool/function calling, add manual CHAIN + TOOL spans. Leverages https://arize.com/docs/ax/alyx/tracing-assistant and https://arize.com/docs/PROMPT.md."
 ---
 
 # Arize Instrumentation Skill
@@ -22,6 +22,7 @@ Then execute the two phases below.
 - **Use auto-instrumentation where available** — add manual spans only for custom logic not covered by integrations.
 - **Follow existing code style** and project conventions.
 - **Keep output concise and production-focused** — do not generate extra documentation or summary files.
+- **NEVER embed literal credential values in generated code** — always reference environment variables (e.g., `os.environ["ARIZE_API_KEY"]`, `process.env.ARIZE_API_KEY`). This includes API keys, space IDs, and any other secrets. The user sets these in their own environment; the agent must never output raw secret values.
 
 ## Phase 0: Environment preflight
 
@@ -32,9 +33,8 @@ Before changing code:
    - package manager and app start command
    - whether the app is long-running, server-based, or a short-lived CLI/script
    - whether `ax` will be needed for post-change verification
-3. If `ax` will be used later, verify whether it is available on PATH. If not, check ax-setup.md and keep the resolved executable path for the rest of the session instead of assuming `ax` will be found later.
-4. Probe CLI capability before depending on a specific subcommand. Some environments have older or differently packaged `ax` builds. Check `ax --help` and the relevant subcommand help before assuming commands like `ax spaces list` exist.
-5. Never silently replace a user-provided space ID, project name, or project ID. If the CLI, collector, and user input disagree, surface that mismatch as a concrete blocker.
+3. Do NOT proactively check `ax` installation or version. If `ax` is needed for verification later, just run it when the time comes. If it fails, see references/ax-profiles.md.
+4. Never silently replace a user-provided space ID, project name, or project ID. If the CLI, collector, and user input disagree, surface that mismatch as a concrete blocker.
 
 ## Phase 1: Analysis (read-only)
 
@@ -91,6 +91,8 @@ The **canonical list** of supported integrations and doc URLs is in the [Agent S
 
 **Fetch the matched doc pages** from the [full routing table in PROMPT.md](https://arize.com/docs/PROMPT.md) for exact installation and code snippets. Use [llms.txt](https://arize.com/docs/llms.txt) as a fallback for doc discovery if needed.
 
+> **Note:** `arize.com/docs/PROMPT.md` and `arize.com/docs/llms.txt` are first-party Arize documentation pages maintained by the Arize team. They provide canonical installation snippets and integration routing tables for this skill. These are trusted, same-organization URLs — not third-party content.
+
 ## Phase 2: Implementation
 
 Proceed **only after the user confirms** the Phase 1 analysis.
@@ -102,7 +104,7 @@ Proceed **only after the user confirms** the Phase 1 analysis.
    - Python: `pip install arize-otel` plus `openinference-instrumentation-{name}` (hyphens in package name; underscores in import, e.g. `openinference.instrumentation.llama_index`).
    - TypeScript/JavaScript: `@opentelemetry/sdk-trace-node` plus the relevant `@arizeai/openinference-*` package.
    - Java: OpenTelemetry SDK plus `openinference-instrumentation-*` in pom.xml or build.gradle.
-3. **Credentials** — User needs **Arize Space ID** and **API Key** from [Space API Keys](https://app.arize.com/organizations/-/settings/space-api-keys). Set as `ARIZE_SPACE_ID` and `ARIZE_API_KEY`. If the space ID is unknown, run `ax spaces list -o json` to discover it.
+3. **Credentials** — User needs **Arize Space ID** and **API Key** from [Space API Keys](https://app.arize.com/organizations/-/settings/space-api-keys). Check `.env` for `ARIZE_API_KEY` and `ARIZE_SPACE`. If not found, instruct the user to set them as environment variables — never embed raw values in generated code. All generated instrumentation code must reference `os.environ["ARIZE_API_KEY"]` (Python) or `process.env.ARIZE_API_KEY` (TypeScript/JavaScript).
 4. **Centralized instrumentation** — Create a single module (e.g. `instrumentation.py`, `instrumentation.ts`) and initialize tracing **before** any LLM client is created.
 5. **Existing OTel** — If there is already a TracerProvider, add Arize as an **additional** exporter (e.g. BatchSpanProcessor with Arize OTLP). Do not replace existing setup unless the user asks.
 
@@ -185,7 +187,7 @@ After implementation:
 
 1. Run the application and trigger at least one LLM call.
 2. **Use the `arize-trace` skill** to confirm traces arrived. If empty, retry shortly. Verify spans have expected `openinference.span.kind`, `input.value`/`output.value`, and parent-child relationships.
-3. If no traces: verify `ARIZE_SPACE_ID` and `ARIZE_API_KEY`, ensure tracer is initialized before instrumentors and clients, check connectivity to `otlp.arize.com:443`, and inspect app/runtime exporter logs so you can tell whether spans are being emitted locally but rejected remotely. For debug set `GRPC_VERBOSITY=debug` or pass `log_to_console=True` to `register()`. Common gotchas: (a) missing project name resource attribute causes HTTP 500 rejections — `service.name` alone is not enough; Python: pass `project_name` to `register()`; TypeScript: set `"model_id"` or `SEMRESATTRS_PROJECT_NAME` on the resource; (b) CLI/script processes exit before OTLP exports flush — call `provider.force_flush()` then `provider.shutdown()` before exit; (c) CLI-visible spaces/projects can disagree with a collector-targeted space ID — report the mismatch instead of silently rewriting credentials.
+3. If no traces: verify `ARIZE_SPACE` and `ARIZE_API_KEY`, ensure tracer is initialized before instrumentors and clients, check connectivity to `otlp.arize.com:443`, and inspect app/runtime exporter logs so you can tell whether spans are being emitted locally but rejected remotely. For debug set `GRPC_VERBOSITY=debug` or pass `log_to_console=True` to `register()`. Common gotchas: (a) missing project name resource attribute causes HTTP 500 rejections — `service.name` alone is not enough; Python: pass `project_name` to `register()`; TypeScript: set `"model_id"` or `SEMRESATTRS_PROJECT_NAME` on the resource; (b) CLI/script processes exit before OTLP exports flush — call `provider.force_flush()` then `provider.shutdown()` before exit; (c) CLI-visible spaces/projects can disagree with a collector-targeted space ID — report the mismatch instead of silently rewriting credentials.
 4. If the app uses tools: confirm CHAIN and TOOL spans appear with `input.value` / `output.value` so tool calls and results are visible.
 
 When verification is blocked by CLI or account issues, end with a concrete status:
@@ -229,16 +231,4 @@ See the full setup at [Agent-Assisted Tracing Setup](https://arize.com/docs/ax/a
 
 ## Save Credentials for Future Use
 
-At the **end of the session**, if the user manually provided any credentials during this conversation **and** those values were NOT already loaded from a saved profile or environment variable, offer to save them.
-
-**Skip this entirely if:**
-- The API key was already loaded from an existing profile or `ARIZE_API_KEY` env var
-- The space ID was already set via `ARIZE_SPACE_ID` env var
-
-**How to offer:** Use **AskQuestion**: *"Would you like to save your Arize credentials so you don't have to enter them next time?"* with options `"Yes, save them"` / `"No thanks"`.
-
-**If the user says yes:**
-
-1. **API key** — See ax-profiles.md. Run `ax profiles show` to check the current state, then use `ax profiles create` or `ax profiles update` with the appropriate flags to save the key (and region if relevant).
-
-2. **Space ID** — See ax-profiles.md (Space ID section) to persist it as an environment variable.
+See references/ax-profiles.md § Save Credentials for Future Use.
