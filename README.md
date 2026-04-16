@@ -60,8 +60,11 @@ ax skills install
 
 ### Option 4: Claude Code plugin
 
+Open up a Claude Code session and execute the following:
+
 ```
-/plugin add https://github.com/Arize-ai/arize-skills
+/plugin marketplace add Arize-ai/arize-skills
+/plugin install arize-skills@Arize-ai-arize-skills 
 ```
 
 ## Prerequisites
