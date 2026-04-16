@@ -6,3 +6,8 @@
 .arize-tmp-traces/
 
 .claude/
+test-results/
+__pycache__/
+**/__pycache__/
+*.pyc
+.idea/
