@@ -107,7 +107,7 @@ Proceed **only after the user confirms** the Phase 1 analysis.
 3. **Credentials** — User needs an **Arize API Key** and **Space ID**. Check `.env` or existing `ax` profiles for `ARIZE_API_KEY` and `ARIZE_SPACE`:
    - Run `ax profiles show` to check for an existing profile.
    - If no profile exists, guide the user to run `ax profiles create` which provides an **interactive wizard** that walks through API key and space setup. See [CLI profiles docs](https://arize.com/docs/api-clients/cli/profiles) for details.
-   - If the user needs to find their API key manually, direct them to **https://app.arize.com/admin > API Keys** (do not use organization-specific URLs with placeholder IDs — they won't resolve for new users).
+   - If the user needs to find their API key manually, direct them to **https://app.arize.com** and to navigate to the settings page (do not use organization-specific URLs with placeholder IDs — they won't resolve for new users).
    - If credentials are not set, instruct the user to set them as environment variables — never embed raw values in generated code. All generated instrumentation code must reference `os.environ["ARIZE_API_KEY"]` (Python) or `process.env.ARIZE_API_KEY` (TypeScript/JavaScript).
    - See references/ax-profiles.md for full profile setup and troubleshooting.
 4. **Centralized instrumentation** — Create a single module (e.g. `instrumentation.py`, `instrumentation.ts`) and initialize tracing **before** any LLM client is created.
