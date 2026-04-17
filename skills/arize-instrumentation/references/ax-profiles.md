@@ -67,7 +67,7 @@ If `ARIZE_API_KEY` is not already set, instruct the user to export it in their s
 export ARIZE_API_KEY="..."   # user pastes their key here in their own terminal
 ```
 
-They can find their key at https://app.arize.com/admin > API Keys. Recommend they create a **scoped service key** (not a personal user key) — service keys are not tied to an individual account and are safer for programmatic use. Keys are space-scoped — make sure they copy the key for the correct space.
+They can find their key at https://app.arize.com by navigating to the settings page. Recommend they create a **scoped service key** (not a personal user key) — service keys are not tied to an individual account and are safer for programmatic use. Keys are space-scoped — make sure they copy the key for the correct space.
 
 Once the user confirms the variable is set, proceed with `ax profiles create --api-key $ARIZE_API_KEY` or `ax profiles update --api-key $ARIZE_API_KEY` as described above.
 

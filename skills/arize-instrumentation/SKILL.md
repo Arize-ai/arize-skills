@@ -104,7 +104,12 @@ Proceed **only after the user confirms** the Phase 1 analysis.
    - Python: `pip install arize-otel` plus `openinference-instrumentation-{name}` (hyphens in package name; underscores in import, e.g. `openinference.instrumentation.llama_index`).
    - TypeScript/JavaScript: `@opentelemetry/sdk-trace-node` plus the relevant `@arizeai/openinference-*` package.
    - Java: OpenTelemetry SDK plus `openinference-instrumentation-*` in pom.xml or build.gradle.
-3. **Credentials** — User needs **Arize Space ID** and **API Key** from [Space API Keys](https://app.arize.com/organizations/-/settings/space-api-keys). Check `.env` for `ARIZE_API_KEY` and `ARIZE_SPACE`. If not found, instruct the user to set them as environment variables — never embed raw values in generated code. All generated instrumentation code must reference `os.environ["ARIZE_API_KEY"]` (Python) or `process.env.ARIZE_API_KEY` (TypeScript/JavaScript).
+3. **Credentials** — User needs an **Arize API Key** and **Space ID**. Check `.env` or existing `ax` profiles for `ARIZE_API_KEY` and `ARIZE_SPACE`:
+   - Run `ax profiles show` to check for an existing profile.
+   - If no profile exists, guide the user to run `ax profiles create` which provides an **interactive wizard** that walks through API key and space setup. See [CLI profiles docs](https://arize.com/docs/api-clients/cli/profiles) for details.
+   - If the user needs to find their API key manually, direct them to **https://app.arize.com** and to navigate to the settings page (do not use organization-specific URLs with placeholder IDs — they won't resolve for new users).
+   - If credentials are not set, instruct the user to set them as environment variables — never embed raw values in generated code. All generated instrumentation code must reference `os.environ["ARIZE_API_KEY"]` (Python) or `process.env.ARIZE_API_KEY` (TypeScript/JavaScript).
+   - See references/ax-profiles.md for full profile setup and troubleshooting.
 4. **Centralized instrumentation** — Create a single module (e.g. `instrumentation.py`, `instrumentation.ts`) and initialize tracing **before** any LLM client is created.
 5. **Existing OTel** — If there is already a TracerProvider, add Arize as an **additional** exporter (e.g. BatchSpanProcessor with Arize OTLP). Do not replace existing setup unless the user asks.
 
