@@ -145,6 +145,7 @@ ax experiments create --name "claude-test" --dataset DATASET_NAME --space SPACE 
 |------|------|----------|-------------|
 | `--name, -n` | string | yes | Experiment name |
 | `--dataset` | string | yes | Dataset to run the experiment against |
+| `--space, -s` | string | no | Space name or ID (required if using dataset name instead of ID) |
 | `--file, -f` | path | yes | Data file with runs: CSV, JSON, JSONL, or Parquet |
 | `-o, --output` | string | no | Output format |
 | `-p, --profile` | string | no | Configuration profile |
