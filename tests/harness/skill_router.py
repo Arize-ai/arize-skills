@@ -1,16 +1,26 @@
 """
 SkillSelectionRunner — tests whether Claude Code selects the correct skill
-for a given prompt. Runs Claude Code with all skills installed and checks
-which skill(s) it invokes.
+for a given prompt.
+
+Runs Claude Code with all skills installed (loaded from the repo's
+.claude/skills/ which symlink to /skills/) and checks which Skill tool
+invocation Claude Code makes. The Skill tool call is intercepted via
+can_use_tool and denied so the skill body never executes — we only care
+about which skill was chosen.
 
 This evaluates the specificity and accuracy of skill name/description pairs
 for vague, ambiguous, and multi-skill prompts.
 """
 
+import json
 import re
+import shutil
+import subprocess
 import time
+from collections.abc import AsyncIterable
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
 from claude_agent_sdk import (
@@ -19,9 +29,13 @@ from claude_agent_sdk import (
     ResultMessage,
     query,
 )
-from claude_agent_sdk.types import TextBlock, ToolUseBlock
+from claude_agent_sdk.types import (
+    TextBlock,
+    ToolUseBlock,
+)
 
-from .result import TestResult, VerificationResult
+# Repo root — two levels up from tests/harness/
+_REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 
 
 @dataclass
@@ -60,46 +74,214 @@ class SkillSelectionResult:
         }
 
 
-# All known skill names
-ALL_SKILLS = [
-    "arize-trace",
-    "arize-instrumentation",
-    "arize-dataset",
-    "arize-experiment",
-    "arize-prompt-optimization",
-    "arize-link",
+def _discover_skill_names() -> list[str]:
+    """Read valid skill names from /skills/*/SKILL.md frontmatter."""
+    skills_dir = _REPO_ROOT / "skills"
+    names: list[str] = []
+    for skill_dir in sorted(skills_dir.iterdir()):
+        skill_md = skill_dir / "SKILL.md"
+        if not skill_md.is_file():
+            continue
+        # Parse the name from YAML frontmatter (between --- markers)
+        text = skill_md.read_text()
+        match = re.search(r"^---\s*\n(.*?)\n---", text, re.DOTALL)
+        if match:
+            for line in match.group(1).splitlines():
+                m = re.match(r"name:\s*(.+)", line)
+                if m:
+                    names.append(m.group(1).strip().strip('"').strip("'"))
+                    break
+    return names
+
+
+def _build_routing_system_prompt() -> str:
+    """Build a system prompt that presents all skills and forces Skill tool usage."""
+    skills_dir = _REPO_ROOT / "skills"
+    skill_lines: list[str] = []
+    for skill_dir in sorted(skills_dir.iterdir()):
+        skill_md = skill_dir / "SKILL.md"
+        if not skill_md.is_file():
+            continue
+        text = skill_md.read_text()
+        match = re.search(r"^---\s*\n(.*?)\n---", text, re.DOTALL)
+        if not match:
+            continue
+        name = ""
+        description = ""
+        for line in match.group(1).splitlines():
+            if not name:
+                m = re.match(r"name:\s*(.+)", line)
+                if m:
+                    name = m.group(1).strip().strip("\"'")
+            if not description:
+                m = re.match(r"description:\s*(.+)", line)
+                if m:
+                    description = m.group(1).strip().strip("\"'")
+        if name and description:
+            skill_lines.append(f"- {name}: {description}")
+    return (
+        "You are an Arize platform skill router. "
+        "For every user message you MUST invoke the Skill tool with the most appropriate skill name. "
+        "Do NOT respond with text or use Bash — only invoke the Skill tool.\n\n"
+        "Available skills:\n" + "\n".join(skill_lines)
+    )
+
+
+# Discover at import time so ALL_SKILLS reflects the actual /skills/ directory
+ALL_SKILLS = _discover_skill_names()
+_ROUTING_SYSTEM_PROMPT = _build_routing_system_prompt()
+_TEST_TOOLS = [
+    "Task",
+    "TaskOutput",
+    "Bash",
+    "Glob",
+    "Grep",
+    "ExitPlanMode",
+    "Read",
+    "Edit",
+    "Write",
+    "NotebookEdit",
+    "WebFetch",
+    "TodoWrite",
+    "WebSearch",
+    "TaskStop",
+    "AskUserQuestion",
+    "Skill",
 ]
+
+
+def _extract_issue_lines(text: str) -> list[str]:
+    """Extract actionable issue/error lines from CLI output."""
+    if not text:
+        return []
+
+    issue_patterns = [
+        r"\[ERROR\]",
+        r'"type":"error"',
+        r'"authentication_error"',
+        r"\binvalid x-api-key\b",
+        r"\b401\b",
+        r"\bforbidden\b",
+        r"\bunauthorized\b",
+        r"\bexception\b",
+        r"\berror\b",
+    ]
+    combined = re.compile("|".join(issue_patterns), re.IGNORECASE)
+    lines: list[str] = []
+    for raw_line in text.splitlines():
+        line = raw_line.strip()
+        if not combined.search(line):
+            continue
+
+        # Normalize JSON stream lines into concise issue text.
+        if line.startswith("{") and line.endswith("}"):
+            try:
+                payload = json.loads(line)
+                error_name = payload.get("error")
+                message_text = ""
+                nested_message = payload.get("message")
+                if isinstance(nested_message, dict):
+                    content = nested_message.get("content")
+                    if (
+                        isinstance(content, list)
+                        and content
+                        and isinstance(content[0], dict)
+                    ):
+                        message_text = str(content[0].get("text", "")).strip()
+                if error_name or message_text:
+                    concise = f"{error_name or 'error'}: {message_text}".strip()
+                    lines.append(concise.rstrip(": "))
+                    continue
+            except Exception:
+                # Fall back to raw line if JSON parsing fails.
+                pass
+
+        lines.append(line)
+
+    # Deduplicate while preserving order.
+    deduped: list[str] = []
+    seen: set[str] = set()
+    for line in lines:
+        if line in seen:
+            continue
+        seen.add(line)
+        deduped.append(line)
+
+    return deduped[:20]
+
+
+def _capture_cli_failure_context(prompt: str) -> str:
+    """Best-effort direct CLI invocation to capture concise issue lines."""
+    cli_path = shutil.which("claude")
+    if not cli_path:
+        return "(diagnostic skipped: 'claude' binary not found in PATH)"
+
+    user_message = {
+        "type": "user",
+        "session_id": "",
+        "message": {"role": "user", "content": prompt},
+        "parent_tool_use_id": None,
+    }
+    cmd = [
+        cli_path,
+        "--output-format",
+        "stream-json",
+        "--verbose",
+        "--system-prompt",
+        "",
+        "--tools",
+        ",".join(_TEST_TOOLS),
+        "--max-turns",
+        "5",
+        "--max-budget-usd",
+        "0.1",
+        "--setting-sources",
+        "project",
+        "--permission-mode",
+        "default",
+        "--input-format",
+        "stream-json",
+    ]
+    try:
+        result = subprocess.run(
+            cmd,
+            cwd=str(_REPO_ROOT),
+            input=f"{json.dumps(user_message)}\n",
+            text=True,
+            capture_output=True,
+            timeout=15,
+            check=False,
+        )
+    except Exception as error:
+        return f"(diagnostic run failed: {error})"
+
+    stdout_issues = _extract_issue_lines(result.stdout or "")
+    stderr_issues = _extract_issue_lines(result.stderr or "")
+    issues = stdout_issues + [line for line in stderr_issues if line not in stdout_issues]
+
+    if not issues:
+        return (
+            f"diagnostic_return_code={result.returncode}\n"
+            "diagnostic_issues: (none found; no error lines matched)"
+        )
+
+    return (
+        f"diagnostic_return_code={result.returncode}\n"
+        "diagnostic_issues:\n"
+        + "\n".join(f"- {line}" for line in issues)
+    )
 
 
 class SkillSelectionRunner:
     """
-    Runs Claude Code with a system prompt that lists all available skills
-    and asks it to identify which skill(s) to use for a given prompt.
+    Runs Claude Code with all skills installed and intercepts which Skill tool
+    invocation(s) Claude Code makes in response to a user prompt.
 
-    Instead of executing the full skill, we just ask Claude to select and
-    name the skill — keeping token usage and duration minimal.
+    Skills are loaded naturally by Claude Code from .claude/skills/ (which
+    symlink to /skills/). The Skill tool call is intercepted via can_use_tool
+    and denied with interrupt=True so the skill body never executes.
     """
 
-    SELECTION_SYSTEM_PROMPT = """\
-You are an AI assistant with access to these Arize skills:
-
-1. **arize-trace**: INVOKE THIS SKILL when downloading or exporting Arize traces and spans. Covers exporting traces by ID, sessions by ID, and debugging LLM application issues using the ax CLI.
-
-2. **arize-instrumentation**: INVOKE THIS SKILL when adding Arize AX tracing to an application. Follow the Agent-Assisted Tracing two-phase flow: analyze the codebase (read-only), then implement instrumentation after user confirmation.
-
-3. **arize-dataset**: INVOKE THIS SKILL when creating, managing, or querying Arize datasets and examples. Covers dataset CRUD, appending examples, exporting data, and file-based dataset creation using the ax CLI.
-
-4. **arize-experiment**: INVOKE THIS SKILL when creating, running, or analyzing Arize experiments. Covers experiment CRUD, exporting runs, comparing results, and evaluation workflows using the ax CLI.
-
-5. **arize-prompt-optimization**: INVOKE THIS SKILL when optimizing, improving, or debugging LLM prompts using production trace data, evaluations, and annotations.
-
-6. **arize-link**: Generate deep links to traces, spans, and sessions in the Arize UI. Use when the user wants a clickable URL to open a specific trace, span, or session.
-
-Given the user's request, respond with ONLY the skill name(s) you would invoke, one per line. Format:
-SELECTED_SKILL: <skill-name>
-
-If multiple skills are needed, list each on its own line. Do NOT explain your reasoning. Do NOT invoke any tools.
-"""
 
     def __init__(
         self,
@@ -107,43 +289,86 @@ If multiple skills are needed, list each on its own line. Do NOT explain your re
         max_budget_usd: float = 0.10,
     ):
         self.model = model
-        self.options = ClaudeAgentOptions(
-            system_prompt=self.SELECTION_SYSTEM_PROMPT,
-            allowed_tools=[],  # No tools needed for selection
-            permission_mode="bypassPermissions",
-            max_turns=1,
-            max_budget_usd=max_budget_usd,
-            model=model,
-        )
+        self.max_budget_usd = max_budget_usd
 
-    async def select(self, prompt: str) -> tuple[list[str], ResultMessage | None, str]:
-        """Run Claude Code to select which skill(s) match the prompt.
+    @staticmethod
+    async def _prompt_stream(text: str) -> AsyncIterable[dict[str, Any]]:
+        """Wrap a string prompt as the AsyncIterable that streaming mode expects."""
+        yield {
+            "type": "user",
+            "message": {"role": "user", "content": text},
+            "parent_tool_use_id": None,
+            "session_id": "",
+        }
+
+    async def select(
+        self, prompt: str, stop_after: int = 1
+    ) -> tuple[list[str], ResultMessage | None, str]:
+        """Run Claude Code and capture which Skill tool(s) it attempts to invoke.
+
+        stop_after: interrupt the session once this many distinct valid skills
+        have been recorded (use len(expected_skills) from the caller).
 
         Returns (selected_skills, result_message, text_output).
         """
         text_blocks: list[str] = []
+        text_output = ""
         result_message: ResultMessage | None = None
+        selected_skills: list[str] = []
+        stderr_lines: list[str] = []
+        def _capture_stderr(line: str) -> None:
+            stderr_lines.append(line)
 
-        async for message in query(prompt=prompt, options=self.options):
-            if isinstance(message, AssistantMessage):
-                for block in message.content:
-                    if isinstance(block, TextBlock):
-                        text_blocks.append(block.text)
-            elif isinstance(message, ResultMessage):
-                result_message = message
+        # Give more turns for multi-skill prompts so the agent has room to
+        # invoke each skill in sequence.  5 turns per expected skill, min 5.
+        max_turns = max(5, stop_after * 5)
 
+        options = ClaudeAgentOptions(
+            system_prompt=_ROUTING_SYSTEM_PROMPT,
+            permission_mode="default",
+            setting_sources=["project"],
+            # Typical list of tools (to exclude all unknown tools of the tester)
+            tools=_TEST_TOOLS,
+            max_turns=max_turns,
+            max_budget_usd=self.max_budget_usd,
+            model=self.model,
+            cwd=str(_REPO_ROOT),
+            stderr=_capture_stderr,
+            # Don't pollute the user's Claude Code session history with test runs
+            extra_args={"no-session-persistence": None},
+        )
+
+        try:
+            async for message in query(prompt=self._prompt_stream(prompt), options=options):
+                if isinstance(message, AssistantMessage):
+                    for block in message.content:
+                        if isinstance(block, TextBlock):
+                            text_blocks.append(block.text)
+                        if isinstance(block, ToolUseBlock):
+                            if block.name == "Skill":
+                                skill_name = block.input.get("skill", "").strip()
+                                selected_skills.append(skill_name)
+                elif isinstance(message, ResultMessage):
+                    result_message = message
+                # Exit early once we've captured the target number of distinct skills
+                if len(selected_skills) >= stop_after:
+                    break
+        except Exception as e:
+            # If we already captured the skill selection, the exception likely came
+            # from subprocess cleanup after early loop exit — not a real failure.
+            if selected_skills:
+                text_output = "\n".join(text_blocks)
+                return selected_skills, result_message, text_output
+            stderr_text = "\n".join(stderr_lines) if stderr_lines else "(no stderr captured)"
+            diagnostic = ""
+            if not stderr_lines:
+                diagnostic = (
+                    "\n\nCLI direct diagnostic:\n"
+                    f"{_capture_cli_failure_context(prompt)}"
+                )
+            raise type(e)(f"{e}\n\nCLI stderr:\n{stderr_text}{diagnostic}") from e
         text_output = "\n".join(text_blocks)
-
-        # Parse selected skills from output
-        selected = []
-        for line in text_output.splitlines():
-            match = re.search(r"SELECTED_SKILL:\s*(\S+)", line)
-            if match:
-                skill_name = match.group(1).strip().lower()
-                if skill_name in ALL_SKILLS:
-                    selected.append(skill_name)
-
-        return selected, result_message, text_output
+        return selected_skills, result_message, text_output
 
     async def test_prompt(
         self,
@@ -153,7 +378,9 @@ If multiple skills are needed, list each on its own line. Do NOT explain your re
     ) -> SkillSelectionResult:
         """Test a single prompt and return the selection result."""
         wall_start = time.monotonic()
-        selected, result_msg, text_output = await self.select(prompt)
+        selected, result_msg, text_output = await self.select(
+            prompt, stop_after=max(len(expected_skills), 1)
+        )
         wall_end = time.monotonic()
 
         # Check correctness: selected must match expected (order-independent)

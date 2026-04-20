@@ -131,6 +131,15 @@ async def run_streaming(
     options = ClaudeAgentOptions(
         system_prompt=system_prompt,
         allowed_tools=["Bash", "Read", "Write", "Edit", "Glob", "Grep"],
+        # bypassPermissions is safe here because:
+        #   1. The agent runs in a temporary workspace (tempfile.mkdtemp) that is
+        #      cleaned up after execution.
+        #   2. Dangerous bash commands (rm -rf, curl, etc.) are blocked via the
+        #      Claude Code settings.json denylist — see the README warning.
+        #   3. Arize credentials are passed explicitly via `env`; no production
+        #      secrets leak through the ambient environment.
+        # WARNING: Do NOT use bypassPermissions without a properly configured
+        # settings.json. See README for required restrictions.
         permission_mode="bypassPermissions",
         cwd=workspace,
         env=arize_env,
@@ -205,6 +214,9 @@ Examples:
   python tests/run_skill.py arize-dataset "Create a dataset named test-data with 5 examples"
   python tests/run_skill.py arize-link "Get a link to trace abc123" --output-dir sessions/
   python tests/run_skill.py arize-trace "Debug my app" --model claude-sonnet-4-6
+  python tests/run_skill.py arize-evaluator "Create a hallucination evaluator for my-app"
+  python tests/run_skill.py arize-annotation "Create a thumbs-up/thumbs-down annotation config"
+  python tests/run_skill.py arize-ai-provider-integration "List all my AI provider integrations"
 """,
     )
     parser.add_argument("skill", help="Skill name (e.g. arize-trace, arize-dataset)")

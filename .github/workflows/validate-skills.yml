@@ -1,12 +1,11 @@
 name: Validate Skills
 
 on:
-  push:
+  pull_request:
     paths:
       - "skills/**"
       - "scripts/**"
       - ".github/workflows/validate-skills.yml"
-  pull_request:
 
 jobs:
   validate:

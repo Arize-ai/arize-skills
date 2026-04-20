@@ -119,6 +119,54 @@ SPECIFIC_PROMPTS = [
         ["arize-link"],
         ["specific", "link"],
     ),
+    # arize-evaluator
+    (
+        "Create an LLM-as-judge evaluator for hallucination detection",
+        ["arize-evaluator"],
+        ["specific", "evaluator"],
+    ),
+    (
+        "Run an evaluation task on my project spans using GPT-4",
+        ["arize-evaluator"],
+        ["specific", "evaluator"],
+    ),
+    (
+        "Set up continuous monitoring with an LLM judge on new spans",
+        ["arize-evaluator"],
+        ["specific", "evaluator"],
+    ),
+    # arize-annotation
+    (
+        "Create an annotation config for correctness labels",
+        ["arize-annotation"],
+        ["specific", "annotation"],
+    ),
+    (
+        "Add human feedback labels to my project spans using the Python SDK",
+        ["arize-annotation"],
+        ["specific", "annotation"],
+    ),
+    (
+        "Set up a categorical annotation config with pass/fail labels",
+        ["arize-annotation"],
+        ["specific", "annotation"],
+    ),
+    # arize-ai-provider-integration
+    (
+        "Register my OpenAI API key as an Arize AI integration",
+        ["arize-ai-provider-integration"],
+        ["specific", "ai-provider-integration"],
+    ),
+    (
+        "List all AI integrations in my Arize space",
+        ["arize-ai-provider-integration"],
+        ["specific", "ai-provider-integration"],
+    ),
+    (
+        "Create an Anthropic integration in Arize for my evaluators",
+        ["arize-ai-provider-integration"],
+        ["specific", "ai-provider-integration"],
+    ),
 ]
 
 # Single-skill: vague/ambiguous prompts (harder to route correctly)
@@ -199,34 +247,38 @@ VAGUE_PROMPTS = [
         ["arize-link"],
         ["vague", "link"],
     ),
-]
-
-# Multi-skill: prompts that should trigger multiple skills
-MULTI_SKILL_PROMPTS = [
+    # Should route to evaluator
     (
-        "Export my traces, then create a dataset from the error cases",
-        ["arize-trace", "arize-dataset"],
-        ["multi", "trace", "dataset"],
+        "I want to automatically score my LLM responses for quality",
+        ["arize-evaluator"],
+        ["vague", "evaluator"],
     ),
     (
-        "Set up tracing for my app and then run an experiment to evaluate it",
-        ["arize-instrumentation", "arize-experiment"],
-        ["multi", "instrumentation", "experiment"],
+        "Can you judge whether my model outputs are correct?",
+        ["arize-evaluator"],
+        ["vague", "evaluator"],
+    ),
+    # Should route to annotation
+    (
+        "I need human reviewers to label my model outputs",
+        ["arize-annotation"],
+        ["vague", "annotation"],
     ),
     (
-        "Download the experiment results and use them to optimize my prompt",
-        ["arize-experiment", "arize-prompt-optimization"],
-        ["multi", "experiment", "prompt-optimization"],
+        "Set up a labeling schema so my team can rate responses",
+        ["arize-annotation"],
+        ["vague", "annotation"],
+    ),
+    # Should route to ai-provider-integration
+    (
+        "I want Arize to use my LLM provider credentials for evaluations",
+        ["arize-ai-provider-integration"],
+        ["vague", "ai-provider-integration"],
     ),
     (
-        "Export the traces, analyze the failures, and give me a link to the worst one",
-        ["arize-trace", "arize-link"],
-        ["multi", "trace", "link"],
-    ),
-    (
-        "Create a dataset from my traces and run an experiment on it",
-        ["arize-dataset", "arize-experiment"],
-        ["multi", "dataset", "experiment"],
+        "Connect my AWS Bedrock account to Arize",
+        ["arize-ai-provider-integration"],
+        ["vague", "ai-provider-integration"],
     ),
 ]
 
@@ -366,34 +418,6 @@ class TestVaguePrompts:
             f"for prompt: {prompt}"
         )
 
-
-class TestMultiSkillPrompts:
-    """Test prompts that should trigger multiple skills."""
-
-    @pytest.mark.asyncio
-    @pytest.mark.parametrize(
-        "prompt,expected_skills,tags", MULTI_SKILL_PROMPTS
-    )
-    async def test_multi_skill_prompt(
-        self,
-        selection_runner,
-        selection_results,
-        prompt,
-        expected_skills,
-        tags,
-    ):
-        result = await selection_runner.test_prompt(
-            prompt, expected_skills, tags
-        )
-        selection_results.append(result)
-        # For multi-skill, check that all expected skills are selected
-        # (may have additional skills — that's ok)
-        expected_set = set(expected_skills)
-        selected_set = set(result.selected_skills)
-        assert expected_set.issubset(selected_set), (
-            f"Expected at least {expected_skills}, got {result.selected_skills} "
-            f"for prompt: {prompt}"
-        )
 
 
 class TestNegativePrompts:

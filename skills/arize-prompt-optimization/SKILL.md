@@ -1,9 +1,11 @@
 ---
 name: arize-prompt-optimization
-description: "INVOKE THIS SKILL when optimizing, improving, or debugging LLM prompts using production trace data, evaluations, and annotations. Covers extracting prompts from spans, gathering performance signal, and running a data-driven optimization loop using the ax CLI."
+description: "INVOKE THIS SKILL when optimizing, improving, or debugging LLM prompts using production trace data, evaluations, and annotations. Also use when the user wants to make their AI respond better or improve AI output quality. Covers extracting prompts from spans, gathering performance signal, and running a data-driven optimization loop using the ax CLI."
 ---
 
 # Arize Prompt Optimization Skill
+
+> **`SPACE`** — All `--space` flags and the `ARIZE_SPACE` env var accept a space **name** (e.g., `my-workspace`) or a base64 space **ID** (e.g., `U3BhY2U6...`). Find yours with `ax spaces list`.
 
 ## Concepts
 
@@ -46,78 +48,39 @@ These columns carry the feedback data used for optimization:
 
 ## Prerequisites
 
-Three things are needed: `ax` CLI, an API key (env var or profile), and a project. A space ID is also needed when using project names.
+Proceed directly with the task — run the `ax` command you need. Do NOT check versions, env vars, or profiles upfront.
 
-### Install ax
-
-Verify `ax` is installed and working before proceeding:
-
-1. Check if `ax` is on PATH: `command -v ax` (Unix) or `where ax` (Windows)
-2. If not found, check common install locations:
-   - macOS/Linux: `test -x ~/.local/bin/ax && export PATH="$HOME/.local/bin:$PATH"`
-   - Windows: check `%APPDATA%\Python\Scripts\ax.exe` or `%LOCALAPPDATA%\Programs\Python\Scripts\ax.exe`
-3. If still not found, install it (requires shell access to install packages):
-   - Preferred: `uv tool install arize-ax-cli`
-   - Alternative: `pipx install arize-ax-cli`
-   - Fallback: `pip install arize-ax-cli`
-4. After install, if `ax` is not on PATH:
-   - macOS/Linux: `export PATH="$HOME/.local/bin:$PATH"`
-   - Windows (PowerShell): `$env:PATH = "$env:APPDATA\Python\Scripts;$env:PATH"`
-5. If `ax --version` fails with an SSL/certificate error:
-   - macOS: `export SSL_CERT_FILE=/etc/ssl/cert.pem`
-   - Linux: `export SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt`
-   - Windows (PowerShell): `$env:SSL_CERT_FILE = "C:\Program Files\Common Files\SSL\cert.pem"` (or use `python -c "import certifi; print(certifi.where())"` to find the cert bundle)
-6. `ax --version` must succeed before proceeding. If it doesn't, stop and ask the user for help.
-
-### Verify environment
-
-Run a quick check for credentials:
-
-**macOS/Linux (bash):**
-```bash
-ax --version && echo "--- env ---" && if [ -n "$ARIZE_API_KEY" ]; then echo "ARIZE_API_KEY: (set)"; else echo "ARIZE_API_KEY: (not set)"; fi && echo "ARIZE_SPACE_ID: ${ARIZE_SPACE_ID:-(not set)}" && echo "ARIZE_DEFAULT_PROJECT: ${ARIZE_DEFAULT_PROJECT:-(not set)}" && echo "--- profiles ---" && ax profiles show 2>&1
-```
-
-**Windows (PowerShell):**
-```powershell
-ax --version; Write-Host "--- env ---"; Write-Host "ARIZE_API_KEY: $(if ($env:ARIZE_API_KEY) { '(set)' } else { '(not set)' })"; Write-Host "ARIZE_SPACE_ID: $env:ARIZE_SPACE_ID"; Write-Host "ARIZE_DEFAULT_PROJECT: $env:ARIZE_DEFAULT_PROJECT"; Write-Host "--- profiles ---"; ax profiles show 2>&1
-```
-
-**Read the output and proceed immediately** if either the env var or the profile has an API key. Only ask the user if **both** are missing. Resolve failures:
-
-- No API key in env **and** no profile → **AskQuestion**: "Arize API key (https://app.arize.com/admin > API Keys)"
-- Space ID unknown → **AskQuestion**, or run `ax projects list -o json --limit 100` and search for a match
-- Project unclear → ask, or run `ax projects list -o json --limit 100` and present as selectable options
-
-### Default Project
-
-If `ARIZE_DEFAULT_PROJECT` is set (visible in the output above), use its value as the project for **all** commands in this session. Do NOT ask the user for a project ID -- just use it. Continue using this default until the user explicitly provides a different project.
-
-If `ARIZE_DEFAULT_PROJECT` is not set and no project is provided, ask the user for one.
+If an `ax` command fails, troubleshoot based on the error:
+- `command not found` or version error → see references/ax-setup.md
+- `401 Unauthorized` / missing API key → run `ax profiles show` to inspect the current profile. If the profile is missing or the API key is wrong, follow references/ax-profiles.md to create/update it. If the user doesn't have their key, direct them to https://app.arize.com/admin > API Keys
+- Space unknown → run `ax spaces list` to pick by name, or ask the user
+- Project unclear → ask the user, or run `ax projects list -o json --limit 100` and present as selectable options
+- LLM provider call fails (missing OPENAI_API_KEY / ANTHROPIC_API_KEY) → run `ax ai-integrations list --space SPACE` to check for platform-managed credentials. If none exist, ask the user to provide the key or create an integration via the **arize-ai-provider-integration** skill
+- **Security:** Never read `.env` files or search the filesystem for credentials. Use `ax profiles` for Arize credentials and `ax ai-integrations` for LLM provider keys. If credentials are not available through these channels, ask the user.
 
 ## Phase 1: Extract the Current Prompt
 
 ### Find LLM spans containing prompts
 
 ```bash
-# List LLM spans (where prompts live)
-ax spans list PROJECT_ID --filter "attributes.openinference.span.kind = 'LLM'" --limit 10
+# Sample LLM spans (where prompts live)
+ax spans export PROJECT --filter "attributes.openinference.span.kind = 'LLM'" -l 10 --stdout
 
 # Filter by model
-ax spans list PROJECT_ID --filter "attributes.llm.model_name = 'gpt-4o'" --limit 10
+ax spans export PROJECT --filter "attributes.llm.model_name = 'gpt-4o'" -l 10 --stdout
 
 # Filter by span name (e.g., a specific LLM call)
-ax spans list PROJECT_ID --filter "name = 'ChatCompletion'" --limit 10
+ax spans export PROJECT --filter "name = 'ChatCompletion'" -l 10 --stdout
 ```
 
 ### Export a trace to inspect prompt structure
 
 ```bash
 # Export all spans in a trace
-ax spans export --trace-id TRACE_ID --project PROJECT_ID
+ax spans export PROJECT --trace-id TRACE_ID
 
 # Export a single span
-ax spans export --span-id SPAN_ID --project PROJECT_ID
+ax spans export PROJECT --span-id SPAN_ID
 ```
 
 ### Extract prompts from exported JSON
@@ -158,33 +121,33 @@ If the span has `attributes.llm.prompt_template.template`, the prompt uses varia
 
 ```bash
 # Find error spans -- these indicate prompt failures
-ax spans list PROJECT_ID \
+ax spans export PROJECT \
   --filter "status_code = 'ERROR' AND attributes.openinference.span.kind = 'LLM'" \
-  --limit 20
+  -l 20 --stdout
 
 # Find spans with low eval scores
-ax spans list PROJECT_ID \
+ax spans export PROJECT \
   --filter "annotation.correctness.label = 'incorrect'" \
-  --limit 20
+  -l 20 --stdout
 
 # Find spans with high latency (may indicate overly complex prompts)
-ax spans list PROJECT_ID \
+ax spans export PROJECT \
   --filter "attributes.openinference.span.kind = 'LLM' AND latency_ms > 10000" \
-  --limit 20
+  -l 20 --stdout
 
 # Export error traces for detailed inspection
-ax spans export --trace-id TRACE_ID --project PROJECT_ID
+ax spans export PROJECT --trace-id TRACE_ID
 ```
 
 ### From datasets and experiments
 
 ```bash
 # Export a dataset (ground truth examples)
-ax datasets export DATASET_ID
+ax datasets export DATASET_NAME --space SPACE
 # -> dataset_*/examples.json
 
 # Export experiment results (what the LLM produced)
-ax experiments export EXPERIMENT_ID
+ax experiments export EXPERIMENT_NAME --dataset DATASET_NAME --space SPACE
 # -> experiment_*/runs.json
 ```
 
@@ -347,7 +310,7 @@ After the LLM returns the revised messages array:
 ```
 1. Extract prompt    -> Phase 1 (once)
 2. Run experiment    -> ax experiments create ...
-3. Export results    -> ax experiments export EXPERIMENT_ID
+3. Export results    -> ax experiments export EXPERIMENT_NAME --dataset DATASET_NAME --space SPACE
 4. Analyze failures  -> jq to find low scores
 5. Run meta-prompt   -> Phase 3 with new failure data
 6. Apply revised prompt
@@ -412,11 +375,11 @@ When optimizing prompts that use template variables:
 
 1. Find failing traces:
    ```bash
-   ax traces list PROJECT_ID --filter "status_code = 'ERROR'" --limit 5
+   ax traces list PROJECT --filter "status_code = 'ERROR'" --limit 5
    ```
 2. Export the trace:
    ```bash
-   ax spans export --trace-id TRACE_ID --project PROJECT_ID
+   ax spans export PROJECT --trace-id TRACE_ID
    ```
 3. Extract the prompt from the LLM span:
    ```bash
@@ -435,13 +398,13 @@ When optimizing prompts that use template variables:
 
 1. Find the dataset and experiment:
    ```bash
-   ax datasets list
-   ax experiments list --dataset-id DATASET_ID
+   ax datasets list --space SPACE
+   ax experiments list --dataset DATASET_NAME --space SPACE
    ```
 2. Export both:
    ```bash
-   ax datasets export DATASET_ID
-   ax experiments export EXPERIMENT_ID
+   ax datasets export DATASET_NAME --space SPACE
+   ax experiments export EXPERIMENT_NAME --dataset DATASET_NAME --space SPACE
    ```
 3. Prepare the joined data for the meta-prompt
 4. Run the optimization meta-prompt
@@ -451,9 +414,9 @@ When optimizing prompts that use template variables:
 
 1. Export spans where the output format is wrong:
    ```bash
-   ax spans list PROJECT_ID \
+   ax spans export PROJECT \
      --filter "attributes.openinference.span.kind = 'LLM' AND annotation.format.label = 'incorrect'" \
-     --limit 10 -o json > bad_format.json
+     -l 10 --stdout > bad_format.json
    ```
 2. Look at what the LLM is producing vs what was expected
 3. Add explicit format instructions to the prompt (JSON schema, examples, delimiters)
@@ -463,13 +426,13 @@ When optimizing prompts that use template variables:
 
 1. Find traces where the model hallucinated:
    ```bash
-   ax spans list PROJECT_ID \
+   ax spans export PROJECT \
      --filter "annotation.faithfulness.label = 'unfaithful'" \
-     --limit 20
+     -l 20 --stdout
    ```
 2. Export and inspect the retriever + LLM spans together:
    ```bash
-   ax spans export --trace-id TRACE_ID --project PROJECT_ID
+   ax spans export PROJECT --trace-id TRACE_ID
    jq '[.[] | {kind: .attributes.openinference.span.kind, name, input: .attributes.input.value, output: .attributes.output.value}]' trace_*/spans.json
    ```
 3. Check if the retrieved context actually contained the answer
@@ -479,8 +442,8 @@ When optimizing prompts that use template variables:
 
 | Problem | Solution |
 |---------|----------|
-| `ax: command not found` | **macOS/Linux:** check `~/.local/bin/ax`. **Windows:** check if `ax` is on PATH. If missing: `uv tool install arize-ax-cli` (requires shell access to install packages) |
-| `No profile found` | Create `~/.arize/config.toml` with `api_key = "${ARIZE_API_KEY}"` (see Prerequisites) |
+| `ax: command not found` | See references/ax-setup.md |
+| `No profile found` | No profile is configured. See references/ax-profiles.md to create one. |
 | No `input_messages` on span | Check span kind -- Chain/Agent spans store prompts on child LLM spans, not on themselves |
 | Prompt template is `null` | Not all instrumentations emit `prompt_template`. Use `input_messages` or `input.value` instead |
 | Variables lost after optimization | Verify the revised prompt preserves all `{var}` placeholders from the original |
