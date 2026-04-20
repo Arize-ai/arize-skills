@@ -22,9 +22,11 @@ Proceed directly with the task — run the `ax` command you need. Do NOT check v
 
 If an `ax` command fails, troubleshoot based on the error:
 - `command not found` or version error → see references/ax-setup.md
-- `401 Unauthorized` / missing API key → run `ax profiles show` to inspect the current profile. If the profile is missing or the API key is wrong: check `.env` for `ARIZE_API_KEY` and use it to create/update the profile via references/ax-profiles.md. If `.env` has no key either, ask the user for their Arize API key (https://app.arize.com/admin > API Keys)
-- Space unknown → check `.env` for `ARIZE_SPACE` (name or ID), or run `ax spaces list` to pick by name, or ask the user
-- Project unclear → check `.env` for `ARIZE_DEFAULT_PROJECT`, or ask, or run `ax projects list -o json --limit 100` and present as selectable options
+- `401 Unauthorized` / missing API key → run `ax profiles show` to inspect the current profile. If the profile is missing or the API key is wrong, follow references/ax-profiles.md to create/update it. If the user doesn't have their key, direct them to https://app.arize.com/admin > API Keys
+- Space unknown → run `ax spaces list` to pick by name, or ask the user
+- Project unclear → ask the user, or run `ax projects list -o json --limit 100` and present as selectable options
+- **Security:** Never read `.env` files or search the filesystem for credentials. Use `ax profiles` for Arize credentials and `ax ai-integrations` for LLM provider keys. If credentials are not available through these channels, ask the user.
+- **CRITICAL — Never fabricate outputs:** When running an experiment, you MUST call the real model API specified by the user for every dataset example. Never fabricate, simulate, or hardcode model outputs, latencies, or evaluation scores. If you cannot call the API (missing SDK, missing credentials, network error), stop and tell the user what is needed before proceeding.
 
 ## List Experiments: `ax experiments list`
 
@@ -236,14 +238,84 @@ At least one of `label`, `score`, or `explanation` should be present per evaluat
    ```bash
    ax datasets export DATASET_NAME --space SPACE
    ```
-3. Process each example through your system, collecting outputs and evaluations
-4. Build a runs file (JSON array) with `example_id`, `output`, and optional `evaluations`:
-   ```json
-   [
-     {"example_id": "ex_001", "output": "4", "evaluations": {"correctness": {"label": "correct", "score": 1.0}}},
-     {"example_id": "ex_002", "output": "Paris", "evaluations": {"correctness": {"label": "correct", "score": 1.0}}}
-   ]
+3. Call the real model API for each example and collect outputs. Use `ax datasets export --stdout` to pipe examples directly into an inference script:
+
+   ```bash
+   ax datasets export DATASET_NAME --space SPACE --stdout | python3 infer.py > runs.json
    ```
+
+   Write `infer.py` to read examples from stdin, call the target model, and write runs JSON to stdout. The script below is a template — first inspect the exported dataset JSON to find the correct input field name, then uncomment the provider block the user wants:
+
+   ```python
+   import json, sys, time
+
+   examples = json.load(sys.stdin)
+   runs = []
+
+   for ex in examples:
+       # Inspect the exported JSON to find the right field (e.g. "input", "question", "prompt")
+       user_input = ex.get("input") or ex.get("question") or ex.get("prompt") or str(ex)
+
+       start = time.time()
+
+       # === CALL THE REAL MODEL API HERE — never fabricate or simulate ===
+       # Uncomment and adapt the provider block the user requested:
+       #
+       # OpenAI (pip install openai  — uses OPENAI_API_KEY env var):
+       #   from openai import OpenAI
+       #   resp = OpenAI().chat.completions.create(
+       #       model="gpt-4o",
+       #       messages=[{"role": "user", "content": user_input}]
+       #   )
+       #   output_text = resp.choices[0].message.content
+       #
+       # Anthropic (pip install anthropic  — uses ANTHROPIC_API_KEY env var):
+       #   import anthropic
+       #   resp = anthropic.Anthropic().messages.create(
+       #       model="claude-sonnet-4-6", max_tokens=1024,
+       #       messages=[{"role": "user", "content": user_input}]
+       #   )
+       #   output_text = resp.content[0].text
+       #
+       # Google Gemini (pip install google-genai  — uses GOOGLE_API_KEY env var):
+       #   from google import genai
+       #   resp = genai.Client().models.generate_content(
+       #       model="gemini-2.5-pro", contents=user_input
+       #   )
+       #   output_text = resp.text
+       #
+       # Custom / OpenAI-compatible proxy (pip install openai — uses CUSTOM_BASE_URL + CUSTOM_API_KEY env vars):
+       # Use this for Azure OpenAI, NVIDIA NIM, local Ollama, or any OpenAI-compatible endpoint,
+       # including a test integration proxy. Matches the `custom` provider in `ax ai-integrations create`.
+       #   import os
+       #   from openai import OpenAI
+       #   resp = OpenAI(
+       #       base_url=os.environ["CUSTOM_BASE_URL"],          # e.g. https://my-proxy.example.com/v1
+       #       api_key=os.environ.get("CUSTOM_API_KEY", "none"),
+       #   ).chat.completions.create(
+       #       model=os.environ.get("CUSTOM_MODEL", "default"),
+       #       messages=[{"role": "user", "content": user_input}]
+       #   )
+       #   output_text = resp.choices[0].message.content
+
+       latency_ms = round((time.time() - start) * 1000)
+       runs.append({
+           "example_id": ex["id"],
+           "output": output_text,
+           "metadata": {"model": "MODEL_NAME", "latency_ms": latency_ms}
+       })
+       print(f"  {ex['id']}: {latency_ms}ms", file=sys.stderr)
+
+   json.dump(runs, sys.stdout, indent=2)
+   ```
+
+   **Before running:** install the provider SDK (`pip install openai` / `anthropic` / `google-genai`) and ensure the API key is set as an environment variable in your shell. If you cannot access the API, stop and tell the user what is needed.
+
+4. Verify the runs file:
+   ```bash
+   python3 -c "import json; runs=json.load(open('runs.json')); print(f'{len(runs)} runs'); print(json.dumps(runs[0], indent=2))"
+   ```
+   Each run must have `example_id` and `output`. Optional fields: `evaluations`, `metadata`.
 5. Create the experiment:
    ```bash
    ax experiments create --name "gpt-4o-baseline" --dataset DATASET_NAME --space SPACE --file runs.json
