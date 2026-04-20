@@ -282,6 +282,20 @@ At least one of `label`, `score`, or `explanation` should be present per evaluat
        #       model="gemini-2.5-pro", contents=user_input
        #   )
        #   output_text = resp.text
+       #
+       # Custom / OpenAI-compatible proxy (pip install openai — uses CUSTOM_BASE_URL + CUSTOM_API_KEY env vars):
+       # Use this for Azure OpenAI, NVIDIA NIM, local Ollama, or any OpenAI-compatible endpoint,
+       # including a test integration proxy. Matches the `custom` provider in `ax ai-integrations create`.
+       #   import os
+       #   from openai import OpenAI
+       #   resp = OpenAI(
+       #       base_url=os.environ["CUSTOM_BASE_URL"],          # e.g. https://my-proxy.example.com/v1
+       #       api_key=os.environ.get("CUSTOM_API_KEY", "none"),
+       #   ).chat.completions.create(
+       #       model=os.environ.get("CUSTOM_MODEL", "default"),
+       #       messages=[{"role": "user", "content": user_input}]
+       #   )
+       #   output_text = resp.choices[0].message.content
 
        latency_ms = round((time.time() - start) * 1000)
        runs.append({
