@@ -25,7 +25,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: Arize-ai/awesome-copilot
-          # token: ${{ secrets.AWESOME_COPILOT_PAT }}
+          token: ${{ secrets.GITHUB_TOKEN }}
           path: awesome-copilot
           ref: staged
 
