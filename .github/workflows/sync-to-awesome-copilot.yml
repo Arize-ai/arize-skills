@@ -64,8 +64,8 @@ jobs:
       - name: Create or update PR
         if: steps.changes.outputs.has_changes == 'true'
         working-directory: awesome-copilot
-        # env:
-          # GH_TOKEN: ${{ secrets.SKILLS_PUSH_TO_AWESOME_COPILOT }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           # Check if a PR already exists from this branch
           EXISTING_PR=$(gh pr list \
