@@ -25,7 +25,7 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
         with:
           repository: Arize-ai/awesome-copilot
-          token: ${{ secrets.SKILLS_PUSH_TO_AWESOME_COPILOT }}
+          # token: ${{ secrets.SKILLS_PUSH_TO_AWESOME_COPILOT }}
           path: awesome-copilot
           ref: staged
 
@@ -65,7 +65,7 @@ jobs:
         if: steps.changes.outputs.has_changes == 'true'
         working-directory: awesome-copilot
         env:
-          GH_TOKEN: ${{ secrets.SKILLS_PUSH_TO_AWESOME_COPILOT }}
+          # GH_TOKEN: ${{ secrets.SKILLS_PUSH_TO_AWESOME_COPILOT }}
         run: |
           # Check if a PR already exists from this branch
           EXISTING_PR=$(gh pr list \
