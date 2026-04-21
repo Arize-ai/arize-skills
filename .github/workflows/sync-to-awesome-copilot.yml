@@ -15,16 +15,7 @@ permissions:
 jobs:
   sync-skills:
     runs-on: ubuntu-latest
-    steps:
-      - name: Verify Secret
-        env:
-          MY_SECRET: ${{ secrets.SKILLS_PUSH_TO_AWESOME_COPILOT }}
-        run: |
-          if [ -z "$MY_SECRET" ]; then
-            echo "Secret is missing or empty"
-            exit 1
-          fi
-          
+    steps:          
       - name: Checkout arize-skills
         uses: actions/checkout@v4
         with:
@@ -34,7 +25,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: Arize-ai/awesome-copilot
-          token: ${{ secrets.SKILLS_PUSH_TO_AWESOME_COPILOT }}
+          # token: ${{ secrets.SKILLS_PUSH_TO_AWESOME_COPILOT }}
           path: awesome-copilot
           ref: staged
 
