@@ -17,12 +17,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:          
       - name: Checkout arize-skills
-        uses: actions/checkout@v4
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
         with:
           path: arize-skills
 
       - name: Checkout awesome-copilot fork
-        uses: actions/checkout@v4
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
         with:
           repository: Arize-ai/awesome-copilot
           # token: ${{ secrets.SKILLS_PUSH_TO_AWESOME_COPILOT }}
