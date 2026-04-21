@@ -388,6 +388,7 @@ ax experiments export EXPERIMENT_NAME --dataset DATASET_NAME --space SPACE --std
 ## Related Skills
 
 - **arize-dataset**: Create or export the dataset this experiment runs against → use `arize-dataset` first
+- **arize-prompts**: Store and version the prompt template in Prompt Hub (`ax prompts`) before or after experiments
 - **arize-prompt-optimization**: Use experiment results to improve prompts → next step is `arize-prompt-optimization`
 - **arize-trace**: Inspect individual span traces for failing experiment runs → use `arize-trace`
 - **arize-link**: Generate clickable UI links to traces from experiment runs → use `arize-link`
