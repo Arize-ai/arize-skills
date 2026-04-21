@@ -16,6 +16,15 @@ jobs:
   sync-skills:
     runs-on: ubuntu-latest
     steps:
+      - name: Verify Secret
+        env:
+          MY_SECRET: ${{ secrets.SKILLS_PUSH_TO_AWESOME_COPILOT }}
+        run: |
+          if [ -z "$MY_SECRET" ]; then
+            echo "Secret is missing or empty"
+            exit 1
+          fi
+          
       - name: Checkout arize-skills
         uses: actions/checkout@v4
         with:
