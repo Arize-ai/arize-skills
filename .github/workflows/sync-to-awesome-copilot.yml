@@ -1,0 +1,91 @@
+name: Sync Skills to awesome-copilot
+
+on:
+  # schedule:
+  #   - cron: "0 9 * * 1" # Weekly on Mondays at 9:00 UTC
+  workflow_dispatch: # Allow manual trigger
+
+permissions:
+  contents: read
+
+jobs:
+  sync-skills:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout arize-skills
+        uses: actions/checkout@v4
+        with:
+          path: arize-skills
+
+      - name: Checkout awesome-copilot fork
+        uses: actions/checkout@v4
+        with:
+          repository: Arize-ai/awesome-copilot
+          # token: ${{ secrets.AWESOME_COPILOT_PAT }}
+          path: awesome-copilot
+          ref: staged
+
+      - name: Copy skills to awesome-copilot
+        run: |
+          for skill_dir in arize-skills/skills/*/; do
+            skill_name=$(basename "$skill_dir")
+            rm -rf "awesome-copilot/skills/$skill_name"
+            cp -r "$skill_dir" "awesome-copilot/skills/$skill_name"
+          done
+
+      - name: Check for changes
+        id: changes
+        working-directory: awesome-copilot
+        run: |
+          git add -A
+          if git diff --cached --quiet; then
+            echo "has_changes=false" >> "$GITHUB_OUTPUT"
+            echo "No changes detected."
+          else
+            echo "has_changes=true" >> "$GITHUB_OUTPUT"
+            echo "Changes detected:"
+            git diff --cached --stat
+          fi
+
+      - name: Commit and push changes
+        if: steps.changes.outputs.has_changes == 'true'
+        working-directory: awesome-copilot
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git checkout -B sync/arize-skills
+          git commit -m "chore: sync Arize skills from arize-skills repo"
+          git push --force origin sync/arize-skills
+
+      - name: Create or update PR
+        if: steps.changes.outputs.has_changes == 'true'
+        working-directory: awesome-copilot
+        # env:
+        #   GH_TOKEN: ${{ secrets.AWESOME_COPILOT_PAT }}
+        run: |
+          # Check if a PR already exists from this branch
+          EXISTING_PR=$(gh pr list \
+            --repo github/awesome-copilot \
+            --head "Arize-ai:sync/arize-skills" \
+            --base staged \
+            --state open \
+            --json number \
+            --jq '.[0].number // empty')
+
+          if [ -n "$EXISTING_PR" ]; then
+            echo "PR #$EXISTING_PR already exists and has been updated by the push."
+          else
+            gh pr create \
+              --repo github/awesome-copilot \
+              --head "Arize-ai:sync/arize-skills" \
+              --base staged \
+              --title "chore: sync Arize skills" \
+              --body "$(cat <<'EOF'
+          ## Summary
+          Automated sync of Arize skills from [arize-skills](https://github.com/Arize-ai/arize-skills).
+
+          This PR was created automatically by a GitHub Action.
+          EOF
+              )"
+            echo "PR created successfully."
+          fi
