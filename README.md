@@ -208,6 +208,22 @@ For interactive setup, `ax profiles create` also offers **Advanced → Single en
 
 ## Testing Skills
 
+`fixtures/financial_agent/` is a tiny sample app (Anthropic Messages API only) you can reuse when trying tracing or evaluator flows against a stable codebase.
+
+```bash
+cd fixtures/financial_agent
+python -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+export ANTHROPIC_API_KEY=sk-ant-...
+python app.py "Is a high-yield savings account enough for an emergency fund?"
+```
+
+`tests/test_skill_import_sandbox.py` spins up the Claude Agent SDK against a **throwaway** directory: it copies `skills/arize-link` into that workspace's `.claude/skills/`, enables Claude Code bash sandboxing, and checks that the Skill tool loads without session errors. Requires `ANTHROPIC_API_KEY` (and the same Claude Code CLI the other SDK tests use).
+
+```bash
+cd tests && pytest test_skill_import_sandbox.py -v --timeout=120
+```
+
 `tests/run_skill.py` is an interactive test harness that runs a skill end-to-end using the Claude Agent SDK. It creates a temporary workspace, passes in your Arize credentials, and streams the agent's output.
 
 ```bash
