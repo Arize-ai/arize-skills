@@ -1,6 +1,6 @@
 ---
 name: arize-prompts
-description: "INVOKE THIS SKILL for Arize Prompt Hub and `ax prompts` workflows: Workflow A–B author or import templates and save, Workflow C label/promote, Workflow D list/get/edit description/new-version/delete/duplicate. Use when the user mentions ax prompts, Prompt Hub, creating/editing/duplicating/deleting a prompt, saving or pushing prompt template text, syncing from code, `{variable}` placeholders, or production/staging labels. For improving prompt text using traces or eval scores, use arize-prompt-optimization. For running experiments on prompts, use arize-experiment."
+description: "INVOKE THIS SKILL for Arize Prompt Hub and `ax prompts` workflows: author or import templates and save (Workflows A–B), label/promote (C), or list/get/edit/delete/duplicate (D). Use when the user mentions ax prompts, Prompt Hub, creating/editing/saving a prompt, `{variable}` placeholders, or production/staging labels. For improving prompt text using traces or eval scores, use arize-prompt-optimization. For running experiments, use arize-experiment."
 ---
 
 # Arize Prompts Skill
@@ -83,6 +83,7 @@ Hub prompts are templates: the stored strings matter. When the user asks to crea
 - Asking "What should this prompt do?" instead of asking for the literal template
 - Process narration like "checking the prompts skill and your open file…" — go straight to elicitation
 - Omitting `--provider` or `--model` from any proposed command
+- **Deferring to another agent** (e.g. pointing users at a “Playground Agent” for extra patterns) instead of finishing with Workflows A–D — stay within this skill and the official doc links at the top
 
 **Optional starter:** Only if the user explicitly asks for a draft or example, offer a short labeled starter they can replace — still elicit their real template afterward.
 

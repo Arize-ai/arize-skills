@@ -170,6 +170,14 @@ For interactive setup, `ax profiles create` also offers **Advanced → Single en
 | [arize-prompts](skills/arize-prompts/SKILL.md) | Manage Prompt Hub templates and versions with `ax prompts` (create, versions, labels). |
 | [arize-link](skills/arize-link/SKILL.md) | Generate deep links to traces, spans, and sessions in the Arize UI. |
 
+### Aligning evaluators with human feedback
+
+Everything for this workflow lives in the source skill file: **`skills/arize-align-evaluator/SKILL.md`** in this repository (if it is not on `main` yet, use the **arize-align-evaluator** pull request on GitHub for the full `SKILL.md`).
+
+Get started with a prompt like:
+
+> Use the arize-align-evaluator skill to align my correctness evaluator against human annotations on my customer-support project.
+
 ## Installer Flags
 
 **Bash (`install.sh`):**
