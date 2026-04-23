@@ -1,6 +1,6 @@
 ---
 name: arize-prompts
-description: "INVOKE THIS SKILL for Arize Prompt Hub and `ax prompts` workflows: author or elicit prompt templates, save to Hub, iterate versions, promote labels, and manage prompts (edit description or messages, duplicate via get+create, delete). Use when the user mentions ax prompts, Prompt Hub, creating/editing/duplicating/deleting a prompt, saving or pushing prompt template text, syncing from code, `{variable}` placeholders, or production/staging labels. For improving prompt text using traces or eval scores, use arize-prompt-optimization. For running experiments on prompts, use arize-experiment."
+description: "INVOKE THIS SKILL for Arize Prompt Hub and `ax prompts` workflows: Workflow A–B author or import templates and save, Workflow C label/promote, Workflow D list/get/edit description/new-version/delete/duplicate. Use when the user mentions ax prompts, Prompt Hub, creating/editing/duplicating/deleting a prompt, saving or pushing prompt template text, syncing from code, `{variable}` placeholders, or production/staging labels. For improving prompt text using traces or eval scores, use arize-prompt-optimization. For running experiments on prompts, use arize-experiment."
 ---
 
 # Arize Prompts Skill
@@ -19,7 +19,7 @@ Official references (read the skill body first; open docs only if the user needs
 
 | Skill | Use it for |
 |-------|------------|
-| **This skill (`arize-prompts`)** | **Build** message templates, **save** and **version** them, **promote** labels, and **manage** prompts (edit, duplicate, delete) via Hub and `ax prompts` |
+| **This skill (`arize-prompts`)** | **Workflows A–B:** build or import templates and save · **C:** labels / promote · **D:** list, get, edit description, new version for message changes, delete, duplicate |
 | **arize-prompt-optimization** | Improving prompt **text** using traces, datasets, experiments, and the optimization meta-prompt — often **after** you know what to change |
 | **arize-experiment** | Running dataset experiments that **consume** Hub prompts or column-mapped inputs |
 | **arize-evaluator** | Scoring prompt outputs with LLM-as-judge |
@@ -112,6 +112,8 @@ Format-only example (not a default to paste — see Eliciting the prompt templat
 ## Recommended order
 
 **Build the prompt first** — finalize system/user (and assistant if needed) strings and `{variables}` in chat, Playground, or a local `messages.json`. **Then save to Hub** with `ax prompts create` or `create-version`. When the user **already** has production-ready text in code or in exported spans, use **Workflow B** to import and persist it (still confirm copy before CLI writes).
+
+**Workflow map:** **A** — author + `create` + iterate with `create-version` · **B** — import from code or spans, then save · **C** — labels / promote · **D** — list, get, edit description, change messages via new version, delete, duplicate.
 
 ---
 
@@ -265,64 +267,11 @@ ax prompts get PROMPT_NAME_OR_ID --label production --space SPACE
 
 ---
 
-## Manage prompts
+## Workflow D: Manage prompts (list, get, edit, delete, duplicate)
 
-Prompt Hub **Edit**, **Delete**, and **Duplicate** map to the workflows below. Prefer the Hub UI for one-click duplicate or rename when available; use the CLI for automation and scripts.
+Use when the user wants to **find**, **inspect**, **change metadata**, **change message bodies or model/provider** (via a new version), **delete** a prompt, or **duplicate** — without going through full authoring (**Workflow A**) or import-from-span (**Workflow B**). Prefer the Hub UI for one-click duplicate or rename when available; use the CLI for automation and scripts.
 
-### Edit prompt
-
-| What they want to change | Hub | CLI |
-|--------------------------|-----|-----|
-| **System / user / assistant message text**, variables, or default **model** / **provider** | Save as a **new version** (same prompt name) | `ax prompts create-version` with updated `--messages` and/or `--model` / `--provider` (see **Workflow A** step 4). `ax prompts update` does **not** change messages or model. |
-| **Prompt description** (prompt-level, not version note) | Edit prompt metadata | `ax prompts update NAME_OR_ID --description "..." [--space SPACE]` |
-| **Prompt name** or **tags** | Edit in Hub | No dedicated flags on `ax prompts update` today — use Hub or check `ax prompts update --help` in your CLI version. |
-
-### Delete prompt
-
-Deletes the prompt and **all** versions (irreversible). Confirm the correct **space** and **name or `pr_...` ID** before running.
-
-1. Optional: `ax prompts list --space SPACE` or `ax prompts get NAME_OR_ID --space SPACE` to verify.
-2. Run delete with `--force` when the user explicitly wants removal:
-
-```bash
-ax prompts delete pr_abc123 --force
-ax prompts delete "old-prompt" --space SPACE --force
-```
-
-### Duplicate prompt
-
-There is **no** `ax prompts duplicate` command. Treat **Duplicate** as **read source → create new prompt**:
-
-1. **Fetch** the version to copy (latest, or pin with `--version-id` / `--label`). Use machine-readable output when automating:
-
-```bash
-ax prompts get "source-prompt" --space SPACE -o json
-# or: ax prompts get pr_abc123 --version-id prv_xyz789 -o json
-```
-
-2. From the JSON, take **messages**, **provider**, **model**, and **input variable format** (mirror Hub / response fields into `f_string` / `mustache` / `none` as appropriate).
-
-3. **Create** a new prompt with a **new** `--name` and the copied payload:
-
-```bash
-ax prompts create \
-  --name "source-prompt-copy" \
-  --space SPACE \
-  --provider PROVIDER_FROM_SOURCE \
-  --model MODEL_FROM_SOURCE \
-  --input-variable-format f_string \
-  --messages ./messages_extracted.json \
-  --description "Copy of source-prompt" \
-  --commit-message "Initial version (duplicated)"
-```
-
-Confirm the new name and space with the user before `create`. Labels are **not** copied automatically — set them on the new prompt with **Workflow C** if needed.
-
----
-
-## Other common commands
-
-### Discover prompts
+### Step 1: Discover prompts (when the target is unclear)
 
 ```bash
 ax prompts list --space SPACE
@@ -330,7 +279,7 @@ ax prompts list --space SPACE --name support --limit 50
 ax prompts list --space SPACE --output prompts.json
 ```
 
-### Fetch a prompt
+### Step 2: Fetch a prompt (inspect or before edit / delete / duplicate)
 
 ```bash
 # Latest version
@@ -344,7 +293,76 @@ ax prompts get pr_abc123 --version-id prv_xyz789
 ax prompts get pr_abc123 --label production
 ```
 
-**Update description, delete, and duplicate** — step-by-step workflows are under **Manage prompts** above.
+### Step 3: Pick the manage action
+
+| What they want | Hub | CLI |
+|-----------------|-----|-----|
+| **System / user / assistant text**, variables, or default **model** / **provider** | Save as a **new version** (same prompt name) | `ax prompts create-version` with updated `--messages` and/or `--model` / `--provider` (same pattern as **Workflow A** step 4). `ax prompts update` does **not** change messages or model. |
+| **Prompt description** (prompt-level) | Edit prompt metadata | `ax prompts update NAME_OR_ID --description "..." [--space SPACE]` |
+| **Prompt name** or **tags** | Edit in Hub | No dedicated flags on `ax prompts update` today — use Hub or `ax prompts update --help` for your CLI version. |
+| **Remove prompt entirely** | Delete in Hub | **Step 4c** below |
+| **Copy to a new prompt** | Duplicate in Hub | **Step 4d** below |
+
+### Step 4a: Update description only
+
+```bash
+ax prompts update NAME_OR_ID --description "Updated description" --space SPACE
+```
+
+### Step 4b: Change messages, model, or provider
+
+Use a **new version** (immutable history). Propose `--commit-message` (version description) and confirm **`--provider`** + **`--model`** + `--messages` before running.
+
+```bash
+ax prompts create-version PROMPT_NAME_OR_ID \
+  --space SPACE \
+  --provider openAI \
+  --model gpt-4o \
+  --input-variable-format f_string \
+  --messages ./updated_messages.json \
+  --commit-message "What changed and why"
+```
+
+### Step 4c: Delete prompt (all versions)
+
+Irreversible. Confirm **space** and **name or `pr_...` ID** with the user.
+
+1. Optional: `ax prompts list --space SPACE` or `ax prompts get NAME_OR_ID --space SPACE` to verify.
+2. Run delete when they explicitly confirm removal:
+
+```bash
+ax prompts delete pr_abc123 --force
+ax prompts delete "old-prompt" --space SPACE --force
+```
+
+### Step 4d: Duplicate (no `ax prompts duplicate` command)
+
+Treat **Duplicate** as **get → extract → create** with a **new** `--name`:
+
+1. **Fetch** the version to copy (latest, or `--version-id` / `--label`). Prefer JSON when automating:
+
+```bash
+ax prompts get "source-prompt" --space SPACE -o json
+# or: ax prompts get pr_abc123 --version-id prv_xyz789 -o json
+```
+
+2. From the JSON, take **messages**, **provider**, **model**, and **input variable format** (`f_string` / `mustache` / `none`).
+
+3. **Create** a new prompt with a new `--name` and the copied payload:
+
+```bash
+ax prompts create \
+  --name "source-prompt-copy" \
+  --space SPACE \
+  --provider PROVIDER_FROM_SOURCE \
+  --model MODEL_FROM_SOURCE \
+  --input-variable-format f_string \
+  --messages ./messages_extracted.json \
+  --description "Copy of source-prompt" \
+  --commit-message "Initial version (duplicated)"
+```
+
+Confirm the new name and space before `create`. Labels are **not** copied — use **Workflow C** on the new prompt if needed.
 
 ---
 
@@ -364,7 +382,7 @@ ax prompts get pr_abc123 --label production
 | Remove label | `ax prompts remove-version-label VERSION_ID --label LABEL` |
 | Update description | `ax prompts update NAME_OR_ID --description "..." [--space SPACE]` |
 | Delete (all versions) | `ax prompts delete NAME_OR_ID [--space SPACE] --force` |
-| Duplicate (no single command) | `get -o json` → extract fields → `create` with new `--name` (see **Manage prompts**) |
+| Duplicate (no single command) | `get -o json` → extract fields → `create` with new `--name` (see **Workflow D** step 4d) |
 
 For exhaustive flags and defaults, see references/cli-prompts.md.
 
