@@ -35,7 +35,7 @@ A **prompt** in Prompt Hub is a named, versioned template stored in a space — 
 Each prompt includes:
 
 - **Messages** — an ordered chat transcript (system, user, assistant, tool roles) as stored JSON. Typically a system message for behavior and a user message as the template that receives dataset or runtime variables.
-- **Template variables** — placeholders in message text using single braces like `{question}` or `{context}`, filled at runtime by experiments or your app. Always use `--input-variable-format f_string` for this style. **Do not ask the user which variable format to use** — default to `f_string` unless the template clearly uses Mustache `{{...}}` or you need `none` for literal braces with no substitution.
+- **Template variables** — **must** be written with **single curly braces** around each name: `{` + identifier + `}` (same shape as `{}` with the variable name inside), e.g. `{question}`, `{context}`. Filled at runtime by experiments or your app. Always use `--input-variable-format f_string` for this style. **Do not ask the user which variable format to use** — default to `f_string` unless the template clearly uses Mustache `{{...}}` or you need `none` for literal braces with no substitution.
 - **Provider and model** — the vendor and model this version targets. `--provider` is required by the CLI on every `create` and `create-version`. `--model` must always appear in commands this skill proposes — pick an explicit model string, propose a sensible default if unknown, and confirm before running.
 - **Invocation parameters** — optional model settings like temperature and max tokens, configured under Params in the UI. CLI flows still require provider and explicit model alongside messages and format.
 - **Version history** — every material change creates a new immutable version. Labels like `production` and `staging` are mutable pointers to specific versions so your app code never needs to change when you promote a new version.
@@ -75,7 +75,7 @@ Prefer resolving gaps with `ax` (e.g. `ax spaces list`, `ax prompts list`, `ax p
 Hub prompts are templates: the stored strings matter. When the user asks to create or save a prompt but has not provided the exact system/user strings, your first move is elicitation — not a finished generic prompt. That is **Workflow A** (build before `ax prompts create`).
 
 1. Ask for the **prompt template** — the actual wording they want in each role: "Paste or type the prompt template (the exact system and user text you want saved)."
-2. In the same turn, state the variable convention: **Reference variables with single curly braces, like `{variable}`** (e.g. `{question}`, `{context}`).
+2. In the same turn, state the variable convention: **You must reference each variable in single curly braces** — `{` + name + `}` (e.g. `{question}`, `{context}`), not bare names and not `{{name}}` unless they explicitly need Mustache.
 3. Assemble the JSON messages array from their template lines per role.
 
 **Anti-patterns — avoid these:**
@@ -106,7 +106,7 @@ Format-only example (not a default to paste — see Eliciting the prompt templat
 
 **Model** (`--model`): Always pass an explicit model. If unknown, propose a provider-appropriate default and confirm before running.
 
-**Variable format:** Always pass `--input-variable-format f_string` for `{variable}` placeholders. Only use `mustache` for `{{variable}}` or `none` for no interpolation — do not ask the user unless they stated a non-default requirement.
+**Variable format:** Placeholders **must** use **single** braces `{name}`. Always pass `--input-variable-format f_string` for that shape. Only use `mustache` for `{{name}}` or `none` for no interpolation — do not ask the user unless they stated a non-default requirement.
 
 ---
 
@@ -396,7 +396,7 @@ For exhaustive flags and defaults, see references/cli-prompts.md.
 | `Unknown command prompts` | Upgrade `ax` — see references/ax-setup.md |
 | `401 Unauthorized` | Check API key at https://app.arize.com/admin > API Keys |
 | Name not found | Pass `--space` when using a name instead of an ID |
-| Variables not interpolating | Confirm template uses `{name}` single braces with `--input-variable-format f_string` |
+| Variables not interpolating | Confirm each placeholder is `{name}` (single `{` / `}` around the identifier) and `--input-variable-format f_string` |
 | Label pointing to wrong version | `get-version-by-label` to check, then `set-version-labels` on the correct `prv_...` ID |
 | Hub shows no default model | You omitted `--model` — always pass it explicitly |
 | CLI rejects missing `--provider` | Required on `create` and `create-version` — set one of `openAI`, `azureOpenAI`, `awsBedrock`, `vertexAI`, `custom` |
