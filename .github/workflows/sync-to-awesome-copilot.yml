@@ -12,6 +12,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: sync-to-awesome-copilot
+  cancel-in-progress: false
+
 jobs:
   sync-skills:
     runs-on: ubuntu-latest
@@ -29,12 +33,43 @@ jobs:
           path: awesome-copilot
           ref: staged
 
-      - name: Copy skills to awesome-copilot
+      - name: Checkout phoenix
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          repository: Arize-ai/phoenix
+          path: phoenix
+
+      - name: Capture phoenix SHA
+        id: phoenix
+        working-directory: phoenix
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Sync awesome-copilot fork with upstream
+        working-directory: awesome-copilot
+        run: |
+          git remote add upstream https://github.com/github/awesome-copilot.git
+          git fetch upstream staged
+          git reset --hard upstream/staged
+          git push --force origin staged
+
+      - name: Reset sync branch to staged
+        working-directory: awesome-copilot
+        run: |
+          git checkout -B sync/arize-skills
+
+      - name: Copy AX skills to awesome-copilot
         run: |
           for skill_dir in arize-skills/skills/*/; do
             skill_name=$(basename "$skill_dir")
             rm -rf "awesome-copilot/skills/$skill_name"
             cp -r "$skill_dir" "awesome-copilot/skills/$skill_name"
+          done
+
+      - name: Copy Phoenix skills to awesome-copilot
+        run: |
+          for skill_name in phoenix-cli phoenix-evals phoenix-tracing; do
+            rm -rf "awesome-copilot/skills/$skill_name"
+            cp -r "phoenix/.agents/skills/$skill_name" "awesome-copilot/skills/$skill_name"
           done
 
       - name: Check for changes
@@ -57,39 +92,6 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git checkout -B sync/arize-skills
-          git commit -m "chore: sync Arize skills from arize-skills repo"
+          git commit -m "chore: sync Arize skills from arize-skills@${{ github.sha }} and phoenix@${{ steps.phoenix.outputs.sha }}"
           git push --force origin sync/arize-skills
 
-      - name: Create or update PR
-        if: steps.changes.outputs.has_changes == 'true'
-        working-directory: awesome-copilot
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          # Check if a PR already exists from this branch
-          EXISTING_PR=$(gh pr list \
-            --repo github/awesome-copilot \
-            --head "Arize-ai:sync/arize-skills" \
-            --base staged \
-            --state open \
-            --json number \
-            --jq '.[0].number // empty')
-
-          if [ -n "$EXISTING_PR" ]; then
-            echo "PR #$EXISTING_PR already exists and has been updated by the push."
-          else
-            gh pr create \
-              --repo github/awesome-copilot \
-              --head "Arize-ai:sync/arize-skills" \
-              --base staged \
-              --title "chore: sync Arize skills" \
-              --body "$(cat <<'EOF'
-          ## Summary
-          Automated sync of Arize skills from [arize-skills](https://github.com/Arize-ai/arize-skills).
-
-          This PR was created automatically by a GitHub Action.
-          EOF
-              )"
-            echo "PR created successfully."
-          fi
