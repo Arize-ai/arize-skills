@@ -72,6 +72,25 @@ jobs:
             cp -r "phoenix/.agents/skills/$skill_name" "awesome-copilot/skills/$skill_name"
           done
 
+      - name: Setup Node.js
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
+        with:
+          node-version: lts/*
+          cache: npm
+          cache-dependency-path: awesome-copilot/package-lock.json
+
+      - name: Install awesome-copilot dependencies
+        working-directory: awesome-copilot
+        run: npm ci
+
+      - name: Validate skills
+        working-directory: awesome-copilot
+        run: npm run skill:validate
+
+      - name: Regenerate README and marketplace
+        working-directory: awesome-copilot
+        run: npm start
+
       - name: Check for changes
         id: changes
         working-directory: awesome-copilot
