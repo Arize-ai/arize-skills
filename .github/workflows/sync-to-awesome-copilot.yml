@@ -1,20 +1,16 @@
 name: Sync Skills to awesome-copilot
 
 on:
-  # schedule:
-  #   - cron: "0 9 * * 1" # Weekly on Mondays at 9:00 UTC
+  schedule:
+    - cron: "0 9 * * 1" # Weekly on Mondays at 9:00 UTC
   workflow_dispatch: # Allow manual trigger
-  pull_request:
-    paths:
-      - ".github/workflows/sync-to-awesome-copilot.yml"
-      - "skills/**"
 
 permissions:
   contents: read
 
 concurrency:
   group: sync-to-awesome-copilot
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   sync-skills:
