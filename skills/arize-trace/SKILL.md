@@ -1,6 +1,6 @@
 ---
 name: arize-trace
-description: Downloads, exports, and inspects Arize traces and spans for debugging and analysis. Covers exporting traces by ID, spans by ID, sessions by ID, and root-cause investigation of runtime issues using the ax CLI. Use when the user mentions export traces, download spans, inspect trace, debug LLM app, view trace data, session export, runtime error, behavior regression, or span analysis.
+description: Downloads, exports, and inspects existing Arize traces and spans to understand what an LLM app is doing or debug runtime issues. Covers exporting traces by ID, spans by ID, sessions by ID, and root-cause investigation using the ax CLI. Use when the user wants to look at existing trace data, see what their LLM app is doing, export traces, download spans, investigate errors, or analyze behavior regressions.
 metadata:
   author: arize
   version: "1.0"
