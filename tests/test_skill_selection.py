@@ -167,6 +167,22 @@ SPECIFIC_PROMPTS = [
         ["arize-ai-provider-integration"],
         ["specific", "ai-provider-integration"],
     ),
+    # arize-compliance-audit
+    (
+        "Audit my AI app for EU AI Act compliance",
+        ["arize-compliance-audit"],
+        ["specific", "compliance-audit"],
+    ),
+    (
+        "Check my LLM application for GDPR compliance gaps",
+        ["arize-compliance-audit"],
+        ["specific", "compliance-audit"],
+    ),
+    (
+        "Run a NIST AI RMF compliance audit on my agent",
+        ["arize-compliance-audit"],
+        ["specific", "compliance-audit"],
+    ),
 ]
 
 # Single-skill: vague/ambiguous prompts (harder to route correctly)
@@ -279,6 +295,22 @@ VAGUE_PROMPTS = [
         "Connect my AWS Bedrock account to Arize",
         ["arize-ai-provider-integration"],
         ["vague", "ai-provider-integration"],
+    ),
+    # Should route to compliance-audit
+    (
+        "Is my AI app compliant?",
+        ["arize-compliance-audit"],
+        ["vague", "compliance-audit"],
+    ),
+    (
+        "What regulations apply to my chatbot?",
+        ["arize-compliance-audit"],
+        ["vague", "compliance-audit"],
+    ),
+    (
+        "Help me make sure my AI meets regulatory requirements",
+        ["arize-compliance-audit"],
+        ["vague", "compliance-audit"],
     ),
 ]
 
