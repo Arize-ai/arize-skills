@@ -1,11 +1,10 @@
 ---
 name: arize-experiment
-description: Creates, runs, and analyzes Arize experiments for evaluating and comparing model performance. Covers experiment CRUD, exporting runs, comparing results, and evaluation workflows using the ax CLI.
-when_to_use: "Use when the user mentions: create experiment, run experiment, compare models, model performance, evaluate AI, GPT-4 vs Claude, experiment results, export runs, benchmark, A/B test models, measure accuracy."
+description: Creates, runs, and analyzes Arize experiments for evaluating and comparing model performance. Covers experiment CRUD, exporting runs, comparing results, and evaluation workflows using the ax CLI. Use when the user mentions create experiment, run experiment, compare models, model performance, evaluate AI, experiment results, benchmark, A/B test models, or measure accuracy.
 metadata:
   author: arize
   version: "1.0"
-compatibility: Requires the ax CLI (pip install arize-ax) and a configured Arize profile.
+compatibility: Requires the ax CLI and a configured Arize profile.
 ---
 
 # Arize Experiment Skill

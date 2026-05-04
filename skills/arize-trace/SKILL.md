@@ -1,11 +1,10 @@
 ---
 name: arize-trace
-description: Downloads, exports, and inspects Arize traces and spans for debugging and analysis. Covers exporting traces by ID, spans by ID, sessions by ID, and root-cause investigation of runtime issues using the ax CLI.
-when_to_use: "Use when the user mentions: export traces, download spans, inspect trace, debug LLM app, view trace data, session export, runtime error investigation, behavior regression, span analysis, trace export, what is my app doing."
+description: Downloads, exports, and inspects Arize traces and spans for debugging and analysis. Covers exporting traces by ID, spans by ID, sessions by ID, and root-cause investigation of runtime issues using the ax CLI. Use when the user mentions export traces, download spans, inspect trace, debug LLM app, view trace data, session export, runtime error, behavior regression, or span analysis.
 metadata:
   author: arize
   version: "1.0"
-compatibility: Requires the ax CLI (pip install arize-ax) and a configured Arize profile.
+compatibility: Requires the ax CLI and a configured Arize profile.
 ---
 
 # Arize Trace Skill

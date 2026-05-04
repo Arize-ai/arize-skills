@@ -1,11 +1,10 @@
 ---
 name: arize-dataset
-description: Creates, manages, and queries Arize datasets and examples. Covers dataset CRUD, appending examples, exporting data, and file-based dataset creation using the ax CLI.
-when_to_use: "Use when the user needs test data, evaluation examples, or mentions: create dataset, list datasets, export dataset, append examples, dataset version, upload data, evaluation data, golden dataset, test set."
+description: Creates, manages, and queries Arize datasets and examples. Covers dataset CRUD, appending examples, exporting data, and file-based dataset creation using the ax CLI. Use when the user needs test data, evaluation examples, or mentions create dataset, list datasets, export dataset, append examples, dataset version, golden dataset, or test set.
 metadata:
   author: arize
   version: "1.0"
-compatibility: Requires the ax CLI (pip install arize-ax) and a configured Arize profile.
+compatibility: Requires the ax CLI and a configured Arize profile.
 ---
 
 # Arize Dataset Skill

@@ -1,7 +1,6 @@
 ---
 name: arize-link
-description: Generates deep links to the Arize UI for traces, spans, sessions, datasets, labeling queues, evaluators, and annotation configs. Produces clickable URLs for sharing Arize resources with team members.
-when_to_use: "Use when the user mentions: link to trace, open in Arize, share trace, view span, session URL, dataset link, evaluator link, annotation config link, Arize URL, open trace, view in UI."
+description: Generates deep links to the Arize UI for traces, spans, sessions, datasets, labeling queues, evaluators, and annotation configs. Produces clickable URLs for sharing Arize resources with team members. Use when the user wants to link to or open a trace, span, session, dataset, evaluator, or annotation config in the Arize UI.
 metadata:
   author: arize
   version: "1.0"

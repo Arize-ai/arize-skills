@@ -1,7 +1,6 @@
 ---
 name: arize-instrumentation
-description: Adds Arize AX tracing and observability to LLM applications. Follows a two-phase agent-assisted flow to analyze the codebase then implement tracing after user confirmation. Handles manual CHAIN and TOOL spans for function calling.
-when_to_use: "Use when the user mentions: instrument app, add tracing, set up observability, OpenTelemetry, openinference, LLM observability, trace my app, get started with Arize, add spans, instrument LLM, monitor AI app."
+description: Adds Arize AX tracing and observability to LLM applications. Follows a two-phase agent-assisted flow to analyze the codebase then implement tracing after user confirmation. Handles manual CHAIN and TOOL spans for function calling. Use when the user mentions instrument app, add tracing, set up observability, OpenTelemetry, openinference, LLM observability, trace my app, get started with Arize, or monitor AI app.
 metadata:
   author: arize
   version: "1.0"
