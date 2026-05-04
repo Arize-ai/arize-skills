@@ -1,6 +1,6 @@
 ---
 name: arize-ai-provider-integration
-description: Creates, reads, updates, and deletes Arize AI integrations for LLM providers (OpenAI, Anthropic, Azure OpenAI, AWS Bedrock, Vertex AI, Gemini, NVIDIA NIM, custom). Manages stored LLM provider credentials used by evaluators and other Arize features. Use when the user mentions AI integration, LLM provider, API key management, create integration, list integrations, update credentials, delete integration, or provider setup.
+description: Creates, reads, updates, and deletes Arize AI integrations that store LLM provider credentials used by evaluators and other Arize features. Use when the user mentions AI integration, LLM provider credentials, create integration, list integrations, update credentials, delete integration, or connecting an LLM provider to Arize.
 metadata:
   author: arize
   version: "1.0"
