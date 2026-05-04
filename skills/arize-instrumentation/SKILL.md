@@ -1,6 +1,11 @@
 ---
 name: arize-instrumentation
-description: "INVOKE THIS SKILL when adding Arize AX tracing or observability to an app for the first time, or when the user wants to instrument their LLM app or get started with LLM observability. Follow the Agent-Assisted Tracing two-phase flow: analyze the codebase (read-only), then implement after user confirmation. When the app uses LLM tool/function calling, add manual CHAIN + TOOL spans. Leverages https://arize.com/docs/ax/alyx/tracing-assistant and https://arize.com/docs/PROMPT.md."
+description: Adds Arize AX tracing and observability to LLM applications. Follows a two-phase agent-assisted flow to analyze the codebase then implement tracing after user confirmation. Handles manual CHAIN and TOOL spans for function calling.
+when_to_use: "Use when the user mentions: instrument app, add tracing, set up observability, OpenTelemetry, openinference, LLM observability, trace my app, get started with Arize, add spans, instrument LLM, monitor AI app."
+metadata:
+  author: arize
+  version: "1.0"
+compatibility: Requires Python with openinference-instrumentation packages. See https://arize.com/docs/PROMPT.md for setup details.
 ---
 
 # Arize Instrumentation Skill
