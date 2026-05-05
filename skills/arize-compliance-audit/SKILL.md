@@ -1,13 +1,13 @@
 ---
 name: arize-compliance-audit
-description: "INVOKE THIS SKILL when auditing an AI agent or LLM app for regulatory compliance. Covers EU AI Act, GPAI Code of Practice, GDPR, NIST AI RMF, Colorado AI Act, and HIPAA. Scans the codebase for compliance gaps, cross-references Arize instrumentation for audit trail coverage, and produces an actionable remediation checklist tailored to jurisdiction and use case."
+description: "INVOKE THIS SKILL when auditing an AI agent or LLM app for regulatory compliance. Covers EU AI Act, GPAI Code of Practice, GDPR, NIST AI RMF, Colorado AI Act, HIPAA, and ISO 42001. Scans the codebase for compliance gaps, cross-references Arize instrumentation for audit trail coverage, and produces an actionable remediation checklist tailored to the selected frameworks."
 ---
 
 # Arize Compliance Audit Skill
 
 Use this skill when the user wants to **audit their AI agent or LLM application for regulatory compliance**. The skill scans the codebase for compliance gaps, cross-references Arize instrumentation for audit trail coverage, and produces a tailored checklist with optional remediation.
 
-**Triggers:** "audit my app for compliance", "EU AI Act requirements", "NIST AI RMF checklist", "GDPR for AI", "is my AI app compliant", "compliance checklist", "regulatory audit".
+**Triggers:** "audit my app for compliance", "EU AI Act requirements", "NIST AI RMF checklist", "GDPR for AI", "is my AI app compliant", "compliance checklist", "regulatory audit", "ISO 42001", "AI management system", "AIMS certification".
 
 ## Disclaimer
 
@@ -23,22 +23,38 @@ Use this skill when the user wants to **audit their AI agent or LLM application 
 - **Keep output concise and production-focused** — do not generate extra documentation or summary files unless requested.
 - **Never embed literal credential values** — always reference environment variables.
 
-## Phase 0: Jurisdiction and use case
+## Phase 0: Framework selection and use case
 
-Before scanning code, determine what regulations apply.
+Before scanning code, determine which compliance frameworks apply.
 
-### Step 1 — Determine jurisdiction
+### Step 1 — Framework selection
 
-Ask the user: **Where do your end-users or data subjects reside?**
+Present the following menu and ask the user to select all frameworks that apply. **Do not infer or auto-select** — always ask explicitly.
 
-- **EU** — EU AI Act, GPAI Code of Practice, GDPR apply. See references/eu-ai-act-gpai.md.
-- **US** — NIST AI RMF, state laws (Colorado, NYC, California) may apply. See references/us-ai-compliance.md.
-- **Both** — all frameworks apply; the audit covers the union of requirements.
+```
+Which compliance frameworks should this audit cover?
+Select all that apply (reply with numbers, e.g. "1, 3"):
 
-**Inference shortcuts** (skip the question if any of these are clear):
-- Arize endpoint URL already configured: `otlp.arize.com` suggests cloud/US; an on-prem or EU-specific endpoint suggests EU.
-- Existing config files referencing GDPR, DPIA, or EU data residency.
-- The user stated their region earlier in the conversation.
+1. EU frameworks — EU AI Act, GPAI Code of Practice, GDPR
+   (choose if end-users or data subjects are located in the EU)
+
+2. US frameworks — NIST AI RMF, state laws (Colorado AI Act, NYC LL144),
+   HIPAA (if processing health data)
+   (choose if operating in the United States)
+
+3. ISO 42001 — International AI Management System standard
+   (choose if pursuing ISO 42001 certification, operating globally,
+   or wanting an internationally recognised baseline)
+
+You can select any combination. If unsure, select all that seem relevant
+and we can narrow down during the audit.
+```
+
+Based on the selection:
+- **1 selected** — EU AI Act, GPAI Code of Practice, GDPR apply. See references/eu-ai-act-gpai.md.
+- **2 selected** — NIST AI RMF, Colorado AI Act, NYC LL144, HIPAA may apply. See references/us-ai-compliance.md.
+- **3 selected** — ISO 42001 AIMS controls apply. See references/iso-42001.md. Note: ISO 42001 is an organisational management system — the audit will cover technically-auditable controls only; purely organisational clauses (leadership review, internal audits) are flagged separately.
+- **Multiple selected** — all selected frameworks apply; the audit covers the union of requirements, with cross-references where frameworks overlap.
 
 ### Step 2 — Determine use case category
 
@@ -54,19 +70,22 @@ Ask the user: **What does your AI application do?**
 
 ### Step 3 — Determine risk tier
 
-Based on the use case:
-- **EU**: Classify as Unacceptable / High / Limited / Minimal per references/eu-ai-act-gpai.md
-- **US**: Classify as High-risk (consequential decisions per Colorado AI Act) or General
+Based on the use case and selected frameworks:
+- **EU selected**: Classify as Unacceptable / High / Limited / Minimal per references/eu-ai-act-gpai.md
+- **US selected**: Classify as High-risk (consequential decisions per Colorado AI Act) or General
+- **ISO 42001 selected**: Risk tier is not a formal classification in ISO 42001, but note whether the system is high-stakes (which elevates the priority of impact assessment and bias controls)
 
 ### Phase 0 output
 
 Present a brief summary:
 
 ```
-Jurisdiction:       {EU / US / Both}
-Use case:           {category}
-Risk tier:          {EU tier} / {US tier}
-Applicable:         {list of frameworks}
+Frameworks selected: {EU / US / ISO 42001 / combination}
+Use case:            {category}
+Risk tier:           {EU tier if applicable} / {US tier if applicable}
+Applicable:          {list of specific regulations and standards}
+ISO 42001 note:      {if selected} Audit covers technically-auditable controls only;
+                     organisational clauses will be flagged but not code-audited.
 ```
 
 Confirm with the user before proceeding to Phase 1.
@@ -240,10 +259,12 @@ If Arize tracing is **not** set up, this is a significant compliance gap. Offer:
 | Colorado AI Act (SB24-205) | https://leg.colorado.gov/bills/sb24-205 |
 | NYC Local Law 144 | https://www.nyc.gov/site/dca/about/automated-employment-decision-tools.page |
 | HIPAA | https://www.hhs.gov/hipaa/index.html |
+| ISO/IEC 42001:2023 | https://www.iso.org/standard/42001.html |
 | Arize AX Docs | https://arize.com/docs/ax |
 
 ## Reference files
 
 - references/eu-ai-act-gpai.md — EU AI Act and GPAI Code of Practice developer guide
 - references/us-ai-compliance.md — US compliance landscape (NIST AI RMF, Colorado, NYC LL144, HIPAA)
+- references/iso-42001.md — ISO/IEC 42001:2023 AI Management Systems developer guide (technically-auditable controls only)
 - references/compliance-checklist-template.md — Reusable checklist template for Phase 2 output
