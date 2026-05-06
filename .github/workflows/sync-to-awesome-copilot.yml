@@ -1,0 +1,112 @@
+name: Sync Skills to awesome-copilot
+
+on:
+  schedule:
+    - cron: "0 9 * * 1" # Weekly on Mondays at 9:00 UTC
+  workflow_dispatch: # Allow manual trigger
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sync-to-awesome-copilot
+  cancel-in-progress: true
+
+jobs:
+  sync-skills:
+    runs-on: ubuntu-latest
+    steps:          
+      - name: Checkout arize-skills
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          path: arize-skills
+
+      - name: Checkout awesome-copilot fork
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          repository: Arize-ai/awesome-copilot
+          token: ${{ secrets.SKILLS_PUSH_TO_AWESOME_COPILOT }}
+          path: awesome-copilot
+          ref: staged
+
+      - name: Checkout phoenix
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          repository: Arize-ai/phoenix
+          path: phoenix
+
+      - name: Capture phoenix SHA
+        id: phoenix
+        working-directory: phoenix
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Sync awesome-copilot fork with upstream
+        working-directory: awesome-copilot
+        run: |
+          git remote add upstream https://github.com/github/awesome-copilot.git
+          git fetch upstream staged
+          git reset --hard upstream/staged
+          git push --force origin staged
+
+      - name: Reset sync branch to staged
+        working-directory: awesome-copilot
+        run: |
+          git checkout -B sync/arize-skills
+
+      - name: Copy AX skills to awesome-copilot
+        run: |
+          for skill_dir in arize-skills/skills/*/; do
+            skill_name=$(basename "$skill_dir")
+            rm -rf "awesome-copilot/skills/$skill_name"
+            cp -r "$skill_dir" "awesome-copilot/skills/$skill_name"
+          done
+
+      - name: Copy Phoenix skills to awesome-copilot
+        run: |
+          for skill_name in phoenix-cli phoenix-evals phoenix-tracing; do
+            rm -rf "awesome-copilot/skills/$skill_name"
+            cp -r "phoenix/.agents/skills/$skill_name" "awesome-copilot/skills/$skill_name"
+          done
+
+      - name: Setup Node.js
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
+        with:
+          node-version: lts/*
+          cache: npm
+          cache-dependency-path: awesome-copilot/package-lock.json
+
+      - name: Install awesome-copilot dependencies
+        working-directory: awesome-copilot
+        run: npm ci
+
+      - name: Validate skills
+        working-directory: awesome-copilot
+        run: npm run skill:validate
+
+      - name: Regenerate README and marketplace
+        working-directory: awesome-copilot
+        run: npm start
+
+      - name: Check for changes
+        id: changes
+        working-directory: awesome-copilot
+        run: |
+          git add -A
+          if git diff --cached --quiet; then
+            echo "has_changes=false" >> "$GITHUB_OUTPUT"
+            echo "No changes detected."
+          else
+            echo "has_changes=true" >> "$GITHUB_OUTPUT"
+            echo "Changes detected:"
+            git diff --cached --stat
+          fi
+
+      - name: Commit and push changes
+        if: steps.changes.outputs.has_changes == 'true'
+        working-directory: awesome-copilot
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git commit -m "chore: sync Arize skills from arize-skills@${{ github.sha }} and phoenix@${{ steps.phoenix.outputs.sha }}"
+          git push --force origin sync/arize-skills
+
