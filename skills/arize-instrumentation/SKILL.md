@@ -93,7 +93,7 @@ The **canonical list** of supported integrations and doc URLs is in the [Agent S
 - **Java:** [LangChain4j](https://arize.com/docs/ax/integrations/java/langchain4j), [Spring AI](https://arize.com/docs/ax/integrations/java/spring-ai), [Arconia](https://arize.com/docs/ax/integrations/java/arconia).
 - **Go:** No first-party auto-instrumentation packages today — use the OpenTelemetry Go SDK with manual [OpenInference](https://github.com/Arize-ai/openinference) attributes per [Manual instrumentation](https://arize.com/docs/ax/instrument/manual-instrumentation).
 - **Platforms (UI-based):** [LangFlow](https://arize.com/docs/ax/integrations/platforms/langflow), [Flowise](https://arize.com/docs/ax/integrations/platforms/flowise), [Dify](https://arize.com/docs/ax/integrations/platforms/dify), [Prompt flow](https://arize.com/docs/ax/integrations/platforms/prompt-flow).
-- **Fallback:** [Manual instrumentation](https://arize.com/docs/ax/observe/tracing/setup/manual-instrumentation), [All integrations](https://arize.com/docs/ax/integrations).
+- **Fallback:** [Manual instrumentation](https://arize.com/docs/ax/instrument/manual-instrumentation), [All integrations](https://arize.com/docs/ax/integrations).
 
 **Fetch the matched doc pages** from the [full routing table in PROMPT.md](https://arize.com/docs/PROMPT.md) for exact installation and code snippets. Use [llms.txt](https://arize.com/docs/llms.txt) as a fallback for doc discovery if needed.
 
@@ -110,7 +110,7 @@ Proceed **only after the user confirms** the Phase 1 analysis.
    - Python: `pip install arize-otel` plus `openinference-instrumentation-{name}` (hyphens in package name; underscores in import, e.g. `openinference.instrumentation.llama_index`).
    - TypeScript/JavaScript: `@opentelemetry/sdk-trace-node` plus the relevant `@arizeai/openinference-*` package.
    - Java: OpenTelemetry SDK plus `openinference-instrumentation-*` in pom.xml or build.gradle.
-   - Go: `go get go.opentelemetry.io/otel go.opentelemetry.io/otel/sdk go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp` — no auto-instrumentors yet, so the agent sets OpenInference attributes manually on spans.
+   - Go: `go get go.opentelemetry.io/otel go.opentelemetry.io/otel/sdk go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp` — no auto-instrumentors yet, so the agent sets OpenInference attributes manually on spans. **Wire the exporter** with `otlptracehttp.WithEndpoint("otlp.arize.com")` (US) or `otlptracehttp.WithEndpoint("otlp.eu-west-1a.arize.com")` (EU) — pass the bare hostname, no `https://` scheme — and `otlptracehttp.WithHeaders(map[string]string{"space_id": ..., "api_key": ...})`. Recent OTel Go modules require Go ≥ 1.23 — `go mod tidy` may bump the toolchain.
 3. **Credentials** — User needs an **Arize API Key** and **Space ID**. Check existing `ax` profiles for `ARIZE_API_KEY` and `ARIZE_SPACE` — never read `.env` files:
    - Run `ax profiles show` to check for an existing profile.
    - If no profile exists, guide the user to run `ax profiles create` which provides an **interactive wizard** that walks through API key and space setup. See [CLI profiles docs](https://arize.com/docs/api-clients/cli/profiles) for details.
@@ -126,7 +126,10 @@ Proceed **only after the user confirms** the Phase 1 analysis.
 - Prefer the repo's native integration surface before adding generic OpenTelemetry plumbing. If the framework ships an exporter or observability package, use that first unless there is a documented gap.
 - **Fail gracefully** if env vars are missing (warn, do not crash).
 - **Import order:** register tracer → attach instrumentors → then create LLM clients.
-- **Project name attribute (required):** Arize rejects spans with HTTP 500 if the project name is missing — `service.name` alone is not accepted. Set it as a **resource attribute** on the TracerProvider (recommended — one place, applies to all spans): Python: `register(project_name="my-app")` handles it automatically (sets `"openinference.project.name"` on the resource); TypeScript: Arize accepts both `"model_id"` (shown in the official TS quickstart) and `"openinference.project.name"` via `SEMRESATTRS_PROJECT_NAME` from `@arizeai/openinference-semantic-conventions` (shown in the manual instrumentation docs) — both work; Go: pass `attribute.String("openinference.project.name", "my-app")` to `resource.New(...)` and apply via `sdktrace.WithResource(res)`. For routing spans to different projects in Python, use `set_routing_context(space_id=..., project_name=...)` from `arize.otel`.
+- **Project name attribute (required):** Arize rejects spans with HTTP 500 if the project name is missing — `service.name` alone is not accepted. Set it as a **resource attribute** on the TracerProvider (recommended — one place, applies to all spans):
+  - **Python:** `register(project_name="my-app")` handles it automatically (sets `"openinference.project.name"` on the resource). For routing spans to different projects, use `set_routing_context(space_id=..., project_name=...)` from `arize.otel`.
+  - **TypeScript:** Arize accepts both `"model_id"` (shown in the official TS quickstart) and `"openinference.project.name"` via `SEMRESATTRS_PROJECT_NAME` from `@arizeai/openinference-semantic-conventions` (shown in the manual instrumentation docs) — both work.
+  - **Go:** Pass `attribute.String("openinference.project.name", "my-app")` to `resource.New(...)` and apply via `sdktrace.WithResource(res)`. The Go SDK has no helper for this, so it must be set manually on every TracerProvider.
 - **CLI/script apps — flush before exit:** `provider.shutdown()` (TS) / `provider.force_flush()` then `provider.shutdown()` (Python) / `tp.Shutdown(ctx)` (Go) must be called before the process exits, otherwise async OTLP exports are dropped and no traces appear.
 - **When the app has tool/function execution:** add manual CHAIN + TOOL spans (see **Enriching traces** below) so the trace tree shows each tool call and its result — otherwise traces will look sparse (only LLM API spans, no tool input/output).
 
@@ -158,9 +161,25 @@ To avoid sparse traces where tool inputs/outputs are missing:
 
 | Attribute | Use |
 |-----------|-----|
-| `openinference.span.kind` | `"CHAIN"` or `"TOOL"` |
+| `openinference.span.kind` | Pick the right value: `"LLM"` for raw provider API calls (OpenAI, Anthropic, etc.); `"CHAIN"` for orchestration / agent-loop boundaries; `"TOOL"` for tool/function execution; `"RETRIEVER"` for vector-store / search lookups; `"EMBEDDING"` for embedding API calls; `"AGENT"` for an autonomous sub-agent run nested inside a larger chain; `"RERANKER"` for rerank API calls; `"GUARDRAIL"` for guardrail/policy checks; `"EVALUATOR"` for online eval calls. |
 | `input.value` | string (e.g. user message or JSON of tool args) |
 | `output.value` | string (e.g. final reply or JSON of tool result) |
+
+**LLM-span attributes (set these in addition to the three above when the span is an actual LLM call):**
+
+| Attribute | Use |
+|-----------|-----|
+| `llm.model_name` | model identifier (e.g. `"gpt-4o-mini"`) |
+| `llm.provider` / `llm.system` | provider name (e.g. `"openai"`, `"anthropic"`) |
+| `llm.input_messages.{i}.message.role` | `"system"` / `"user"` / `"assistant"` / `"tool"` for the i-th input message |
+| `llm.input_messages.{i}.message.content` | text content of the i-th input message |
+| `llm.output_messages.{i}.message.role` | role of the i-th output message |
+| `llm.output_messages.{i}.message.content` | text content of the i-th output message |
+| `llm.token_count.prompt` | int — prompt/input tokens |
+| `llm.token_count.completion` | int — completion/output tokens |
+| `llm.token_count.total` | int — total tokens |
+
+In Python and TypeScript these names are exposed via `openinference-semantic-conventions` packages; in Go they must be hand-typed as the strings above.
 
 **Python pattern:** Get the global tracer (same provider as Arize), then use context managers so tool spans are children of the CHAIN span and appear in the same trace as the LLM spans:
 
@@ -184,7 +203,9 @@ with tracer.start_as_current_span("run_agent") as chain_span:
     chain_span.set_attribute("output.value", final_reply)
 ```
 
-**Go pattern:** Get a tracer from the global TracerProvider (registered via `otel.SetTracerProvider`), then nest spans with `tracer.Start` so tool spans become children of the CHAIN span:
+**Go pattern:** Get a tracer from the global TracerProvider (registered via `otel.SetTracerProvider`), then nest spans with `tracer.Start` so tool spans become children of the CHAIN span.
+
+> **Critical for short-lived processes:** never call `log.Fatalf` / `os.Exit` after a span has started — they skip the deferred `tp.Shutdown(ctx)` and the in-flight CHAIN/LLM spans never flush. Use `log.Printf` + `return` from `main` instead, and keep `tp.Shutdown(ctx)` deferred at the top of `main`.
 
 ```go
 import (
@@ -207,7 +228,10 @@ func runAgent(ctx context.Context, userMessage string) string {
     // ... LLM call ...
     for _, toolUse := range toolUses {
         ctx, toolSpan := tracer.Start(ctx, toolUse.Name)
-        argsJSON, _ := json.Marshal(toolUse.Input)
+        argsJSON, err := json.Marshal(toolUse.Input)
+        if err != nil {
+            toolSpan.RecordError(err)
+        }
         toolSpan.SetAttributes(
             attribute.String("openinference.span.kind", "TOOL"),
             attribute.String("input.value", string(argsJSON)),
@@ -223,7 +247,7 @@ func runAgent(ctx context.Context, userMessage string) string {
 }
 ```
 
-See [Manual instrumentation](https://arize.com/docs/ax/observe/tracing/setup/manual-instrumentation) for more span kinds and attributes.
+See [Manual instrumentation](https://arize.com/docs/ax/instrument/manual-instrumentation) for more span kinds and attributes.
 
 ## Verification
 
