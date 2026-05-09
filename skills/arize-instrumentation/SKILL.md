@@ -40,6 +40,14 @@ Before changing code:
 3. Do NOT proactively check `ax` installation or version. If `ax` is needed for verification later, just run it when the time comes. If it fails, see references/ax-profiles.md.
 4. Never silently replace a user-provided space ID, project name, or project ID. If the CLI, collector, and user input disagree, surface that mismatch as a concrete blocker.
 
+### When you must ask the user first
+
+If monorepo scope, service entrypoint, or target app is still unclear after quick inspection — or you would otherwise open with a bare list of questions — use this opening pattern:
+
+1. Acknowledge the skill, e.g.: **I found the arize-instrumentation skill in this repo** (you may add `skills/arize-instrumentation/SKILL.md` if helpful).
+2. Then a clear pause line, e.g.: **A few clarifying questions before I invoke it:**
+3. Ask **minimal** numbered or short bullet questions — only what blocks Phase 1 or Phase 2.
+
 ## Phase 1: Analysis (read-only)
 
 **Do not write any code or create any files during this phase.**
