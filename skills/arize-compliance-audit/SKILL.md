@@ -173,7 +173,9 @@ Systematically scan the codebase for evidence of compliance and gaps across seve
 
 ### Phase 1 output
 
-Present a structured report:
+Present a two-part report:
+
+**Part 1 — Summary table**
 
 | Domain | Evidence found | Gaps identified | Rating |
 |---|---|---|---|
@@ -184,6 +186,16 @@ Present a structured report:
 | E. Documentation | {findings} | {gaps} | ... |
 | F. Monitoring | {findings} | {gaps} | ... |
 | G. Vendor management | {findings} | {gaps} | ... |
+
+**Part 2 — Gap detail (required for every Non-compliant or Partial rating)**
+
+For each domain rated Non-compliant or Partial, write a dedicated subsection that includes:
+
+1. **The exact code path** — file path(s), line number(s), and the relevant code snippet showing where the gap exists. Do not paraphrase; quote the actual code.
+2. **Why it matters in this specific app** — explain the concrete risk in the context of this codebase (e.g. which tools could be abused, which data flows are exposed, what an attacker or regulator would find).
+3. **What is missing** — a precise description of the control or code that should exist but does not (e.g. "a span attribute processor that hashes `user_email` before the OTLP exporter fires", not just "add PII redaction").
+
+Minimum one subsection per Non-compliant/Partial domain. Do not omit this section — it is the primary value of the audit for engineering teams.
 
 Then proceed directly to Phase 2.
 
@@ -201,16 +213,21 @@ Using the Phase 1 findings and the template in references/compliance-checklist-t
 
 ### Final report
 
-Present a single consolidated report with three sections:
+Present a single consolidated report with four sections:
 
 **Section 1 — Audit scope (Phase 0 summary)**
 - Frameworks selected, use case, risk tier, applicable regulations
 
-**Section 2 — Codebase findings (Phase 1 summary)**
+**Section 2 — Codebase findings (Phase 1 summary table)**
 - The domain table (A–G) with evidence, gaps, and ratings
 
-**Section 3 — Compliance checklist (Phase 2)**
-- The tailored checklist with status and remediation suggestions
+**Section 3 — Gap detail (Phase 1 expanded)**
+- One subsection per Non-compliant or Partial domain, each containing: exact file paths and line numbers, quoted code snippets, app-specific risk explanation, and a precise description of what is missing. This section is mandatory — never omit it.
+
+**Section 4 — Compliance checklist (Phase 2)**
+- The tailored checklist with status and remediation suggestions, instrumentation cross-reference table, priority summary, and recommended next steps
+
+When the user asks for a report file, write a single markdown file to `/tmp/<app-name>-compliance-audit-<YYYY-MM-DD>.md` containing all four sections.
 
 After presenting the report, offer Phase 3 remediation.
 
