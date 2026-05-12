@@ -168,6 +168,10 @@ For interactive setup, `ax profiles create` also offers **Advanced → Single en
 | [arize-annotation](skills/arize-annotation/SKILL.md) | Create and manage annotation configs (categorical, continuous, freeform); bulk-annotate project spans via the Python SDK. |
 | [arize-prompt-optimization](skills/arize-prompt-optimization/SKILL.md) | Optimize prompts using trace data, experiments, and meta-prompting. |
 | [arize-link](skills/arize-link/SKILL.md) | Generate deep links to traces, spans, and sessions in the Arize UI. |
+| [arize-compliance-audit](skills/arize-compliance-audit/SKILL.md) | Audit an AI agent for regulatory compliance (EU AI Act, NIST AI RMF, GDPR, HIPAA). Produces a tailored remediation checklist. |
+
+> [!WARNING]
+> **arize-compliance-audit is for guidance only and does not constitute legal advice or a complete compliance assessment.** It identifies common technical patterns based on publicly available regulatory frameworks and cannot account for your organisation's specific legal obligations, contractual commitments, or operational context. Always consult a qualified attorney or compliance specialist for binding assessments.
 
 ## Installer Flags
 
