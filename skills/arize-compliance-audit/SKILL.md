@@ -11,7 +11,17 @@ Use this skill when the user wants to **audit their AI agent or LLM application 
 
 ## Disclaimer
 
-> **This skill identifies technical compliance gaps based on common regulatory frameworks. It is NOT legal advice.** Always consult qualified legal counsel for binding compliance assessments. The audit covers what is observable in the codebase and cannot assess organisational processes, legal agreements, or runtime behaviour not captured in code.
+**Before doing anything else, present this disclaimer verbatim to the user:**
+
+---
+
+> ⚠️ **Legal disclaimer**
+>
+> This audit is for **guidance only** and does **not** constitute legal advice or a complete compliance assessment. It identifies common technical patterns and gaps based on publicly available regulatory frameworks, but cannot assess your organisation's specific legal obligations, contractual commitments, data processing agreements, or operational processes.
+>
+> **Do not rely on this output as a substitute for qualified legal counsel.** Regulatory compliance is a complex, jurisdiction-specific, and fact-dependent determination. Always engage a qualified attorney or compliance specialist for binding assessments.
+
+---
 
 ## Core principles
 
@@ -29,7 +39,9 @@ Before scanning code, determine which compliance frameworks apply.
 
 ### Step 1 — Framework selection
 
-Present the following menu and ask the user to select all frameworks that apply. **Do not infer or auto-select** — always ask explicitly.
+Use the `AskUserQuestion` tool to ask the user which frameworks apply. **Do not infer or auto-select** — always ask explicitly.
+
+Ask:
 
 ```
 Which compliance frameworks should this audit cover?
@@ -58,7 +70,7 @@ Based on the selection:
 
 ### Step 2 — Determine use case category
 
-Ask the user: **What does your AI application do?**
+Use the `AskUserQuestion` tool to ask: **What does your AI application do?**
 
 - **General chatbot / assistant** — Limited risk (EU), general obligations (US)
 - **Hiring / HR** — High risk (EU Art. 6, Annex III); Colorado AI Act applies; NYC LL144 applies if NYC
@@ -88,7 +100,7 @@ ISO 42001 note:      {if selected} Audit covers technically-auditable controls o
                      organisational clauses will be flagged but not code-audited.
 ```
 
-Confirm with the user before proceeding to Phase 1.
+Then proceed directly to Phase 1.
 
 ## Phase 1: Codebase audit (read-only)
 
@@ -173,7 +185,7 @@ Present a structured report:
 | F. Monitoring | {findings} | {gaps} | ... |
 | G. Vendor management | {findings} | {gaps} | ... |
 
-Wait for user confirmation before proceeding to Phase 2.
+Then proceed directly to Phase 2.
 
 ## Phase 2: Compliance checklist
 
@@ -187,9 +199,24 @@ Using the Phase 1 findings and the template in references/compliance-checklist-t
 4. **Be specific in remediation.** Instead of "implement input validation", say "add a guardrail library like `guardrails-ai` to validate LLM inputs and outputs against your content policy".
 5. **Include the instrumentation cross-reference table** from the template. If Arize tracing is not set up, flag this as a Critical gap — audit trails are required by EU Art. 12 and NIST MAN-2.1.
 
+### Final report
+
+Present a single consolidated report with three sections:
+
+**Section 1 — Audit scope (Phase 0 summary)**
+- Frameworks selected, use case, risk tier, applicable regulations
+
+**Section 2 — Codebase findings (Phase 1 summary)**
+- The domain table (A–G) with evidence, gaps, and ratings
+
+**Section 3 — Compliance checklist (Phase 2)**
+- The tailored checklist with status and remediation suggestions
+
+After presenting the report, offer Phase 3 remediation.
+
 ## Phase 3: Remediation (optional)
 
-After presenting the checklist, offer to implement specific fixes. **Always confirm before making any changes.**
+After presenting the checklist, offer to implement specific fixes. **Always use the `AskUserQuestion` tool to confirm before making any changes.**
 
 ### Remediation categories
 
@@ -216,14 +243,14 @@ After presenting the checklist, offer to implement specific fixes. **Always conf
 ### Remediation rules
 
 - Present each remediation as a **discrete, confirmable action**. Never batch-apply changes.
-- Show exactly what will change (file, code diff concept) before the user confirms.
+- Show exactly what will change (file, code diff concept) then use the `AskUserQuestion` tool to get confirmation before applying.
 - Follow existing code style and project conventions.
 - Never embed credentials — always use environment variables.
 - Test that the application still builds after changes.
 
 ## Skill orchestration
 
-When gaps identified in Phase 1 or 2 require capabilities from other Arize skills, offer to invoke them. **Always ask before invoking another skill** and explain why it is relevant to the compliance gap.
+When gaps identified in Phase 1 or 2 require capabilities from other Arize skills, offer to invoke them. **Always use the `AskUserQuestion` tool to ask before invoking another skill** and explain why it is relevant to the compliance gap.
 
 | Gap | Skill to invoke | Why |
 |---|---|---|
