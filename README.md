@@ -169,6 +169,7 @@ For interactive setup, `ax profiles create` also offers **Advanced → Single en
 | [arize-prompt-optimization](skills/arize-prompt-optimization/SKILL.md) | Optimize prompts using trace data, experiments, and meta-prompting. |
 | [arize-link](skills/arize-link/SKILL.md) | Generate deep links to traces, spans, and sessions in the Arize UI. |
 | [arize-compliance-audit](skills/arize-compliance-audit/SKILL.md) | Audit an AI agent for regulatory compliance (EU AI Act, NIST AI RMF, GDPR, HIPAA). Produces a tailored remediation checklist. |
+| [arize-admin](skills/arize-admin/SKILL.md) | Manage organizations, spaces, roles, role bindings, resource restrictions, and API keys. Enterprise admin workflows: team onboarding, SAML/SSO role mapping, service key management, and access control. |
 
 > [!WARNING]
 > **arize-compliance-audit is for guidance only and does not constitute legal advice or a complete compliance assessment.** It identifies common technical patterns based on publicly available regulatory frameworks and cannot account for your organisation's specific legal obligations, contractual commitments, or operational context. Always consult a qualified attorney or compliance specialist for binding assessments.
