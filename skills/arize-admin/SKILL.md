@@ -4,7 +4,7 @@ description: Manages Arize users, organizations, spaces, roles, role bindings, r
 metadata:
   author: arize
   version: "1.0"
-compatibility: Requires the ax CLI (≥ 0.14.0) and a configured Arize profile with org-admin privileges.
+compatibility: Requires the ax CLI (≥ 0.19.0) and a configured Arize profile with org-admin privileges.
 ---
 
 # Arize Admin Skill
@@ -150,8 +150,6 @@ ax roles delete "Data Scientist" --force   # predefined roles cannot be deleted
 ## Role Bindings
 
 Fine-grained assignment of a custom role to a user on a specific resource (space or project).
-
-> **No list command.** To enumerate all bindings on a resource, use the Arize UI (Settings > Users & Permissions).
 
 ```bash
 # Assign at space level
