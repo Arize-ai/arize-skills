@@ -97,6 +97,15 @@ Then `source ~/.zshrc` (or restart terminal).
 ```
 Restart terminal for it to take effect.
 
+### `ARIZE_SPACE` vs `ARIZE_SPACE_ID` — when each is used
+
+| Var | Where it's used | What it accepts |
+|-----|------|------|
+| `ARIZE_SPACE` | `ax` CLI commands and `ax`-profile detection | Space **name** *or* base64 **ID** |
+| `ARIZE_SPACE_ID` | Tracing code (OTLP `space_id` header), `arize-otel-python`'s `register()`, and the docs | Base64 **ID** only |
+
+The OTLP collector cannot resolve names — sending a name as `space_id` produces a silent failure (HTTP 200, no trace ingested). When the instrumentation skill generates tracing code, it resolves `$ARIZE_SPACE` to the base64 ID via `ax spaces list -o json` and exports `ARIZE_SPACE_ID` before running the app. The generated tracing code always references `ARIZE_SPACE_ID`, never `ARIZE_SPACE`.
+
 ## Save Credentials for Future Use
 
 At the **end of the session**, if the user manually provided any credentials during this conversation **and** those values were NOT already loaded from a saved profile or environment variable, offer to save them.
