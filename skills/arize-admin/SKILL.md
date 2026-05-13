@@ -29,7 +29,7 @@ Programmatic management of Arize users, organizations, spaces, roles, permission
 - **Space** — a workspace that isolates traces, datasets, and projects. A user must be an org member before they can be added to a space within that org.
 - **Role** — a named set of permissions. Predefined roles are system-managed. Custom roles are created by admins. The roles for org/space membership (`admin`, `member`, `read-only`, `annotator`) are separate from custom RBAC roles used with `ax role-bindings`.
 - **Role binding** — fine-grained assignment of a custom role to a user on a specific resource (a space or a project).
-- **Resource restriction** — marks a project so that only users with an explicit role binding on that project can access it. Space-level roles are excluded.
+- **Resource restriction** — marks a project so that only users with an explicit role binding on that project can access it. Roles bound at any higher hierarchy level (space, org, account) are excluded.
 - **API key** — either a *user* key (authenticates as the creator, full user permissions) or a *service* key (scoped to a specific space, for automated pipelines).
 
 ## Prerequisites
