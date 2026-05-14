@@ -13,6 +13,13 @@ Programmatic management of Arize users, organizations, spaces, roles, permission
 
 > **Privilege requirement:** Most operations require **org-admin** or **account-admin** privileges. If commands return `403 Forbidden`, the authenticated profile lacks sufficient permissions.
 
+> **Destructive-action rule:** Commands that delete, remove, or irreversibly modify resources (`delete`, `remove-user`, `unrestrict`) require **explicit user confirmation before execution**. When a user asks you to perform one of these operations:
+> 1. Summarize exactly what will happen (e.g., "This will delete user jane@example.com and cascade-remove all their org/space memberships, API keys, and role bindings.")
+> 2. Ask the user to confirm (use `AskUserQuestion`).
+> 3. Only after the user confirms, run the command with `--force` to skip the CLI's interactive prompt.
+>
+> Never run a `--force` deletion without confirming with the user first.
+
 ## When to Use
 
 - Invite users to the account, assign them to orgs and spaces
@@ -65,7 +72,7 @@ ax users create \
 ax users update USER_ID --full-name "Jane Smith"
 ax users update USER_ID --is-developer          # grant developer flag
 
-ax users delete USER_ID --force   # cascades: org/space memberships, API keys, role bindings
+ax users delete USER_ID --force   # ⚠ confirm first — cascades: org/space memberships, API keys, role bindings
 
 ax users resend-invitation USER_ID
 ax users reset-password USER_ID
@@ -91,7 +98,7 @@ ax organizations update "Platform Team" --name "ML Platform" --description "Upda
 # Add user (must exist in account first)
 ax organizations add-user "Platform Team" --user-id USER_ID --role member
 
-# Remove user (also removes from all child spaces)
+# Remove user (also removes from all child spaces) — ⚠ confirm first
 ax organizations remove-user "Platform Team" --user-id USER_ID --force
 ```
 
@@ -112,11 +119,11 @@ ax spaces create --name "team-alpha" --organization-id ORG_ID
 
 ax spaces update "team-alpha" --name "team-alpha-v2"
 
-ax spaces delete "team-alpha" --force   # irreversible; deletes all resources
+ax spaces delete "team-alpha" --force   # ⚠ confirm first — irreversible; deletes all resources
 
 # User must be an org member before being added to a space
 ax spaces add-user "team-alpha" --user-id USER_ID --role member
-ax spaces remove-user "team-alpha" --user-id USER_ID --force
+ax spaces remove-user "team-alpha" --user-id USER_ID --force   # ⚠ confirm first
 ```
 
 ---
@@ -140,7 +147,7 @@ ax roles create \
 
 ax roles update "Data Scientist" --permissions "PROJECT_READ,DATASET_CREATE,EXPERIMENT_CREATE,EVALUATOR_CREATE"
 
-ax roles delete "Data Scientist" --force   # predefined roles cannot be deleted
+ax roles delete "Data Scientist" --force   # ⚠ confirm first — predefined roles cannot be deleted
 ```
 
 **Finding available permissions:** Run `ax roles get <predefined-role> -o json` on a system role (e.g. `Member`, `Admin`) to see valid permission names.
@@ -168,7 +175,7 @@ ax role-bindings create \
 
 ax role-bindings get BINDING_ID
 ax role-bindings update BINDING_ID --role-id NEW_ROLE_ID
-ax role-bindings delete BINDING_ID --force
+ax role-bindings delete BINDING_ID --force   # ⚠ confirm first
 ```
 
 Idempotent — if a binding already exists for the user on that resource, exits without error.
@@ -181,7 +188,7 @@ Restricts a **project** so only users with an explicit role binding on that proj
 
 ```bash
 ax resource-restrictions restrict --resource-id PROJECT_GLOBAL_ID     # idempotent
-ax resource-restrictions unrestrict --resource-id PROJECT_GLOBAL_ID --force
+ax resource-restrictions unrestrict --resource-id PROJECT_GLOBAL_ID --force   # ⚠ confirm first
 
 # Finding project IDs
 ax projects list -l 100 -o json --space "my-workspace"
@@ -207,7 +214,7 @@ ax api-keys create \
   --space "team-alpha" \
   --expires-at "2027-01-01T00:00:00"
 
-ax api-keys delete KEY_ID --force
+ax api-keys delete KEY_ID --force   # ⚠ confirm first
 
 # Zero-downtime rotation — revokes old key, issues new one with same scope
 ax api-keys refresh KEY_ID

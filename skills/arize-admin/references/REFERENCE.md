@@ -98,13 +98,18 @@ ax api-keys list --status active -o json
 
 ## Workflow 5: Offboard a User
 
-`ax users delete` cascades to all org memberships, space memberships, API keys, and role bindings in one operation:
+`ax users delete` cascades to all org memberships, space memberships, API keys, and role bindings in one operation.
+
+**Always confirm with the user before running the delete.** Summarize the cascade impact, then ask for explicit confirmation.
 
 ```bash
 # 1. Find the user's global ID
 ax users list --email "jane@example.com" -o json
 
-# 2. Delete the user (cascades everything)
+# 2. Confirm with the user: "Delete jane@example.com? This will cascade-remove
+#    all org/space memberships, API keys, and role bindings."
+
+# 3. After user confirms, delete
 ax users delete USER_ID --force
 ```
 
