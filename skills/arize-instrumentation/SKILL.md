@@ -4,7 +4,7 @@ description: Adds Arize AX tracing to an LLM application for the first time. Fol
 metadata:
   author: arize
   version: "1.0"
-compatibility: Python and TypeScript/JavaScript apps use openinference-instrumentation packages for auto-instrumentation. Java and Go apps use the OpenTelemetry SDK with manual OpenInference spans. See https://arize.com/docs/PROMPT.md for setup details.
+compatibility: Python and TypeScript/JavaScript apps use openinference-instrumentation packages for auto-instrumentation. Go apps use arize-otel-go for setup plus per-provider instrumentors from openinference/go/instrumentation (openai, anthropic) or manual spans via openinference/go/semconv. Java apps use the OpenTelemetry SDK with manual OpenInference spans. See https://arize.com/docs/PROMPT.md for setup details.
 ---
 
 # Arize Instrumentation Skill
@@ -91,7 +91,7 @@ The **canonical list** of supported integrations and doc URLs is in the [Agent S
 - **Python frameworks:** [LangChain](https://arize.com/docs/ax/integrations/python-agent-frameworks/langchain), [LangGraph](https://arize.com/docs/ax/integrations/python-agent-frameworks/langgraph), [LlamaIndex](https://arize.com/docs/ax/integrations/python-agent-frameworks/llamaindex), [CrewAI](https://arize.com/docs/ax/integrations/python-agent-frameworks/crewai), [DSPy](https://arize.com/docs/ax/integrations/python-agent-frameworks/dspy), [AutoGen](https://arize.com/docs/ax/integrations/python-agent-frameworks/autogen), [Semantic Kernel](https://arize.com/docs/ax/integrations/python-agent-frameworks/semantic-kernel), [Pydantic AI](https://arize.com/docs/ax/integrations/python-agent-frameworks/pydantic), [Haystack](https://arize.com/docs/ax/integrations/python-agent-frameworks/haystack), [Guardrails AI](https://arize.com/docs/ax/integrations/python-agent-frameworks/guardrails-ai), [Hugging Face Smolagents](https://arize.com/docs/ax/integrations/python-agent-frameworks/hugging-face-smolagents), [Instructor](https://arize.com/docs/ax/integrations/python-agent-frameworks/instructor), [Agno](https://arize.com/docs/ax/integrations/python-agent-frameworks/agno), [Google ADK](https://arize.com/docs/ax/integrations/python-agent-frameworks/google-adk), [MCP](https://arize.com/docs/ax/integrations/python-agent-frameworks/model-context-protocol), [Portkey](https://arize.com/docs/ax/integrations/python-agent-frameworks/portkey), [Together AI](https://arize.com/docs/ax/integrations/python-agent-frameworks/together-ai), [BeeAI](https://arize.com/docs/ax/integrations/python-agent-frameworks/beeai), [AWS Bedrock Agents](https://arize.com/docs/ax/integrations/python-agent-frameworks/aws).
 - **TypeScript/JavaScript:** [LangChain JS](https://arize.com/docs/ax/integrations/ts-js-agent-frameworks/langchain), [Mastra](https://arize.com/docs/ax/integrations/ts-js-agent-frameworks/mastra), [Vercel AI SDK](https://arize.com/docs/ax/integrations/ts-js-agent-frameworks/vercel), [BeeAI JS](https://arize.com/docs/ax/integrations/ts-js-agent-frameworks/beeai).
 - **Java:** [LangChain4j](https://arize.com/docs/ax/integrations/java/langchain4j), [Spring AI](https://arize.com/docs/ax/integrations/java/spring-ai), [Arconia](https://arize.com/docs/ax/integrations/java/arconia).
-- **Go:** No first-party auto-instrumentation packages today — use the OpenTelemetry Go SDK with manual [OpenInference](https://github.com/Arize-ai/openinference) attributes per [Manual instrumentation](https://arize.com/docs/ax/instrument/manual-instrumentation).
+- **Go:** Use [`arize-otel-go`](https://github.com/Arize-ai/arize-otel-go)'s `Register(ctx, Options)` for setup, then either (a) a per-provider auto-instrumentor from [`openinference/go/instrumentation`](https://github.com/Arize-ai/openinference/tree/main/go/instrumentation) — `openai` for `sashabaranov/go-openai`, `anthropic` for `anthropics/anthropic-sdk-go` — or (b) manual spans built with [`openinference/go/semconv`](https://github.com/Arize-ai/openinference/tree/main/go/semconv) constants for clients that don't have an instrumentor yet. The [`openinference/go/instrumentation`](https://github.com/Arize-ai/openinference/tree/main/go/instrumentation) package also exports `WithSession` / `WithUser` / `WithMetadata` / `WithTags` / `WithSuppression` context helpers that the provider instrumentors honor automatically.
 - **Platforms (UI-based):** [LangFlow](https://arize.com/docs/ax/integrations/platforms/langflow), [Flowise](https://arize.com/docs/ax/integrations/platforms/flowise), [Dify](https://arize.com/docs/ax/integrations/platforms/dify), [Prompt flow](https://arize.com/docs/ax/integrations/platforms/prompt-flow).
 - **Fallback:** [Manual instrumentation](https://arize.com/docs/ax/instrument/manual-instrumentation), [All integrations](https://arize.com/docs/ax/integrations).
 
@@ -110,13 +110,16 @@ Proceed **only after the user confirms** the Phase 1 analysis.
    - Python: `pip install arize-otel` plus `openinference-instrumentation-{name}` (hyphens in package name; underscores in import, e.g. `openinference.instrumentation.llama_index`).
    - TypeScript/JavaScript: `@opentelemetry/sdk-trace-node` plus the relevant `@arizeai/openinference-*` package.
    - Java: OpenTelemetry SDK plus `openinference-instrumentation-*` in pom.xml or build.gradle.
-   - Go: No auto-instrumentors yet — the agent sets OpenInference attributes manually on spans. Install the OTel SDK:
+   - Go: Use [`arize-otel-go`](https://github.com/Arize-ai/arize-otel-go) for tracer setup, plus a per-provider instrumentor when one exists. Install:
      ```
-     go get go.opentelemetry.io/otel
-     go get go.opentelemetry.io/otel/sdk
-     go get go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp
+     go get github.com/Arize-ai/arize-otel-go
+     go get github.com/Arize-ai/openinference/go/semconv
+     go get github.com/Arize-ai/openinference/go/instrumentation
+     # Plus exactly one of these, matched to the detected client:
+     go get github.com/Arize-ai/openinference/go/instrumentation/openai     # sashabaranov/go-openai
+     go get github.com/Arize-ai/openinference/go/instrumentation/anthropic  # anthropics/anthropic-sdk-go v1.43+
      ```
-     **Wire the exporter** with `otlptracehttp.WithEndpoint("otlp.arize.com")` (US) or `otlptracehttp.WithEndpoint("otlp.eu-west-1a.arize.com")` (EU) — pass the bare hostname, no `https://` scheme — and `otlptracehttp.WithHeaders(map[string]string{"space_id": ..., "api_key": ...})`. Recent OTel Go modules require Go ≥ 1.23 — run `go mod tidy` after installing.
+     **Wire the exporter** with one call: `arizeotel.Register(ctx, arizeotel.Options{ProjectName: "my-app"})` — defaults to `otlp.arize.com` (US), use `arizeotel.EndpointArizeEurope` for EU. It reads `ARIZE_SPACE_ID` / `ARIZE_API_KEY` / `ARIZE_PROJECT_NAME` / `ARIZE_COLLECTOR_ENDPOINT` from env when the matching `Options` fields are unset. **Wire the OpenAI instrumentor** by setting `cfg.HTTPClient = &http.Client{Transport: openaiotel.NewTransport(http.DefaultTransport, otel.Tracer("my-app"))}` before `openai.NewClientWithConfig(cfg)`. **Wire the Anthropic instrumentor** by passing `option.WithMiddleware(anthropicotel.Middleware(otel.Tracer("my-app")))` to `anthropic.NewClient`. Module floor is Go 1.25.
 3. **Credentials** — User needs an **Arize API Key** and **Space ID**. Check existing `ax` profiles for `ARIZE_API_KEY` and `ARIZE_SPACE` — never read `.env` files:
    - Run `ax profiles show` to check for an existing profile.
    - If no profile exists, guide the user to run `ax profiles create` which provides an **interactive wizard** that walks through API key and space setup. See [CLI profiles docs](https://arize.com/docs/api-clients/cli/profiles) for details.
@@ -135,7 +138,7 @@ Proceed **only after the user confirms** the Phase 1 analysis.
 - **Project name attribute (required):** Arize rejects spans with HTTP 500 if the project name is missing — `service.name` alone is not accepted. Set it as a **resource attribute** on the TracerProvider (recommended — one place, applies to all spans):
   - **Python:** `register(project_name="my-app")` handles it automatically (sets `"openinference.project.name"` on the resource). For routing spans to different projects, use `set_routing_context(space_id=..., project_name=...)` from `arize.otel`.
   - **TypeScript:** Arize accepts both `"model_id"` (shown in the official TS quickstart) and `"openinference.project.name"` via `SEMRESATTRS_PROJECT_NAME` from `@arizeai/openinference-semantic-conventions` (shown in the manual instrumentation docs) — both work.
-  - **Go:** Pass `attribute.String("openinference.project.name", "my-app")` to `resource.New(...)` and apply via `sdktrace.WithResource(res)`. The Go SDK has no helper for this, so it must be set manually on every TracerProvider.
+  - **Go:** `arizeotel.Register(ctx, arizeotel.Options{ProjectName: "my-app"})` handles this automatically (sets `openinference.project.name` and `service.name` on the resource). If you're wiring `sdktrace.NewTracerProvider` directly (multi-exporter, on-prem collector), pass `attribute.String("openinference.project.name", "my-app")` to `resource.New(...)` manually.
 - **CLI/script apps — flush before exit:** `provider.shutdown()` (TS) / `provider.force_flush()` then `provider.shutdown()` (Python) / `tp.Shutdown(ctx)` (Go) must be called before the process exits, otherwise async OTLP exports are dropped and no traces appear.
 - **When the app has tool/function execution:** add manual CHAIN + TOOL spans (see **Enriching traces** below) so the trace tree shows each tool call and its result — otherwise traces will look sparse (only LLM API spans, no tool input/output).
 
@@ -220,6 +223,8 @@ import (
     "go.opentelemetry.io/otel"
     "go.opentelemetry.io/otel/attribute"
     "go.opentelemetry.io/otel/codes"
+
+    "github.com/Arize-ai/openinference/go/semconv"
 )
 
 var tracer = otel.Tracer("my-app")
@@ -228,11 +233,11 @@ func runAgent(ctx context.Context, userMessage string) string {
     ctx, chainSpan := tracer.Start(ctx, "run_agent")
     defer chainSpan.End()
     chainSpan.SetAttributes(
-        attribute.String("openinference.span.kind", "CHAIN"),
-        attribute.String("input.value", userMessage),
+        attribute.String(semconv.OpenInferenceSpanKind, semconv.SpanKindChain),
+        attribute.String(semconv.InputValue, userMessage),
     )
 
-    // ... LLM call ...
+    // ... LLM call (auto-instrumented by openaiotel/anthropicotel if used) ...
     for _, toolUse := range toolUses {
         _, toolSpan := tracer.Start(ctx, toolUse.Name)
         argsJSON, err := json.Marshal(toolUse.Input)
@@ -241,19 +246,37 @@ func runAgent(ctx context.Context, userMessage string) string {
             toolSpan.SetStatus(codes.Error, err.Error())
         }
         toolSpan.SetAttributes(
-            attribute.String("openinference.span.kind", "TOOL"),
-            attribute.String("input.value", string(argsJSON)),
+            attribute.String(semconv.OpenInferenceSpanKind, semconv.SpanKindTool),
+            attribute.String(semconv.InputValue, string(argsJSON)),
         )
         result := runTool(toolUse.Name, toolUse.Input)
-        toolSpan.SetAttributes(attribute.String("output.value", result))
+        toolSpan.SetAttributes(attribute.String(semconv.OutputValue, result))
         toolSpan.End()
         // ... append tool result to messages, call LLM again ...
     }
 
-    chainSpan.SetAttributes(attribute.String("output.value", finalReply))
+    chainSpan.SetAttributes(attribute.String(semconv.OutputValue, finalReply))
     return finalReply
 }
 ```
+
+**Session, user, metadata, tags, suppression (Go):** when the customer asks for session-aware tracing or wants evaluator calls excluded, use the `instrumentation` package's context helpers — the per-provider instrumentors (openai, anthropic) apply them automatically to every LLM span:
+
+```go
+import "github.com/Arize-ai/openinference/go/instrumentation"
+
+ctx = instrumentation.WithSession(ctx, sessionID)
+ctx = instrumentation.WithUser(ctx, userID)
+ctx = instrumentation.WithMetadata(ctx, metadataJSON)
+ctx = instrumentation.WithTags(ctx, "prod", "canary")
+resp, _ := client.CreateChatCompletion(ctx, req)   // span carries all four
+
+// Off-trace evaluator calls:
+suppressedCtx := instrumentation.WithSuppression(ctx)
+_, _ = evalClient.CreateChatCompletion(suppressedCtx, req)   // no span emitted
+```
+
+For manual spans you author yourself, call `instrumentation.ApplyContextAttributes(ctx, span)` right after `tracer.Start` to copy the same baggage onto the span.
 
 See [Manual instrumentation](https://arize.com/docs/ax/instrument/manual-instrumentation) for more span kinds and attributes.
 
