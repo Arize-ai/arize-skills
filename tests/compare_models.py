@@ -17,10 +17,6 @@ import pathlib
 import sys
 from datetime import datetime
 
-from dotenv import load_dotenv
-
-load_dotenv(pathlib.Path(__file__).parent.parent / ".env")
-
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from harness.skill_router import SkillSelectionRunner

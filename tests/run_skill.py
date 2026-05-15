@@ -28,11 +28,6 @@ _tests_dir = pathlib.Path(__file__).resolve().parent
 if str(_tests_dir) not in sys.path:
     sys.path.insert(0, str(_tests_dir))
 
-from dotenv import load_dotenv
-
-# Load .env from the repository root (parent of tests/)
-load_dotenv(pathlib.Path(__file__).parent.parent / ".env")
-
 from harness.result import TestResult
 
 SKILLS_DIR = pathlib.Path(__file__).parent.parent / "skills"
@@ -252,17 +247,17 @@ Examples:
 
     # Validate environment
     arize_api_key = os.environ.get("ARIZE_API_KEY")
-    arize_space_id = os.environ.get("ARIZE_SPACE_ID")
+    arize_space = os.environ.get("ARIZE_SPACE")
     if not arize_api_key:
-        print("Error: ARIZE_API_KEY is not set. Add it to .env or export it.", file=sys.stderr)
+        print("Error: ARIZE_API_KEY is not set. Export it before running.", file=sys.stderr)
         sys.exit(1)
-    if not arize_space_id:
-        print("Error: ARIZE_SPACE_ID is not set. Add it to .env or export it.", file=sys.stderr)
+    if not arize_space:
+        print("Error: ARIZE_SPACE is not set. Export it before running.", file=sys.stderr)
         sys.exit(1)
 
     arize_env = {
         "ARIZE_API_KEY": arize_api_key,
-        "ARIZE_SPACE_ID": arize_space_id,
+        "ARIZE_SPACE": arize_space,
         "ARIZE_DEFAULT_PROJECT": os.environ.get("TEST_PROJECT_NAME", "skill-tests"),
         "PATH": os.environ.get("PATH", "") + ":" + os.path.expanduser("~/.local/bin"),
     }
