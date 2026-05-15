@@ -30,6 +30,33 @@ Programmatic management of Arize users, organizations, spaces, roles, permission
 - Create scoped service keys for CI/CD pipelines or multi-tenant architectures
 - Rotate or revoke API keys
 
+## Upfront Questions
+
+For multi-step workflows, **collect all required information before running any `ax` commands**. Use `AskUserQuestion` to avoid back-and-forth mid-workflow. Fetch live data first (e.g. org list) so you can present real options rather than asking the user to recall IDs.
+
+### Onboarding a new team
+1. Run `ax organizations list -o json` to get available org names.
+2. Use `AskUserQuestion` (single call, up to 4 questions) to gather:
+   - **Which org?** — present the org names from the list as options
+   - **Space name** — what to call the new team's space
+   - **Team members** — names and emails to invite (user can type via "Other"; ask if none yet)
+   - **Service key?** — whether to generate a service key for CI/CD pipelines
+
+### Offboarding a user
+Ask before running any commands:
+- **Which user?** — email address (then look up with `ax users list --email`)
+
+### Restricting a project
+Ask before running any commands:
+- **Which space and project?** — to look up the project global ID
+- **Which users get explicit access?** — emails of users to bind to the restricted project
+
+### Inviting users (standalone)
+Ask before running any commands:
+- **Name and email** — for each user to invite
+- **Role** — `admin`, `member`, or `read-only` (present as options)
+- **Invite mode** — `email_link` (default), `temporary_password`, or `none`
+
 ## Concepts
 
 - **Organization** — a named grouping within an account (e.g. one per business unit). Spaces live inside organizations. Users are added to the account first, then to orgs, then to spaces.
