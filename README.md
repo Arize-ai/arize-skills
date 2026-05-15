@@ -112,7 +112,7 @@ You'll also need a space name or ID. Find yours by running `ax spaces list -o js
 export ARIZE_SPACE="my-workspace"        # name, or base64 ID like U3BhY2U6...
 ```
 
-**Option B — Environment variables** (CI/CD):
+**Option B — Environment variables**:
 ```bash
 export ARIZE_API_KEY="your-api-key"       # from https://app.arize.com/admin > API Keys
 export ARIZE_SPACE="my-workspace"         # space name or base64 ID from ax spaces list
