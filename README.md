@@ -112,29 +112,13 @@ You'll also need a space name or ID. Find yours by running `ax spaces list -o js
 export ARIZE_SPACE="my-workspace"        # name, or base64 ID like U3BhY2U6...
 ```
 
-**Option B — `.env` file** (project-scoped credentials + provider keys):
-
-Copy the example and fill in your keys:
-```bash
-cp .env.example .env
-# Edit .env with your credentials
-```
-
-The `.env` file supports all credentials used by the skills:
-```bash
-ARIZE_API_KEY=your-api-key               # from https://app.arize.com/admin > API Keys
-ARIZE_SPACE=my-workspace             # space name or base64 ID from ax spaces list
-# ARIZE_DEFAULT_PROJECT=my-project       # optional default project
-# OPENAI_API_KEY=sk-...                  # for AI integrations and evaluators
-# ANTHROPIC_API_KEY=sk-ant-...           # for AI integrations and evaluators
-```
-
-Skills automatically load this file during their prerequisite check. The `.env` file is gitignored — never commit it.
-
-**Option C — Environment variables** (CI/CD):
+**Option B — Environment variables**:
 ```bash
 export ARIZE_API_KEY="your-api-key"       # from https://app.arize.com/admin > API Keys
-export ARIZE_SPACE="my-workspace"        # space name or base64 ID from ax spaces list
+export ARIZE_SPACE="my-workspace"         # space name or base64 ID from ax spaces list
+# export ARIZE_DEFAULT_PROJECT=my-project # optional default project
+# export OPENAI_API_KEY="sk-..."          # for AI integrations and evaluators
+# export ANTHROPIC_API_KEY="sk-ant-..."   # for AI integrations and evaluators
 ```
 
 ### Verify
@@ -213,6 +197,17 @@ For interactive setup, `ax profiles create` also offers **Advanced → Single en
 ## Testing Skills
 
 `tests/run_skill.py` is an interactive test harness that runs a skill end-to-end using the Claude Agent SDK. It creates a temporary workspace, passes in your Arize credentials, and streams the agent's output.
+
+Export the required environment variables before running:
+
+```bash
+export ARIZE_API_KEY="your-api-key"       # from https://app.arize.com/admin > API Keys
+export ARIZE_SPACE="my-workspace"         # space name or base64 ID from ax spaces list
+export TEST_PROJECT_NAME="my-project"     # optional: Arize project for trace tests
+export TEST_MODEL="claude-sonnet-4-6"     # optional: Claude model override
+```
+
+Then run the harness:
 
 ```bash
 python tests/run_skill.py --skill arize-trace --prompt "Export trace abc123"
