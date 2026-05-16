@@ -282,6 +282,7 @@ class SkillSelectionRunner:
     and denied with interrupt=True so the skill body never executes.
     """
 
+
     def __init__(
         self,
         model: str | None = None,

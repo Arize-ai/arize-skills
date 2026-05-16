@@ -25,6 +25,8 @@ Use `ax spans export` to download individual spans, or `ax traces export` to dow
 
 **Space name as ground truth:** If the user tells you their space name, use it directly — do not run `ax spaces list` first to look it up. `ax spaces list` paginates and only returns the first page (~15 spaces); the target space may be on a later page and never appear. Pass the user-provided name straight to `--space-id` or `ax projects list --space-id "<name>"`.
 
+**Resolving project for export:** The `PROJECT` positional argument accepts either a project name or a base64 project ID. When using a name, `--space-id` is required. If you hit limit errors or `401 Unauthorized` when using a project name, resolve it to a base64 ID: run `ax projects list --space-id SPACE_ID -l 100 -o json`, find the project by `name`, and use its `id` as `PROJECT`.
+
 **Exploratory export rule:** When exporting spans or traces **without** a specific `--trace-id`, `--span-id`, or `--session-id` (i.e., browsing/exploring a project), always start with `-l 50` to pull a small sample first. Summarize what you find, then pull more data only if the user asks or the task requires it. This avoids slow queries and overwhelming output on large projects.
 
 **Recency warning:** `ax traces export` and `ax spans export` return results in **arbitrary order, not by recency**. Running without `--start-time` will not give you the most recent traces. To fetch recent data (e.g., "last day's conversations"), always pass `--start-time` scoped to the relevant window.
