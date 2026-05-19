@@ -183,6 +183,37 @@ SPECIFIC_PROMPTS = [
         ["arize-compliance-audit"],
         ["specific", "compliance-audit"],
     ),
+    # arize-admin
+    (
+        "Invite jane@example.com to my Arize account with a member role",
+        ["arize-admin"],
+        ["specific", "admin"],
+    ),
+    (
+        "Create a new Arize space called team-alpha inside the Platform org",
+        ["arize-admin"],
+        ["specific", "admin"],
+    ),
+    (
+        "Generate a service API key scoped to the production space for my CI pipeline",
+        ["arize-admin"],
+        ["specific", "admin"],
+    ),
+    (
+        "Create a custom RBAC role with dataset and experiment permissions",
+        ["arize-admin"],
+        ["specific", "admin"],
+    ),
+    (
+        "Restrict a project so only users with explicit role bindings can access it",
+        ["arize-admin"],
+        ["specific", "admin"],
+    ),
+    (
+        "Offboard a user and revoke all their org and space memberships",
+        ["arize-admin"],
+        ["specific", "admin"],
+    ),
 ]
 
 # Single-skill: vague/ambiguous prompts (harder to route correctly)
@@ -311,6 +342,22 @@ VAGUE_PROMPTS = [
         "Help me make sure my AI meets regulatory requirements",
         ["arize-compliance-audit"],
         ["vague", "compliance-audit"],
+    ),
+    # Should route to arize-admin
+    (
+        "I need to control who can access my Arize projects",
+        ["arize-admin"],
+        ["vague", "admin"],
+    ),
+    (
+        "How do I set up my team in Arize?",
+        ["arize-admin"],
+        ["vague", "admin"],
+    ),
+    (
+        "I need a service account for my data pipeline",
+        ["arize-admin"],
+        ["vague", "admin"],
     ),
 ]
 
