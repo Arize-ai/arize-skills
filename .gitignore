@@ -6,6 +6,9 @@
 .arize-tmp-traces/
 
 .claude/
+.cursor/
+.codex/
+
 test-results/
 __pycache__/
 **/__pycache__/
