@@ -1,6 +1,6 @@
 ---
 name: arize-admin
-description: "Manages Arize users, organizations, spaces, projects, roles, role bindings, resource restrictions, and API keys via the ax CLI. Use for enterprise admin workflows: inviting and offboarding users, onboarding new teams, creating custom roles for SAML/SSO mappings, assigning roles to users, restricting project-level access, and managing service keys for multi-tenant architectures. Covers ax users, ax organizations, ax spaces, ax projects, ax roles, ax role-bindings, ax resource-restrictions, ax api-keys, and ax auth."
+description: "Manages Arize users, organizations, spaces, projects, roles, role bindings, resource restrictions, and API keys via the ax CLI. Use for enterprise admin workflows: inviting and offboarding users, onboarding new teams, creating custom roles for SAML/SSO mappings, assigning roles to users, restricting project-level access, and managing service keys for multi-tenant architectures. Covers ax users, ax organizations, ax spaces, ax projects, ax roles, ax role-bindings, and ax api-keys."
 metadata:
   author: arize
   version: "1.0"
