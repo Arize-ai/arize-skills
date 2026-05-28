@@ -2,8 +2,6 @@
 
 Consult when you need full flag lists or edge cases. Official docs: https://arize.com/docs/api-clients/cli/prompts
 
-**Status:** `ax prompts` is **ALPHA**. The CLI emits a one-time warning on first use; the API may change without notice.
-
 ---
 
 ## `ax prompts list`
@@ -43,7 +41,7 @@ ax prompts create \
 |--------|-------------|
 | `--name` | Unique prompt name within the space |
 | `--space` | Space name or ID |
-| `--provider` | **Required.** `openAI`, `azureOpenAI`, `awsBedrock`, `vertexAI`, `custom` |
+| `--provider` | **Required.** `openAI`, `anthropic`, `azureOpenAI`, `awsBedrock`, `vertexAI`, `gemini`, `custom` |
 | `--input-variable-format` | `f_string` (default for `{variable}` placeholders — use without asking the user), `mustache` for `{{variable}}`, or `none` |
 | `--messages` | Path to JSON file or inline JSON array of message objects |
 | `--commit-message` | Initial version message (default: `Initial version`). Same concept as Hub **Version description (optional)** on first save. |
@@ -108,7 +106,7 @@ ax prompts create-version NAME_OR_ID \
 
 | Option | Description |
 |--------|-------------|
-| `--provider` | **Required.** Same enum as `create` |
+| `--provider` | **Required.** Same enum as `create`: `openAI`, `anthropic`, `azureOpenAI`, `awsBedrock`, `vertexAI`, `gemini`, `custom` |
 | `--input-variable-format` | Same as `create` (default `f_string` for `{variable}`) |
 | `--messages` | Updated messages JSON for this version |
 | `--commit-message` | Same concept as Hub **Save New Version** → **Version description (optional)** (CLI default: `New version`) |

@@ -11,7 +11,7 @@ Official references (read the skill body first; open docs only if the user needs
 - CLI: https://arize.com/docs/api-clients/cli/prompts
 - Creating prompts in the product (Prompt Playground, variables, params): https://arize.com/docs/ax/prompts/tutorial/create-a-prompt
 
-**ALPHA:** `ax prompts` may emit a one-time CLI warning; the command surface can change. See references/cli-prompts.md for full flag tables.
+See references/cli-prompts.md for full flag tables.
 
 ---
 
@@ -102,7 +102,7 @@ Format-only example (not a default to paste — see Eliciting the prompt templat
 ]
 ```
 
-**Providers** (`--provider`): `openAI`, `azureOpenAI`, `awsBedrock`, `vertexAI`, `custom`. Required on every `create` and `create-version`.
+**Providers** (`--provider`): `openAI`, `anthropic`, `azureOpenAI`, `awsBedrock`, `vertexAI`, `gemini`, `custom`. Required on every `create` and `create-version`.
 
 **Model** (`--model`): Always pass an explicit model. If unknown, propose a provider-appropriate default and confirm before running.
 

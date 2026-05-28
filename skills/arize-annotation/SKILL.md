@@ -64,6 +64,7 @@ Always ensure the relevant **annotation config** exists in the space before expe
 ax annotation-configs list --space SPACE
 ax annotation-configs list --space SPACE -o json
 ax annotation-configs list --space SPACE --limit 20
+ax annotation-configs list --space SPACE --name "Correctness"   # substring filter
 ```
 
 ### Create — Categorical
@@ -141,6 +142,7 @@ Annotation queues route records (spans, dataset examples, experiment runs) to hu
 ```bash
 ax annotation-queues list --space SPACE
 ax annotation-queues list --space SPACE -o json
+ax annotation-queues list --space SPACE --name "Review"   # substring filter
 
 ax annotation-queues get NAME_OR_ID --space SPACE
 ax annotation-queues get NAME_OR_ID --space SPACE -o json
@@ -285,12 +287,27 @@ response = client.spans.update_annotations(
 
 ---
 
+## Batch Annotate via CLI
+
+The `ax` CLI provides batch annotation commands for writing annotations at scale without the Python SDK. All commands accept a file (CSV, JSON, JSONL, or Parquet) with up to **1000 annotations per request** and use **upsert semantics** (existing annotations with the same key are updated; new ones are created).
+
+| Resource | Command | Skill |
+|----------|---------|-------|
+| Spans | `ax spans annotate PROJECT --file annotations.json` | **arize-trace** |
+| Dataset examples | `ax datasets annotate-examples NAME_OR_ID --file annotations.json` | **arize-dataset** |
+| Experiment runs | `ax experiments annotate-runs NAME_OR_ID --file annotations.json --dataset DATASET` | **arize-experiment** |
+
+All three commands support `--space SPACE`. See the linked skills for full flag tables and file format details.
+
+---
+
 ## Related Skills
 
-- **arize-trace**: Export spans to find span IDs and time ranges
-- **arize-dataset**: Find dataset IDs and example IDs
+- **arize-trace**: Export spans to find span IDs and time ranges; batch annotate spans via `ax spans annotate`
+- **arize-dataset**: Find dataset IDs and example IDs; batch annotate examples via `ax datasets annotate-examples`
 - **arize-evaluator**: Automated LLM-as-judge alongside human annotation
-- **arize-experiment**: Experiments tied to datasets and evaluation workflows
+- **arize-experiment**: Experiments tied to datasets and evaluation workflows; batch annotate runs via `ax experiments annotate-runs`
+- **arize-prompts**: Manage prompt templates; annotate prompt outputs for quality tracking
 - **arize-link**: Deep links to annotation configs and queues in the Arize UI
 
 ---

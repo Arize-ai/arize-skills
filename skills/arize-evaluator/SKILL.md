@@ -1,6 +1,6 @@
 ---
 name: arize-evaluator
-description: Handles LLM-as-judge evaluation workflows on Arize including creating/updating evaluators, running evaluations on spans or experiments, managing tasks, trigger-run operations, column mapping, and continuous monitoring. Use when the user mentions create evaluator, LLM judge, hallucination, faithfulness, correctness, relevance, run eval, score spans, score experiment, trigger-run, column mapping, continuous monitoring, or improve evaluator prompt.
+description: Handles LLM-as-judge and code evaluator workflows on Arize including creating/updating evaluators, running evaluations on spans or experiments, managing tasks, trigger-run operations, column mapping, and continuous monitoring. Use when the user mentions create evaluator, LLM judge, code evaluator, hallucination, faithfulness, correctness, relevance, run eval, score spans, score experiment, trigger-run, column mapping, continuous monitoring, or improve evaluator prompt.
 metadata:
   author: arize
   version: "1.0"
@@ -11,7 +11,7 @@ compatibility: Requires the ax CLI and a configured Arize profile with an AI int
 
 > **`SPACE`** — All `--space` flags and the `ARIZE_SPACE` env var accept a space **name** (e.g., `my-workspace`) or a base64 space **ID** (e.g., `U3BhY2U6...`). Find yours with `ax spaces list`.
 
-This skill covers designing, creating, and running **LLM-as-judge evaluators** on Arize. An evaluator defines the judge; a **task** is how you run it against real data.
+This skill covers designing, creating, and running **evaluators** on Arize — both **LLM-as-judge (template)** evaluators and **code evaluators** (deterministic, no LLM required). An evaluator defines the judge; a **task** is how you run it against real data.
 
 ---
 
@@ -108,20 +108,33 @@ ax ai-integrations create \
   --api-key $OPENAI_API_KEY
 ```
 
-Copy the returned integration ID — it is required for `ax evaluators create --ai-integration-id`.
+Copy the returned integration ID — it is required for `ax evaluators create-template-evaluator --ai-integration-id`.
 
 ### Evaluators
 
 ```bash
 # List / Get
 ax evaluators list --space SPACE
+ax evaluators list --space SPACE --name "Hallucination"   # substring filter
 ax evaluators get ID                    # accepts name or ID
 ax evaluators get NAME --space SPACE   # required when using name instead of ID
 ax evaluators list-versions NAME_OR_ID
 ax evaluators get-version VERSION_ID
 
-# Create (creates the evaluator and its first version)
-ax evaluators create \
+# Update metadata only (name, description — not prompt/code)
+ax evaluators update NAME_OR_ID \
+  --name "New Name" \
+  --description "Updated description"
+
+# Delete (permanent — removes all versions)
+ax evaluators delete NAME_OR_ID
+```
+
+#### Template evaluators (LLM-as-judge)
+
+```bash
+# Create a template evaluator (LLM-as-judge)
+ax evaluators create-template-evaluator \
   --name "Answer Correctness" \
   --space SPACE \
   --description "Judges if the model answer is correct" \
@@ -129,7 +142,7 @@ ax evaluators create \
   --commit-message "Initial version" \
   --ai-integration-id INT_ID \
   --model-name "gpt-4o" \
-  --include-explanations \
+  --include-explanation \
   --use-function-calling \
   --classification-choices '{"correct": 1, "incorrect": 0}' \
   --template 'You are an evaluator. Given the user question and the model response, decide if the response correctly answers the question.
@@ -140,28 +153,20 @@ Model response: {output}
 
 Respond with exactly one of these labels: correct, incorrect'
 
-# Create a new version (for prompt or model changes — versions are immutable)
-ax evaluators create-version NAME_OR_ID \
+# Create a new template version (for prompt or model changes — versions are immutable)
+ax evaluators create-template-evaluator-version NAME_OR_ID \
   --commit-message "Added context grounding" \
   --template-name "correctness" \
   --ai-integration-id INT_ID \
   --model-name "gpt-4o" \
-  --include-explanations \
+  --include-explanation \
   --classification-choices '{"correct": 1, "incorrect": 0}' \
   --template 'Updated prompt...
 
 {input} / {output} / {context}'
-
-# Update metadata only (name, description — not prompt)
-ax evaluators update NAME_OR_ID \
-  --name "New Name" \
-  --description "Updated description"
-
-# Delete (permanent — removes all versions)
-ax evaluators delete NAME_OR_ID
 ```
 
-**Key flags for `create`:**
+**Key flags for `create-template-evaluator`:**
 
 | Flag | Required | Description |
 |------|----------|-------------|
@@ -174,12 +179,108 @@ ax evaluators delete NAME_OR_ID
 | `--template` | yes | Prompt with `{variable}` placeholders (single-quoted in bash) |
 | `--classification-choices` | yes | JSON object mapping choice labels to numeric scores e.g. `'{"correct": 1, "incorrect": 0}'` |
 | `--description` | no | Human-readable description |
-| `--include-explanations` | no | Include reasoning alongside the label |
+| `--include-explanation` | no | Include reasoning alongside the label |
 | `--use-function-calling` | no | Prefer structured function-call output |
 | `--invocation-params` | no | JSON of model params e.g. `'{"temperature": 0}'` |
-| `--data-granularity` | no | `span` (default), `trace`, or `session`. Only relevant for project tasks, not dataset/experiment tasks. See Data Granularity section. |
-| `--direction` | no | Optimization direction: `maximize` or `minimize`. Sets how the UI renders trends. |
 | `--provider-params` | no | JSON object of provider-specific parameters |
+| `--data-granularity` | no | `span` (default), `trace`, or `session`. Only relevant for project tasks, not dataset/experiment tasks. See Data Granularity section. |
+| `--direction` | no | Optimization direction: `maximize`, `minimize`, or `none`. Sets how the UI renders trends. |
+
+#### Code evaluators (deterministic, no LLM)
+
+Code evaluators run without an AI integration — they use deterministic logic (regex, JSON checks, keyword matching, or custom Python). Use them for fast, low-cost checks that don't need language understanding.
+
+**Managed code evaluators** use built-in patterns:
+
+```bash
+# Managed: check output matches a regex
+ax evaluators create-code-evaluator \
+  --name "JSON Format Check" \
+  --space SPACE \
+  --template-name "json_format" \
+  --commit-message "Initial version" \
+  --code-type managed \
+  --code-name "json_check" \
+  --managed-evaluator JSONParseable \
+  --variables '[]'
+
+# Managed: check output contains required keywords
+ax evaluators create-code-evaluator \
+  --name "Safety Keywords" \
+  --space SPACE \
+  --template-name "safety_check" \
+  --commit-message "Initial version" \
+  --code-type managed \
+  --code-name "safety_keywords" \
+  --managed-evaluator ContainsAnyKeyword \
+  --variables '[{"name": "keywords", "value": ["unsafe", "harmful", "illegal"]}]'
+```
+
+**Managed evaluator types:**
+
+| Value | What it checks |
+|-------|---------------|
+| `MatchesRegex` | Output matches a regular expression |
+| `JSONParseable` | Output is valid JSON |
+| `ContainsAnyKeyword` | Output contains at least one keyword from a list |
+| `ContainsAllKeywords` | Output contains all keywords from a list |
+| `ExactMatch` | Output exactly equals a target string |
+
+**Custom Python code evaluators:**
+
+```bash
+# Custom Python: inline code
+ax evaluators create-code-evaluator \
+  --name "Word Count Check" \
+  --space SPACE \
+  --template-name "word_count" \
+  --commit-message "Initial version" \
+  --code-type custom \
+  --code-name "word_count_eval" \
+  --variables '[{"name": "max_words", "value": 100}]' \
+  --code 'def evaluate(output, max_words):
+    count = len(output.split())
+    return {"label": "pass" if count <= max_words else "fail", "score": count}'
+
+# Custom Python: from file
+ax evaluators create-code-evaluator \
+  --name "Custom Evaluator" \
+  --space SPACE \
+  --template-name "custom_eval" \
+  --commit-message "Initial version" \
+  --code-type custom \
+  --code-name "my_eval" \
+  --variables '[]' \
+  --code @./my_evaluator.py
+
+# Create a new version of a code evaluator
+ax evaluators create-code-evaluator-version NAME_OR_ID \
+  --commit-message "Updated regex pattern" \
+  --code-type managed \
+  --code-name "regex_check" \
+  --managed-evaluator MatchesRegex \
+  --variables '[{"name": "pattern", "value": "^[A-Z]"}]'
+```
+
+**Key flags for `create-code-evaluator`:**
+
+| Flag | Required | Description |
+|------|----------|-------------|
+| `--name` | yes | Evaluator name (unique within space) |
+| `--space` | yes | Space name or ID to create in |
+| `--template-name` | yes | Eval column name — alphanumeric, spaces, hyphens, underscores |
+| `--commit-message` | yes | Description of this version |
+| `--code-type` | yes | `managed` (built-in pattern) or `custom` (Python function) |
+| `--code-name` | yes | Internal identifier for the code evaluator |
+| `--variables` | yes | JSON array of variable definitions `[{"name": "...", "value": ...}]` |
+| `--managed-evaluator` | managed only | One of: `MatchesRegex`, `JSONParseable`, `ContainsAnyKeyword`, `ContainsAllKeywords`, `ExactMatch` |
+| `--code` | custom only | Python code string (or `@filepath` to read from file) |
+| `--imports` | custom only | Python import block for the code |
+| `--static-params` | no | JSON of static parameters passed to the evaluator function |
+| `--query-filter` | no | SQL-style filter to restrict which spans are evaluated |
+| `--description` | no | Human-readable description |
+| `--data-granularity` | no | `span` (default), `trace`, or `session` |
+| `--direction` | no | Optimization direction: `maximize`, `minimize`, or `none` |
 
 ### Tasks
 
@@ -190,10 +291,11 @@ ax evaluators delete NAME_OR_ID
 ax tasks list --space SPACE
 ax tasks list --project PROJECT_NAME
 ax tasks list --dataset DATASET_NAME --space SPACE
+ax tasks list --task-type template_evaluation   # filter by type: template_evaluation, code_evaluation, run_experiment
 ax tasks get TASK_ID
 
-# Create (project — continuous)
-ax tasks create \
+# Create evaluation task (project — continuous)
+ax tasks create-evaluation \
   --name "Correctness Monitor" \
   --task-type template_evaluation \
   --project PROJECT_NAME \
@@ -201,22 +303,40 @@ ax tasks create \
   --is-continuous \
   --sampling-rate 0.1
 
-# Create (project — one-time / backfill)
-ax tasks create \
+# Create evaluation task (project — one-time / backfill)
+ax tasks create-evaluation \
   --name "Correctness Backfill" \
   --task-type template_evaluation \
   --project PROJECT_NAME \
   --evaluators '[{"evaluator_id": "EVAL_ID", "column_mappings": {"input": "attributes.input.value", "output": "attributes.output.value"}}]' \
   --no-continuous
 
-# Create (experiment / dataset)
-ax tasks create \
+# Create evaluation task (experiment / dataset)
+ax tasks create-evaluation \
   --name "Experiment Scoring" \
   --task-type template_evaluation \
   --dataset DATASET_NAME --space SPACE \
   --experiment-ids "EXP_ID_1,EXP_ID_2" \   # base64 IDs from `ax experiments list --space SPACE -o json`
   --evaluators '[{"evaluator_id": "EVAL_ID", "column_mappings": {"output": "output"}}]' \
   --no-continuous
+
+# Create run-experiment task (runs an experiment via a task)
+ax tasks create-run-experiment \
+  --name "GPT-4o Baseline Run" \
+  --dataset DATASET_NAME \
+  --run-configuration '{"model": "gpt-4o", "temperature": 0}' \
+  --space SPACE
+
+# Update a task (mutable fields only)
+ax tasks update TASK \
+  --name "New Task Name" \
+  --sampling-rate 0.2 \
+  --is-continuous \
+  --query-filter "span_kind = 'LLM'" \
+  --evaluators '[{"evaluator_id": "EVAL_ID", "column_mappings": {"output": "output"}}]'
+
+# Delete a task (irreversible)
+ax tasks delete TASK --force
 
 # Trigger a run (project task — use data window)
 ax tasks trigger-run TASK_ID \
@@ -235,6 +355,8 @@ ax tasks get-run RUN_ID
 ax tasks wait-for-run RUN_ID --timeout 300
 ax tasks cancel-run RUN_ID --force
 ```
+
+> **Note:** `ax tasks create` (generic) also works and dispatches by `--task-type`. `create-evaluation` and `create-run-experiment` are dedicated shortcuts with clearer flag validation.
 
 **Time format for trigger-run:** `2026-03-21T09:00:00` — no trailing `Z`.
 
@@ -306,14 +428,14 @@ If a suitable integration exists, note its ID. If not, create one using the **ar
 Use the template design best practices below. Keep the evaluator name and variables **generic** — the task (Step 6) handles project-specific wiring via `column_mappings`.
 
 ```bash
-ax evaluators create \
+ax evaluators create-template-evaluator \
   --name "Hallucination" \
   --space SPACE \
   --template-name "hallucination" \
   --commit-message "Initial version" \
   --ai-integration-id INT_ID \
   --model-name "gpt-4o" \
-  --include-explanations \
+  --include-explanation \
   --use-function-calling \
   --classification-choices '{"factual": 1, "hallucinated": 0}' \
   --template 'You are an evaluator. Given the user question and the model response, decide if the response is factual or contains unsupported claims.
@@ -379,7 +501,7 @@ Include a mapping for **every** variable the template references. Omitting one c
 
 **Backfill only (a):**
 ```bash
-ax tasks create \
+ax tasks create-evaluation \
   --name "Hallucination Backfill" \
   --task-type template_evaluation \
   --project PROJECT \
@@ -389,7 +511,7 @@ ax tasks create \
 
 **Continuous only (b):**
 ```bash
-ax tasks create \
+ax tasks create-evaluation \
   --name "Hallucination Monitor" \
   --task-type template_evaluation \
   --project PROJECT \
@@ -482,7 +604,7 @@ ax datasets export DATASET_NAME --space SPACE --stdout | python3 -c "import sys,
 ### Step 6: Create the task
 
 ```bash
-ax tasks create \
+ax tasks create-evaluation \
   --name "Experiment Correctness" \
   --task-type template_evaluation \
   --dataset DATASET_NAME --space SPACE \
@@ -581,7 +703,7 @@ The labels in `--classification-choices` must exactly match the labels reference
 | Scores look wrong | Add `--include-explanations` and inspect judge reasoning on a few samples |
 | Evaluator cancels on wrong span kind | Match `query_filter` and `column_mappings` to LLM vs CHAIN spans |
 | Time format error on `trigger-run` | Use `2026-03-21T09:00:00` — no trailing `Z` |
-| Run failed: "missing rails and classification choices" | Add `--classification-choices '{"label_a": 1, "label_b": 0}'` to `ax evaluators create` — labels must match the template |
+| Run failed: "missing rails and classification choices" | Add `--classification-choices '{"label_a": 1, "label_b": 0}'` to `ax evaluators create-template-evaluator` — labels must match the template |
 | Run `completed`, all spans skipped | Query filter matched spans but column mappings are wrong or template variables don't resolve — export a sample span and verify paths |
 | `query_filter` set but 0 spans scored | The filter attribute may not be indexed in the eval index. `attributes.metadata.*` and custom attributes are often not indexed. Use `span_kind` or `attributes.llm.model_name` instead, or remove the filter to confirm spans exist in the window. |
 
@@ -664,6 +786,7 @@ If any variable shows MISSING on all spans, fix the column mapping or adjust `qu
 - **arize-trace**: Export spans to discover column paths and time ranges
 - **arize-experiment**: Create experiments and export runs for experiment column mappings
 - **arize-dataset**: Export dataset examples to find input fields when runs omit them
+- **arize-prompts**: Manage prompt templates in the Prompt Hub; use with evaluators to score versioned prompts
 - **arize-link**: Deep links to evaluators and tasks in the Arize UI
 
 ---
