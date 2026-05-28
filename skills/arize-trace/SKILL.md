@@ -23,7 +23,7 @@ Use `ax spans export` to download individual spans, or `ax traces export` to dow
 
 **Resolving project for export:** The `PROJECT` positional argument accepts either a project name or a base64 project ID. For `ax spans export`, a project name works without `--space`. For `ax traces export`, `--space` is required when using a project name. If you hit limit errors or `401 Unauthorized`, resolve the name to a base64 ID: run `ax projects list -l 100 -o json` (add `--space SPACE` if known), find the project by `name`, and use its `id` as `PROJECT`.
 
-**Space name as ground truth:** If the user tells you their space name, use it directly — do not run `ax spaces list` first to look it up. `ax spaces list` paginates and only returns the first page (~15 spaces); the target space may be on a later page and never appear. Pass the user-provided name straight to `--space-id` or `ax projects list --space-id "<name>"`.
+**Space name as ground truth:** If the user tells you their space name, use it directly — do not run `ax spaces list` first to look it up. `ax spaces list` paginates and only returns the first page (~15 spaces); the target space may be on a later page and never appear. Pass the user-provided name straight to `--space` or `ax projects list --space "<name>"`.
 
 **Exploratory export rule:** When exporting spans or traces **without** a specific `--trace-id`, `--span-id`, or `--session-id` (i.e., browsing/exploring a project), always start with `-l 50` to pull a small sample first. Summarize what you find, then pull more data only if the user asks or the task requires it. This avoids slow queries and overwhelming output on large projects.
 
@@ -175,7 +175,6 @@ ax traces export PROJECT --space SPACE --filter "status_code = 'ERROR'" --all --
 | `--output-dir` | string | `.` | Output directory |
 | `--stdout` | bool | false | Print JSON to stdout instead of file |
 | `--all` | bool | false | Use Arrow Flight for both phases (see spans `--all` docs above) |
-| `-p, --profile` | string | default | Configuration profile |
 
 ### How it differs from `ax spans export`
 
@@ -190,6 +189,30 @@ Arize uses two storage tiers:
 - **Time-series query index** (used by `--days`, `--start-time`, `--end-time`) — built asynchronously from the primary store and lags **6–12 hours**. Queries scoped by time range will miss very recent traces.
 
 **Implication:** If you already have a `trace_id`, use `ax spans export PROJECT_ID --trace-id TRACE_ID` — it's faster and immediately consistent. Use time-range queries only for historical exploration, and set `--start-time` at least 12 hours in the past to guarantee results are indexed.
+
+## Batch Annotate Spans: `ax spans annotate`
+
+Write annotations onto spans in bulk from a file. Upsert semantics — existing annotations with the same key are updated, new ones are created. Up to 1000 annotations per request.
+
+```bash
+ax spans annotate PROJECT --file annotations.json
+ax spans annotate PROJECT --file annotations.csv --space SPACE
+ax spans annotate PROJECT --file annotations.json --start-time "2026-05-01T00:00:00" --end-time "2026-05-28T00:00:00"
+ax spans annotate PROJECT --file annotations.json --days 7
+```
+
+### Flags
+
+| Flag | Type | Required | Description |
+|------|------|----------|-------------|
+| `PROJECT` | string | yes | Project name or base64 ID (positional) |
+| `--file, -f` | path | yes | Annotation file: JSON, JSONL, CSV, or Parquet (use `-` for stdin) |
+| `--space` | string | no | Space name or ID |
+| `--start-time` | string | no | ISO 8601 start of annotation window |
+| `--end-time` | string | no | ISO 8601 end of annotation window |
+| `--days` | int | no | Lookback window in days (default 30) |
+
+The annotation file must contain the span ID and the annotation fields to write. Export a sample span first to confirm span IDs and available fields before bulk-annotating.
 
 ## Filter Syntax Reference
 

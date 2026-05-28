@@ -235,9 +235,15 @@ ax ai-integrations update NAME_OR_ID --model-name gpt-4o --model-name gpt-4o-min
 
 # Update base URL (for Azure, custom, or NIM)
 ax ai-integrations update NAME_OR_ID --base-url "https://new-endpoint.example.com/v1"
+
+# Restrict visibility to specific spaces (full replace — lists all spaces that should have access)
+ax ai-integrations update NAME_OR_ID \
+  --scopings '[{"space_id": "SPACE_GLOBAL_ID", "scoping_type": "include"}]'
 ```
 
 Add `--space SPACE` when using a name instead of ID. Any flag accepted by `create` can be passed to `update`.
+
+**`--scopings` flag:** Controls which spaces can use this integration. Accepts a JSON array of scoping rules. Replaces all existing scopings on update. Use `ax spaces list -o json` to find space global IDs.
 
 ---
 

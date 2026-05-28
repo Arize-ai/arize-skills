@@ -1,6 +1,6 @@
 ---
 name: arize-admin
-description: "Manages Arize users, organizations, spaces, roles, role bindings, resource restrictions, and API keys via the ax CLI. Use for enterprise admin workflows: inviting and offboarding users, onboarding new teams, creating custom roles for SAML/SSO mappings, assigning roles to users, restricting project-level access, and managing service keys for multi-tenant architectures. Covers ax users, ax organizations, ax spaces, ax roles, ax role-bindings, ax resource-restrictions, and ax api-keys."
+description: "Manages Arize users, organizations, spaces, projects, roles, role bindings, resource restrictions, and API keys via the ax CLI. Use for enterprise admin workflows: inviting and offboarding users, onboarding new teams, creating custom roles for SAML/SSO mappings, assigning roles to users, restricting project-level access, and managing service keys for multi-tenant architectures. Covers ax users, ax organizations, ax spaces, ax projects, ax roles, ax role-bindings, ax resource-restrictions, ax api-keys, and ax auth."
 metadata:
   author: arize
   version: "1.0"
@@ -29,6 +29,7 @@ Programmatic management of Arize users, organizations, spaces, roles, permission
 - Restrict a project so only explicitly bound users can access it
 - Create scoped service keys for CI/CD pipelines or multi-tenant architectures
 - Rotate or revoke API keys
+- Create or delete projects within a space
 
 ## Upfront Questions
 
@@ -75,6 +76,8 @@ If an `ax` command fails:
 - `401 Unauthorized` / missing API key → run `ax profiles show`; follow [references/ax-profiles.md](references/ax-profiles.md)
 - `403 Forbidden` → the active profile lacks admin privileges; ask the user to authenticate with an admin key
 - **Security:** Never read `.env` files or search the filesystem for credentials. Use `ax profiles` for Arize credentials. Never echo, log, or display raw API key values.
+
+> **OAuth login option (v0.18.0+):** Users can authenticate via browser-based OAuth PKCE instead of API keys by running `ax auth login` (then `ax auth logout` to revoke). Inform users of this option if they ask about authentication alternatives — do **not** run `ax auth login` yourself, as it opens a browser interactively.
 
 ---
 
@@ -232,13 +235,13 @@ ax api-keys list
 ax api-keys list --key-type service --status active -o json
 
 # User key — authenticates as creator, inherits their full permissions
-ax api-keys create --name "CI pipeline" --key-type user --expires-at "2027-01-01T00:00:00"
+ax api-keys create --name "CI pipeline" --expires-at "2027-01-01T00:00:00"
 
-# Service key — scoped to a specific space (recommended for pipelines)
-ax api-keys create \
+# Service key — space-scoped bot user (recommended for CI/CD pipelines)
+ax api-keys create-service-key \
   --name "team-alpha-traces" \
-  --key-type service \
   --space "team-alpha" \
+  --space-role member \
   --expires-at "2027-01-01T00:00:00"
 
 ax api-keys delete KEY_ID --force   # ⚠ confirm first
@@ -249,6 +252,38 @@ ax api-keys refresh KEY_ID --expires-at "2028-01-01T00:00:00"
 ```
 
 > **The raw key is displayed once.** Save it immediately in your secrets manager. It cannot be retrieved again.
+
+**`create-service-key` flags:**
+
+| Flag | Required | Description |
+|------|----------|-------------|
+| `--name` | yes | Key name |
+| `--space` | yes | Space this service key is scoped to |
+| `--space-role` | no | Role in the space: `admin`, `member`, `read-only` |
+| `--org-role` | no | Role in the parent organization |
+| `--account-role` | no | Role at account level |
+| `--expires-at` | no | ISO 8601 expiry date |
+| `--description` | no | Optional description |
+
+---
+
+## Projects
+
+Projects live inside spaces and contain traces, datasets, and experiments.
+
+```bash
+ax projects list --space SPACE
+ax projects list --space SPACE --name "playground"   # substring filter
+ax projects list --space SPACE -l 100 -o json        # get base64 IDs
+
+ax projects get NAME_OR_ID --space SPACE
+
+ax projects create --name "my-project" --space SPACE
+
+ax projects delete NAME_OR_ID --space SPACE --force   # ⚠ confirm first — deletes all traces and datasets
+```
+
+> **Note:** Project IDs (base64 strings) are used by `ax spans export`, `ax traces export`, and `ax resource-restrictions`. If commands reject a project name, look up the `id` field from `ax projects list -o json` and use that instead.
 
 ---
 
