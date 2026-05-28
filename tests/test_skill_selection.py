@@ -103,6 +103,22 @@ SPECIFIC_PROMPTS = [
         ["arize-prompt-optimization"],
         ["specific", "prompt-optimization"],
     ),
+    # arize-prompts
+    (
+        "Create a new prompt in Arize Prompt Hub using ax prompts with messages from a JSON file",
+        ["arize-prompts"],
+        ["specific", "prompts"],
+    ),
+    (
+        "Set the production label on my prompt version prv_xyz789 using the CLI",
+        ["arize-prompts"],
+        ["specific", "prompts"],
+    ),
+    (
+        "List all versions of my support-agent prompt in Prompt Hub",
+        ["arize-prompts"],
+        ["specific", "prompts"],
+    ),
     # arize-link
     (
         "Give me a link to trace abc123 in the Arize UI",
@@ -282,6 +298,17 @@ VAGUE_PROMPTS = [
         "Make my AI respond better",
         ["arize-prompt-optimization"],
         ["vague", "prompt-optimization"],
+    ),
+    # Should route to arize-prompts (versioned templates in Arize)
+    (
+        "I want to version control my LLM prompt templates in Arize Prompt Hub",
+        ["arize-prompts"],
+        ["vague", "prompts"],
+    ),
+    (
+        "Upload my system and user messages to Arize as a named prompt with the CLI",
+        ["arize-prompts"],
+        ["vague", "prompts"],
     ),
     # Should route to link
     (

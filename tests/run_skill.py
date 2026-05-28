@@ -10,6 +10,7 @@ Usage:
     python tests/run_skill.py arize-dataset "Create a dataset named test-data with 5 examples"
     python tests/run_skill.py arize-trace "Debug my app" --model claude-sonnet-4-6
     python tests/run_skill.py arize-link "Get a link to trace abc123" --output-dir sessions/
+    python tests/run_skill.py arize-prompts "List prompts in my space and show how to create-version"
 """
 
 import argparse
