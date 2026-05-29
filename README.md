@@ -64,7 +64,7 @@ Open up a Claude Code session and execute the following:
 
 ```
 /plugin marketplace add Arize-ai/arize-skills
-/plugin install arize-skills@Arize-ai-arize-skills 
+/plugin install arize-skills@arize-skills
 ```
 
 ## Prerequisites
