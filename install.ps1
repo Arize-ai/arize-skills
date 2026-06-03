@@ -67,19 +67,22 @@ if ($Skill.Count -gt 0) {
 function Get-AgentSkillsDir {
     param([string]$AgentName, [string]$Base)
     switch ($AgentName) {
-        "cursor" { Join-Path $Base ".cursor\skills" }
-        "claude" { Join-Path $Base ".claude\skills" }
-        "codex"  { Join-Path $Base ".codex\skills" }
-        default  { Join-Path $Base ".$AgentName\skills" }
+        "cursor"  { Join-Path $Base ".cursor\skills" }
+        "claude"  { Join-Path $Base ".claude\skills" }
+        "codex"   { Join-Path $Base ".codex\skills" }
+        "copilot" { Join-Path $Base ".agents\skills" }
+        default   { Join-Path $Base ".$AgentName\skills" }
     }
 }
 
 function Find-Agents {
     param([string]$Base)
     $found = @()
-    if (Test-Path (Join-Path $Base ".cursor")) { $found += "cursor" }
-    if (Test-Path (Join-Path $Base ".claude")) { $found += "claude" }
-    if (Test-Path (Join-Path $Base ".codex"))  { $found += "codex" }
+    if (Test-Path (Join-Path $Base ".cursor"))         { $found += "cursor" }
+    if (Test-Path (Join-Path $Base ".claude"))         { $found += "claude" }
+    if (Test-Path (Join-Path $Base ".codex"))          { $found += "codex" }
+    if ((Test-Path (Join-Path $Base ".github\copilot")) -or
+        (Get-Command gh -ErrorAction SilentlyContinue)) { $found += "copilot" }
     return $found
 }
 
@@ -109,12 +112,13 @@ if ($Agent.Count -gt 0) {
 
 if ($Agents.Count -eq 0) {
     if (-not $Yes) {
-        Write-Host "No agents detected (looked for .cursor/, .claude/, .codex/)."
+        Write-Host "No agents detected (looked for .cursor/, .claude/, .codex/, .github/copilot/ directories and cursor/claude/codex/gh binaries)."
         Write-Host ""
         Write-Host "Which agent(s) are you using?"
         Write-Host "  1) cursor"
         Write-Host "  2) claude"
         Write-Host "  3) codex"
+        Write-Host "  4) copilot (GitHub Copilot)"
         Write-Host ""
         $choices = Read-Host "Enter number(s) separated by spaces [1]"
         if (-not $choices) { $choices = "1" }
@@ -123,11 +127,12 @@ if ($Agents.Count -eq 0) {
                 "1" { $Agents += "cursor" }
                 "2" { $Agents += "claude" }
                 "3" { $Agents += "codex" }
+                "4" { $Agents += "copilot" }
                 default { Write-Host "Unknown choice: $choice"; exit 1 }
             }
         }
     } else {
-        Write-Host "No agents detected (looked for .cursor/, .claude/, .codex/)."
+        Write-Host "No agents detected (looked for .cursor/, .claude/, .codex/, .github/copilot/ directories and cursor/claude/codex/gh binaries)."
         Write-Host "Use -Agent <name> to specify manually, e.g.: .\install.ps1 -Agent cursor"
         exit 1
     }

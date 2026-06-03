@@ -4,7 +4,7 @@ Skills that guide AI coding agents to help you add observability, run experiment
 
 These skills encode the workflows we've refined building the [Arize](https://arize.com) platform and helping teams debug LLM apps in production. They handle the `ax` CLI flags, data shape quirks, and multi-step recipes so you don't have to.
 
-Works with Cursor, Claude Code, Codex, Windsurf, and [40+ other agents](https://github.com/vercel-labs/skills#supported-agents).
+Works with Cursor, Claude Code, Codex, GitHub Copilot, Windsurf, and [40+ other agents](https://github.com/vercel-labs/skills#supported-agents).
 
 ## New to Arize? Start Here
 
@@ -170,7 +170,7 @@ For interactive setup, `ax profiles create` also offers **Advanced → Single en
 | `--copy` | Copy files instead of symlinking |
 | `--force` | Overwrite existing skills |
 | `--skip-cli` | Don't install `ax` CLI even if missing |
-| `--agent <name>` | Manually specify agent (cursor, claude, codex) — repeatable |
+| `--agent <name>` | Manually specify agent (cursor, claude, codex, copilot) — repeatable |
 | `--skill <name>` | Only install/uninstall specific skills — repeatable (e.g. `--skill arize-trace --skill arize-dataset`) |
 | `--yes` | Skip confirmation prompts |
 | `--list` | List all available skills and exit |
@@ -185,7 +185,7 @@ For interactive setup, `ax profiles create` also offers **Advanced → Single en
 | `-Copy` | Copy files instead of symlinking |
 | `-Force` | Overwrite existing skills |
 | `-SkipCli` | Don't install `ax` CLI even if missing |
-| `-Agent <name>` | Manually specify agent (cursor, claude, codex) — repeatable |
+| `-Agent <name>` | Manually specify agent (cursor, claude, codex, copilot) — repeatable |
 | `-Skill <name>` | Only install/uninstall specific skills — repeatable |
 | `-Yes` | Skip confirmation prompts |
 | `-Uninstall` | Remove previously installed skill symlinks |
