@@ -32,7 +32,7 @@ Flags:
   --copy            Copy files instead of symlinking
   --force           Overwrite existing skills with same names
   --skip-cli        Don't install ax CLI even if missing
-  --agent <name>    Manually specify agent (cursor, claude, codex) — repeatable
+  --agent <name>    Manually specify agent (cursor, claude, codex, copilot) — repeatable
   --skill <name>    Only install/uninstall specific skills — repeatable
   --yes             Skip confirmation prompts
   --uninstall       Remove previously installed skill symlinks
@@ -45,6 +45,7 @@ Examples:
   ./install.sh --project ~/my-app --skill arize-trace          # Install one skill
   ./install.sh --project . --skill arize-trace --skill arize-dataset  # Install two skills
   ./install.sh --project . --agent cursor --yes                # Current dir, Cursor only
+  ./install.sh --project . --agent copilot --yes               # Current dir, GitHub Copilot only
   ./install.sh --global                                        # Install globally
   ./install.sh --project ~/my-app --copy                       # Copy instead of symlink
   ./install.sh --project ~/my-app --uninstall                  # Remove all installed symlinks
@@ -105,10 +106,11 @@ AGENTS=()
 agent_skills_dir() {
   local agent="$1" base="$2"
   case "$agent" in
-    cursor) echo "$base/.cursor/skills" ;;
-    claude) echo "$base/.claude/skills" ;;
-    codex)  echo "$base/.codex/skills" ;;
-    *)      echo "$base/.$agent/skills" ;;
+    cursor)  echo "$base/.cursor/skills" ;;
+    claude)  echo "$base/.claude/skills" ;;
+    codex)   echo "$base/.codex/skills" ;;
+    copilot) echo "$base/.agents/skills" ;;
+    *)       echo "$base/.$agent/skills" ;;
   esac
 }
 
@@ -125,15 +127,17 @@ detect_agents() {
   local base="$1"
 
   # Check for config directories in the target project/home
-  if [[ -d "$base/.cursor" ]]; then add_agent "cursor"; fi
-  if [[ -d "$base/.claude" ]]; then add_agent "claude"; fi
-  if [[ -d "$base/.codex" ]];  then add_agent "codex"; fi
+  if [[ -d "$base/.cursor" ]];        then add_agent "cursor"; fi
+  if [[ -d "$base/.claude" ]];        then add_agent "claude"; fi
+  if [[ -d "$base/.codex" ]];         then add_agent "codex"; fi
+  if [[ -d "$base/.github/copilot" ]]; then add_agent "copilot"; fi
 
   # Also check for installed agent binaries (catches agents that haven't
   # created config dirs in this project yet)
   command -v cursor &>/dev/null && add_agent "cursor"
   command -v claude &>/dev/null && add_agent "claude"
   command -v codex  &>/dev/null && add_agent "codex"
+  command -v gh     &>/dev/null && add_agent "copilot"
 }
 
 if [[ "$GLOBAL" != true && -z "$PROJECT_DIR" ]]; then
@@ -152,12 +156,13 @@ fi
 
 if [[ ${#AGENTS[@]} -eq 0 ]]; then
   if [[ -t 0 && "$YES" != true ]]; then
-    echo "No agents detected (checked for .cursor/, .claude/, .codex/ directories and cursor/claude/codex binaries)."
+    echo "No agents detected (checked for .cursor/, .claude/, .codex/, .github/copilot/ directories and cursor/claude/codex/gh binaries)."
     echo ""
     echo "Which agent(s) are you using?"
     echo "  1) cursor"
     echo "  2) claude"
     echo "  3) codex"
+    echo "  4) copilot (GitHub Copilot)"
     echo ""
     read -rp "Enter number(s) separated by spaces [1]: " agent_choices
     agent_choices="${agent_choices:-1}"
@@ -166,11 +171,12 @@ if [[ ${#AGENTS[@]} -eq 0 ]]; then
         1) AGENTS+=("cursor") ;;
         2) AGENTS+=("claude") ;;
         3) AGENTS+=("codex") ;;
+        4) AGENTS+=("copilot") ;;
         *) echo "Unknown choice: $choice"; exit 1 ;;
       esac
     done
   else
-    echo "No agents detected (checked for .cursor/, .claude/, .codex/ directories and cursor/claude/codex binaries)."
+    echo "No agents detected (checked for .cursor/, .claude/, .codex/, .github/copilot/ directories and cursor/claude/codex/gh binaries)."
     echo "Use --agent <name> to specify manually, e.g.: ./install.sh --agent cursor"
     exit 1
   fi
