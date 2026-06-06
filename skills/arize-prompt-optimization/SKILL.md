@@ -1,11 +1,19 @@
 ---
 name: arize-prompt-optimization
-description: "INVOKE THIS SKILL when optimizing, improving, or debugging LLM prompts using production trace data, evaluations, and annotations. Also use when the user wants to make their AI respond better or improve AI output quality. Covers extracting prompts from spans, gathering performance signal, and running a data-driven optimization loop using the ax CLI."
+description: Optimizes, improves, and debugs LLM prompts using production trace data, evaluations, and annotations. Extracts prompts from spans, gathers performance signal, and runs a data-driven optimization loop using the ax CLI. Use when the user mentions optimize prompt, improve prompt, make AI respond better, improve output quality, prompt engineering, prompt tuning, or system prompt improvement.
+metadata:
+  author: arize
+  version: "1.0"
+compatibility: Requires the ax CLI and a configured Arize profile.
 ---
 
 # Arize Prompt Optimization Skill
 
 > **`SPACE`** — All `--space` flags and the `ARIZE_SPACE` env var accept a space **name** (e.g., `my-workspace`) or a base64 space **ID** (e.g., `U3BhY2U6...`). Find yours with `ax spaces list`.
+
+## Related skills
+
+- **arize-prompts**: Create, version, and label prompts in **Prompt Hub** with `ax prompts` (JSON messages, providers, labels such as `production`). Use that skill when the artifact should live in Arize; use **arize-prompt-optimization** below to improve prompt text from traces, datasets, and experiments.
 
 ## Concepts
 
@@ -57,6 +65,14 @@ If an `ax` command fails, troubleshoot based on the error:
 - Project unclear → ask the user, or run `ax projects list -o json --limit 100` and present as selectable options
 - LLM provider call fails (missing OPENAI_API_KEY / ANTHROPIC_API_KEY) → run `ax ai-integrations list --space SPACE` to check for platform-managed credentials. If none exist, ask the user to provide the key or create an integration via the **arize-ai-provider-integration** skill
 - **Security:** Never read `.env` files or search the filesystem for credentials. Use `ax profiles` for Arize credentials and `ax ai-integrations` for LLM provider keys. If credentials are not available through these channels, ask the user.
+
+### When you must ask the user first
+
+Still prefer `ax spaces list`, `ax projects list`, `ax datasets list`, `ax experiments list`, and exports over open-ended questions. If you still cannot proceed (e.g. multiple projects match the name the user gave, unclear trace vs experiment path, or destructive scope), **do not** jump straight into questions — use the same explicit framing as **arize-instrumentation** when it stops for scope or confirmation:
+
+1. Acknowledge the skill, e.g.: **I found the arize-prompt-optimization skill in this repo** (you may add `skills/arize-prompt-optimization/SKILL.md` if helpful).
+2. Then a clear pause line, e.g.: **A few clarifying questions before I invoke it:**
+3. Ask **minimal** numbered or short bullet questions — only what blocks the next `ax` step in this skill.
 
 ## Phase 1: Extract the Current Prompt
 

@@ -1,6 +1,10 @@
 ---
 name: arize-experiment
-description: "INVOKE THIS SKILL when creating, running, or analyzing Arize experiments. Also use when the user wants to evaluate or measure model performance, compare models (including GPT-4, Claude, or others), or assess how well their AI is doing. Covers experiment CRUD, exporting runs, comparing results, and evaluation workflows using the ax CLI."
+description: Creates, runs, and analyzes Arize experiments for evaluating and comparing model performance. Covers experiment CRUD, exporting runs, comparing results, and evaluation workflows using the ax CLI. Use when the user mentions create experiment, run experiment, compare models, model performance, evaluate AI, experiment results, benchmark, A/B test models, or measure accuracy.
+metadata:
+  author: arize
+  version: "1.0"
+compatibility: Requires the ax CLI and a configured Arize profile.
 ---
 
 # Arize Experiment Skill
@@ -44,10 +48,10 @@ ax experiments list -o json
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
 | `--dataset` | string | none | Filter by dataset |
+| `--name, -n` | string | none | Substring filter on experiment name |
 | `--limit, -l` | int | 15 | Max results (1-100) |
 | `--cursor` | string | none | Pagination cursor from previous response |
 | `-o, --output` | string | table | Output format: table, json, csv, parquet, or file path |
-| `-p, --profile` | string | default | Configuration profile |
 
 ## Get Experiment: `ax experiments get`
 
@@ -67,7 +71,6 @@ ax experiments get NAME_OR_ID --dataset DATASET_NAME --space SPACE   # required 
 | `--dataset` | string | none | Dataset name or ID (required if using experiment name instead of ID) |
 | `--space` | string | none | Space name or ID (required if using dataset name instead of ID) |
 | `-o, --output` | string | table | Output format |
-| `-p, --profile` | string | default | Configuration profile |
 
 ### Response fields
 
@@ -106,7 +109,6 @@ ax experiments export EXPERIMENT_NAME --dataset DATASET_NAME --space SPACE --std
 | `--all` | bool | false | Use Arrow Flight for bulk export (see below) |
 | `--output-dir` | string | `.` | Output directory |
 | `--stdout` | bool | false | Print JSON to stdout instead of file |
-| `-p, --profile` | string | default | Configuration profile |
 
 ### REST vs Flight (`--all`)
 
@@ -150,7 +152,6 @@ ax experiments create --name "claude-test" --dataset DATASET_NAME --space SPACE 
 | `--space, -s` | string | no | Space name or ID (required if using dataset name instead of ID) |
 | `--file, -f` | path | yes | Data file with runs: CSV, JSON, JSONL, or Parquet |
 | `-o, --output` | string | no | Output format |
-| `-p, --profile` | string | no | Configuration profile |
 
 ### Passing data via stdin
 
@@ -190,7 +191,24 @@ ax experiments delete NAME_OR_ID --force   # skip confirmation prompt
 | `--dataset` | string | none | Dataset name or ID (required if using experiment name instead of ID) |
 | `--space` | string | none | Space name or ID (required if using dataset name instead of ID) |
 | `--force, -f` | bool | false | Skip confirmation prompt |
-| `-p, --profile` | string | default | Configuration profile |
+
+## Annotate Runs: `ax experiments annotate-runs`
+
+Write annotations onto experiment runs in bulk from a file. Upsert semantics — existing annotations with the same key are updated, new ones are created. Up to 1000 annotations per request.
+
+```bash
+ax experiments annotate-runs NAME_OR_ID --file annotations.json --dataset DATASET_NAME --space SPACE
+ax experiments annotate-runs NAME_OR_ID --file annotations.csv --dataset DATASET_NAME --space SPACE
+```
+
+### Flags
+
+| Flag | Type | Required | Description |
+|------|------|----------|-------------|
+| `NAME_OR_ID` | string | yes | Experiment name or ID (positional) |
+| `--file, -f` | path | yes | Annotation file: JSON, JSONL, CSV, or Parquet (use `-` for stdin) |
+| `--dataset` | string | yes | Dataset name or ID (required when using experiment name instead of ID) |
+| `--space` | string | no | Space name or ID |
 
 ## Experiment Run Schema
 
@@ -388,6 +406,7 @@ ax experiments export EXPERIMENT_NAME --dataset DATASET_NAME --space SPACE --std
 ## Related Skills
 
 - **arize-dataset**: Create or export the dataset this experiment runs against → use `arize-dataset` first
+- **arize-prompts**: Store and version the prompt template in Prompt Hub (`ax prompts`) before or after experiments
 - **arize-prompt-optimization**: Use experiment results to improve prompts → next step is `arize-prompt-optimization`
 - **arize-trace**: Inspect individual span traces for failing experiment runs → use `arize-trace`
 - **arize-link**: Generate clickable UI links to traces from experiment runs → use `arize-link`

@@ -103,6 +103,22 @@ SPECIFIC_PROMPTS = [
         ["arize-prompt-optimization"],
         ["specific", "prompt-optimization"],
     ),
+    # arize-prompts
+    (
+        "Create a new prompt in Arize Prompt Hub using ax prompts with messages from a JSON file",
+        ["arize-prompts"],
+        ["specific", "prompts"],
+    ),
+    (
+        "Set the production label on my prompt version prv_xyz789 using the CLI",
+        ["arize-prompts"],
+        ["specific", "prompts"],
+    ),
+    (
+        "List all versions of my support-agent prompt in Prompt Hub",
+        ["arize-prompts"],
+        ["specific", "prompts"],
+    ),
     # arize-link
     (
         "Give me a link to trace abc123 in the Arize UI",
@@ -166,6 +182,53 @@ SPECIFIC_PROMPTS = [
         "Create an Anthropic integration in Arize for my evaluators",
         ["arize-ai-provider-integration"],
         ["specific", "ai-provider-integration"],
+    ),
+    # arize-compliance-audit
+    (
+        "Audit my AI app for EU AI Act compliance",
+        ["arize-compliance-audit"],
+        ["specific", "compliance-audit"],
+    ),
+    (
+        "Check my LLM application for GDPR compliance gaps",
+        ["arize-compliance-audit"],
+        ["specific", "compliance-audit"],
+    ),
+    (
+        "Run a NIST AI RMF compliance audit on my agent",
+        ["arize-compliance-audit"],
+        ["specific", "compliance-audit"],
+    ),
+    # arize-admin
+    (
+        "Invite jane@example.com to my Arize account with a member role",
+        ["arize-admin"],
+        ["specific", "admin"],
+    ),
+    (
+        "Create a new Arize space called team-alpha inside the Platform org",
+        ["arize-admin"],
+        ["specific", "admin"],
+    ),
+    (
+        "Generate a service API key scoped to the production space for my CI pipeline",
+        ["arize-admin"],
+        ["specific", "admin"],
+    ),
+    (
+        "Create a custom RBAC role with dataset and experiment permissions",
+        ["arize-admin"],
+        ["specific", "admin"],
+    ),
+    (
+        "Restrict a project so only users with explicit role bindings can access it",
+        ["arize-admin"],
+        ["specific", "admin"],
+    ),
+    (
+        "Offboard a user and revoke all their org and space memberships",
+        ["arize-admin"],
+        ["specific", "admin"],
     ),
 ]
 
@@ -236,6 +299,17 @@ VAGUE_PROMPTS = [
         ["arize-prompt-optimization"],
         ["vague", "prompt-optimization"],
     ),
+    # Should route to arize-prompts (versioned templates in Arize)
+    (
+        "I want to version control my LLM prompt templates in Arize Prompt Hub",
+        ["arize-prompts"],
+        ["vague", "prompts"],
+    ),
+    (
+        "Upload my system and user messages to Arize as a named prompt with the CLI",
+        ["arize-prompts"],
+        ["vague", "prompts"],
+    ),
     # Should route to link
     (
         "I want to share this trace with my team",
@@ -279,6 +353,38 @@ VAGUE_PROMPTS = [
         "Connect my AWS Bedrock account to Arize",
         ["arize-ai-provider-integration"],
         ["vague", "ai-provider-integration"],
+    ),
+    # Should route to compliance-audit
+    (
+        "Is my AI app compliant?",
+        ["arize-compliance-audit"],
+        ["vague", "compliance-audit"],
+    ),
+    (
+        "What regulations apply to my chatbot?",
+        ["arize-compliance-audit"],
+        ["vague", "compliance-audit"],
+    ),
+    (
+        "Help me make sure my AI meets regulatory requirements",
+        ["arize-compliance-audit"],
+        ["vague", "compliance-audit"],
+    ),
+    # Should route to arize-admin
+    (
+        "I need to control who can access my Arize projects",
+        ["arize-admin"],
+        ["vague", "admin"],
+    ),
+    (
+        "How do I set up my team in Arize?",
+        ["arize-admin"],
+        ["vague", "admin"],
+    ),
+    (
+        "I need a service account for my data pipeline",
+        ["arize-admin"],
+        ["vague", "admin"],
     ),
 ]
 

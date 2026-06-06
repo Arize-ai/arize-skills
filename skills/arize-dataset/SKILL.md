@@ -1,6 +1,10 @@
 ---
 name: arize-dataset
-description: "INVOKE THIS SKILL when creating, managing, or querying Arize datasets and examples. Also use when the user needs test data or evaluation examples for their model. Covers dataset CRUD, appending examples, exporting data, and file-based dataset creation using the ax CLI."
+description: Creates, manages, and queries Arize datasets and examples. Covers dataset CRUD, appending examples, exporting data, and file-based dataset creation using the ax CLI. Use when the user needs test data, evaluation examples, or mentions create dataset, list datasets, export dataset, append examples, dataset version, golden dataset, or test set.
+metadata:
+  author: arize
+  version: "1.0"
+compatibility: Requires the ax CLI and a configured Arize profile.
 ---
 
 # Arize Dataset Skill
@@ -43,10 +47,10 @@ ax datasets list -o json
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
 | `--space` | string | from profile | Filter by space |
+| `--name, -n` | string | none | Substring filter on dataset name |
 | `--limit, -l` | int | 15 | Max results (1-100) |
 | `--cursor` | string | none | Pagination cursor from previous response |
 | `-o, --output` | string | table | Output format: table, json, csv, parquet, or file path |
-| `-p, --profile` | string | default | Configuration profile |
 
 ## Get Dataset: `ax datasets get`
 
@@ -65,7 +69,6 @@ ax datasets get NAME_OR_ID --space SPACE   # required when using dataset name in
 | `NAME_OR_ID` | string | required | Dataset name or ID (positional) |
 | `--space` | string | none | Space name or ID (required if using dataset name instead of ID) |
 | `-o, --output` | string | table | Output format |
-| `-p, --profile` | string | default | Configuration profile |
 
 ### Response fields
 
@@ -104,7 +107,6 @@ ax datasets export NAME_OR_ID --space SPACE   # required when using dataset name
 | `--all` | bool | false | Unlimited bulk export (use for datasets > 500 examples) |
 | `--output-dir` | string | `.` | Output directory |
 | `--stdout` | bool | false | Print JSON to stdout instead of file |
-| `-p, --profile` | string | default | Configuration profile |
 
 **Agent auto-escalation rule:** If an export returns exactly 500 examples, the result is likely truncated — re-run with `--all` to get the full dataset.
 
@@ -153,7 +155,6 @@ ax datasets create --name "My Dataset" --space SPACE --file data.parquet
 | `--space` | string | yes | Space to create the dataset in |
 | `--file, -f` | path | yes | Data file: CSV, JSON, JSONL, or Parquet |
 | `-o, --output` | string | no | Output format for the returned dataset metadata |
-| `-p, --profile` | string | no | Configuration profile |
 
 ### Passing data via stdin
 
@@ -224,7 +225,6 @@ ax datasets append DATASET_NAME --space SPACE --json '[{"q": "..."}]' --version-
 | `--file, -f` | path | mutex | Data file (CSV, JSON, JSONL, Parquet) |
 | `--version-id` | string | no | Append to a specific version (default: latest) |
 | `-o, --output` | string | no | Output format for the returned dataset metadata |
-| `-p, --profile` | string | no | Configuration profile |
 
 Exactly one of `--json` or `--file` is required.
 
@@ -262,7 +262,40 @@ ax datasets delete NAME_OR_ID --force   # skip confirmation prompt
 | `NAME_OR_ID` | string | required | Dataset name or ID (positional) |
 | `--space` | string | none | Space name or ID (required if using dataset name instead of ID) |
 | `--force, -f` | bool | false | Skip confirmation prompt |
-| `-p, --profile` | string | default | Configuration profile |
+
+## Update Dataset: `ax datasets update`
+
+Rename an existing dataset.
+
+```bash
+ax datasets update NAME_OR_ID --name "new-dataset-name"
+ax datasets update NAME_OR_ID --name "new-dataset-name" --space SPACE
+```
+
+### Flags
+
+| Flag | Type | Required | Description |
+|------|------|----------|-------------|
+| `NAME_OR_ID` | string | yes | Dataset name or ID (positional) |
+| `--name` | string | yes | New dataset name |
+| `--space` | string | no | Space name or ID (required if using dataset name instead of ID) |
+
+## Annotate Examples: `ax datasets annotate-examples`
+
+Write annotations onto dataset examples in bulk from a file. Upsert semantics — existing annotations with the same key are updated, new ones are created. Up to 1000 annotations per request.
+
+```bash
+ax datasets annotate-examples NAME_OR_ID --file annotations.json
+ax datasets annotate-examples NAME_OR_ID --file annotations.csv --space SPACE
+```
+
+### Flags
+
+| Flag | Type | Required | Description |
+|------|------|----------|-------------|
+| `NAME_OR_ID` | string | yes | Dataset name or ID (positional) |
+| `--file, -f` | path | yes | Annotation file: JSON, JSONL, CSV, or Parquet (use `-` for stdin) |
+| `--space` | string | no | Space name or ID (required if using dataset name instead of ID) |
 
 ## Workflows
 
