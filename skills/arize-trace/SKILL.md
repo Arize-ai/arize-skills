@@ -29,13 +29,13 @@ Use `ax spans export` to download individual spans, or `ax traces export` to dow
 
 **Recency warning:** `ax traces export` and `ax spans export` return results in **arbitrary order, not by recency**. Running without `--start-time` will not give you the most recent traces. To fetch recent data (e.g., "last day's conversations"), always pass `--start-time` scoped to the relevant window.
 
-**Timezone rule:** Naive timestamps (no offset) are interpreted as UTC by the API — passing a naive local time silently shifts the query window. **Always use ISO 8601 with an explicit timezone offset**, e.g. `2026-04-05T00:00:00-07:00` or `2026-04-05T00:00:00Z`.
+**Timezone rule:** The API expects UTC. Pass timestamps as UTC with a `Z` suffix (e.g. `2026-06-08T18:00:00Z`). Naive timestamps without a suffix are also interpreted as UTC — but always construct them from UTC time, not local time, or the window will be silently shifted.
 
 When the user asks for traces relative to now or a human time ("last hour", "yesterday morning"):
-1. Run `date "+%Y-%m-%dT%H:%M:%S%z"` to get the machine's current local time with offset.
-2. Compute the window from that and pass timestamps with the same offset.
+1. Run `date -u "+%Y-%m-%dT%H:%M:%SZ"` to get the current UTC time.
+2. Compute the window from that and pass UTC timestamps.
 
-When the user references times they see in the **Arize UI** (e.g., "I see a trace at 3:45pm"), those times reflect the timezone configured in their Arize account settings, which may differ from the machine timezone. If the computed window returns no results, ask: "What timezone is your Arize account set to?" and adjust the offset accordingly.
+When the user references times they see in the **Arize UI** (e.g., "I see a trace at 3:45pm"), those times reflect the timezone configured in their Arize account settings. Convert that local time to UTC before passing it to `--start-time`. If the user doesn't know their UTC offset, ask: "What timezone is your Arize account set to?"
 
 **Default output directory:** Always use `--output-dir .arize-tmp-traces` on every `ax spans export` call. The CLI automatically creates the directory and adds it to `.gitignore`.
 
@@ -168,7 +168,7 @@ Export full traces -- all spans belonging to traces that match a filter. Uses a 
 ```bash
 # Explore recent traces — always pass --start-time with timezone offset; results are not ordered by recency without it
 ax traces export PROJECT --space SPACE \
-  --start-time "2026-04-05T00:00:00-07:00" \
+  --start-time "2026-06-07T00:00:00Z" \
   -l 50 --output-dir .arize-tmp-traces
 
 # Export traces with error spans (REST, up to 500 spans in phase 1)
@@ -441,7 +441,7 @@ ax spans export PROJECT --trace-id TRACE_ID --stdout | jq '.[]'
 | `401 Unauthorized` with valid API key | For `ax traces export` with a project name, add `--space SPACE`. For `ax spans export`, try resolving to a base64 project ID: `ax projects list -l 100 -o json` and use the project's `id`. If the key itself is wrong or expired, fix the profile using references/ax-profiles.md. |
 | `No spans found` | Expand `--days` (default 30), verify project ID |
 | Results don't include recent traces | Time-range queries lag 6–12h. Use `--trace-id` for immediate lookups of known traces. For time-range queries, set `--start-time` at least 12h in the past to ensure spans are indexed. |
-| Expected traces missing from time-range query | Likely a timezone mismatch. Naive timestamps are treated as UTC. Re-run using `date "+%Y-%m-%dT%H:%M:%S%z"` to get the local offset and pass it explicitly (e.g. `--start-time "2026-04-05T09:00:00-07:00"`). If the user references UI-displayed times, ask what timezone their Arize account is set to. |
+| Expected traces missing from time-range query | Likely a timezone mismatch. Timestamps must be UTC — naive timestamps and `Z`-suffix timestamps are both treated as UTC; local times without conversion will shift the window. Re-run using `date -u "+%Y-%m-%dT%H:%M:%SZ"` to get current UTC and compute the correct window. If the user references UI-displayed times, ask what timezone their Arize account is set to and convert to UTC. |
 | `Filter error` or `invalid filter expression` | Check column name spelling (e.g., `attributes.openinference.span.kind` not `span_kind`), wrap string values in single quotes, use `CONTAINS` for free-text fields |
 | `unknown attribute` in filter | The attribute path is wrong or not indexed. Try browsing a small sample first to see actual column names: `ax spans export PROJECT -l 5 --stdout \| jq '.[0] \| keys'` |
 | `Timeout on large export` | Use `--days 7` to narrow the time range |
