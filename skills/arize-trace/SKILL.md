@@ -106,17 +106,26 @@ ax spans export PROJECT --space SPACE --filter "status_code = 'ERROR'" --all --o
 - Downloading full traces with many child spans
 - Large time-range exports
 
-**Agent auto-escalation rule:** If an export returns exactly the number of spans requested by `-l` (or 500 if no limit was set), the result is likely truncated. Increase `-l` or re-run with `--all` to get the full dataset — but only when the user asks or the task requires more data.
+**Always report span count in every summary:** After every export, state the count explicitly — e.g., "Got 47 spans" or "Got 500/500 spans". When the count equals the limit (or 500 if no `-l` was set), flag it clearly: `⚠️ Result hit the limit (500/500) — likely truncated.`
+
+**Auto-escalation rules (two cases):**
+
+*Targeted export* (`--trace-id`, `--span-id`, or `--session-id` present): The span count is bounded by the trace/session. If the result equals the limit, **automatically re-run with `--all`** — do not wait for the user to ask. Users always want complete data for a specific trace.
+
+*Exploratory export* (no ID filter): If the result equals the limit, **surface the truncation prominently and offer to re-run**: "Got exactly 500 spans — results are likely truncated. Re-run with `--all` to get the full dataset?" Wait for confirmation before re-running (exploratory exports can be slow or large).
 
 **Decision tree:**
 ```
 Do you have a --trace-id, --span-id, or --session-id?
-├─ YES: count is bounded → omit --all. If result is exactly 500, re-run with --all.
-└─ NO (exploratory export):
-    ├─ Just browsing a sample? → use -l 50
+├─ YES (targeted): count is bounded by trace/session
+│   ├─ Result < limit → done, report count
+│   └─ Result = limit → auto re-run with --all (no need to ask)
+└─ NO (exploratory):
+    ├─ Just browsing a sample? → use -l 50, report count
     └─ Need all matching spans?
-        ├─ Expected < 500 → -l is fine
+        ├─ Expected < 500 → -l is fine; report count
         └─ Expected ≥ 500 or unknown → use --all
+            ├─ Result = limit after -l? → offer to re-run with --all
             └─ Times out? → batch by --days (e.g., --days 7) and loop
 ```
 
