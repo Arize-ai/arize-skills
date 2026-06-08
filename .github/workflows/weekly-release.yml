@@ -1,0 +1,116 @@
+name: Weekly Release
+
+on:
+  schedule:
+    - cron: "0 9 * * 1" # Mondays at 09:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: weekly-release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Detect last release tag
+        id: last_tag
+        run: |
+          LAST_TAG=$(git tag --list 'v*' --sort=-v:refname | head -n 1)
+          if [ -z "$LAST_TAG" ]; then
+            echo "No prior release tag found — first release will be v1.0.0"
+            echo "tag=" >> "$GITHUB_OUTPUT"
+          else
+            echo "Last release tag: $LAST_TAG"
+            echo "tag=$LAST_TAG" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Check for skill changes since last release
+        id: changes
+        run: |
+          LAST_TAG="${{ steps.last_tag.outputs.tag }}"
+          if [ -z "$LAST_TAG" ]; then
+            echo "First release — proceeding."
+            echo "has_changes=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # Look at changes to skills/ and the two plugin manifests since the last tag
+          CHANGED=$(git diff --name-only "$LAST_TAG"..HEAD -- skills/ .claude-plugin/ .cursor-plugin/ | wc -l)
+          if [ "$CHANGED" -eq 0 ]; then
+            echo "No skill or manifest changes since $LAST_TAG — skipping release."
+            echo "has_changes=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "Found $CHANGED changed file(s) since $LAST_TAG:"
+            git diff --name-only "$LAST_TAG"..HEAD -- skills/ .claude-plugin/ .cursor-plugin/
+            echo "has_changes=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Compute next version
+        if: steps.changes.outputs.has_changes == 'true'
+        id: version
+        run: |
+          LAST_TAG="${{ steps.last_tag.outputs.tag }}"
+          if [ -z "$LAST_TAG" ]; then
+            NEXT="1.0.0"
+          else
+            CURRENT="${LAST_TAG#v}"
+            IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT"
+            NEXT="${MAJOR}.${MINOR}.$((PATCH + 1))"
+          fi
+          echo "Next version: $NEXT"
+          echo "next=$NEXT" >> "$GITHUB_OUTPUT"
+
+      - name: Bump version in plugin manifests
+        if: steps.changes.outputs.has_changes == 'true'
+        env:
+          NEXT: ${{ steps.version.outputs.next }}
+        run: |
+          # Use jq for safe JSON edits; preserve key order with --indent 2
+          for file in .claude-plugin/plugin.json .cursor-plugin/plugin.json; do
+            tmp=$(mktemp)
+            jq --arg v "$NEXT" '.version = $v' "$file" > "$tmp" && mv "$tmp" "$file"
+            echo "Bumped $file to $NEXT"
+          done
+          # marketplace.json nests the version inside plugins[]
+          tmp=$(mktemp)
+          jq --arg v "$NEXT" '.plugins[0].version = $v' .claude-plugin/marketplace.json > "$tmp" && mv "$tmp" .claude-plugin/marketplace.json
+          echo "Bumped .claude-plugin/marketplace.json to $NEXT"
+
+      - name: Commit, tag, and push
+        if: steps.changes.outputs.has_changes == 'true'
+        env:
+          NEXT: ${{ steps.version.outputs.next }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add .claude-plugin/plugin.json .claude-plugin/marketplace.json .cursor-plugin/plugin.json
+          git commit -m "chore: release v${NEXT}"
+          git tag -a "v${NEXT}" -m "Release v${NEXT}"
+          git push origin HEAD:main
+          git push origin "v${NEXT}"
+
+      - name: Create GitHub release
+        if: steps.changes.outputs.has_changes == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NEXT: ${{ steps.version.outputs.next }}
+          LAST_TAG: ${{ steps.last_tag.outputs.tag }}
+        run: |
+          if [ -z "$LAST_TAG" ]; then
+            NOTES="Initial release."
+          else
+            NOTES=$(git log --pretty=format:'- %s' "$LAST_TAG"..HEAD -- skills/ .claude-plugin/ .cursor-plugin/)
+            if [ -z "$NOTES" ]; then NOTES="Release $NEXT"; fi
+          fi
+          gh release create "v${NEXT}" \
+            --title "v${NEXT}" \
+            --notes "$NOTES"
