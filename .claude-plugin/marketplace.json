@@ -17,7 +17,7 @@
       "category": "observability",
       "homepage": "https://arize.com/docs/ax",
       "repository": "https://github.com/Arize-ai/arize-skills",
-      "license": "Apache-2.0"
+      "license": "MIT"
     }
   ]
 }
