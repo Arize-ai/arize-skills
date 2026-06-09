@@ -29,6 +29,14 @@ Use `ax spans export` to download individual spans, or `ax traces export` to dow
 
 **Recency warning:** `ax traces export` and `ax spans export` return results in **arbitrary order, not by recency**. Running without `--start-time` will not give you the most recent traces. To fetch recent data (e.g., "last day's conversations"), always pass `--start-time` scoped to the relevant window.
 
+**Timezone rule:** The API expects UTC. Pass timestamps as UTC with a `Z` suffix (e.g. `2026-06-08T18:00:00Z`). Naive timestamps without a suffix are also interpreted as UTC — but always construct them from UTC time, not local time, or the window will be silently shifted.
+
+When the user asks for traces relative to now or a human time ("last hour", "yesterday morning"):
+1. Run `date -u "+%Y-%m-%dT%H:%M:%SZ"` to get the current UTC time.
+2. Compute the window from that and pass UTC timestamps.
+
+When the user references times they see in the **Arize UI** (e.g., "I see a trace at 3:45pm"), those times reflect the timezone configured in their Arize account settings. Convert that local time to UTC before passing it to `--start-time`. If the user doesn't know their UTC offset, ask: "What timezone is your Arize account set to?"
+
 **Default output directory:** Always use `--output-dir .arize-tmp-traces` on every `ax spans export` call. The CLI automatically creates the directory and adds it to `.gitignore`.
 
 ## Prerequisites
@@ -106,17 +114,26 @@ ax spans export PROJECT --space SPACE --filter "status_code = 'ERROR'" --all --o
 - Downloading full traces with many child spans
 - Large time-range exports
 
-**Agent auto-escalation rule:** If an export returns exactly the number of spans requested by `-l` (or 500 if no limit was set), the result is likely truncated. Increase `-l` or re-run with `--all` to get the full dataset — but only when the user asks or the task requires more data.
+**Always report span count in every summary:** After every export, state the count explicitly — e.g., "Got 47 spans" or "Got 500/500 spans". When the count equals the limit (or 500 if no `-l` was set), flag it clearly: `⚠️ Result hit the limit (500/500) — likely truncated.`
+
+**Auto-escalation rules (two cases):**
+
+*Targeted export* (`--trace-id`, `--span-id`, or `--session-id` present): The span count is bounded by the trace/session. If the result equals the limit, **automatically re-run with `--all`** — do not wait for the user to ask. Users always want complete data for a specific trace.
+
+*Exploratory export* (no ID filter): If the result equals the limit, **surface the truncation prominently and offer to re-run**: "Got exactly 500 spans — results are likely truncated. Re-run with `--all` to get the full dataset?" Wait for confirmation before re-running (exploratory exports can be slow or large).
 
 **Decision tree:**
 ```
 Do you have a --trace-id, --span-id, or --session-id?
-├─ YES: count is bounded → omit --all. If result is exactly 500, re-run with --all.
-└─ NO (exploratory export):
-    ├─ Just browsing a sample? → use -l 50
+├─ YES (targeted): count is bounded by trace/session
+│   ├─ Result < limit → done, report count
+│   └─ Result = limit → auto re-run with --all (no need to ask)
+└─ NO (exploratory):
+    ├─ Just browsing a sample? → use -l 50, report count
     └─ Need all matching spans?
-        ├─ Expected < 500 → -l is fine
+        ├─ Expected < 500 → -l is fine; report count
         └─ Expected ≥ 500 or unknown → use --all
+            ├─ Result = limit after -l? → offer to re-run with --all
             └─ Times out? → batch by --days (e.g., --days 7) and loop
 ```
 
@@ -149,9 +166,9 @@ Export full traces -- all spans belonging to traces that match a filter. Uses a 
 2. **Phase 2:** Extract unique trace IDs, then fetch every span for those traces
 
 ```bash
-# Explore recent traces — always pass --start-time; results are not ordered by recency without it
+# Explore recent traces — always pass --start-time with timezone offset; results are not ordered by recency without it
 ax traces export PROJECT --space SPACE \
-  --start-time "2026-04-05T00:00:00" \
+  --start-time "2026-06-07T00:00:00Z" \
   -l 50 --output-dir .arize-tmp-traces
 
 # Export traces with error spans (REST, up to 500 spans in phase 1)
@@ -424,6 +441,7 @@ ax spans export PROJECT --trace-id TRACE_ID --stdout | jq '.[]'
 | `401 Unauthorized` with valid API key | For `ax traces export` with a project name, add `--space SPACE`. For `ax spans export`, try resolving to a base64 project ID: `ax projects list -l 100 -o json` and use the project's `id`. If the key itself is wrong or expired, fix the profile using references/ax-profiles.md. |
 | `No spans found` | Expand `--days` (default 30), verify project ID |
 | Results don't include recent traces | Time-range queries lag 6–12h. Use `--trace-id` for immediate lookups of known traces. For time-range queries, set `--start-time` at least 12h in the past to ensure spans are indexed. |
+| Expected traces missing from time-range query | Likely a timezone mismatch. Timestamps must be UTC — naive timestamps and `Z`-suffix timestamps are both treated as UTC; local times without conversion will shift the window. Re-run using `date -u "+%Y-%m-%dT%H:%M:%SZ"` to get current UTC and compute the correct window. If the user references UI-displayed times, ask what timezone their Arize account is set to and convert to UTC. |
 | `Filter error` or `invalid filter expression` | Check column name spelling (e.g., `attributes.openinference.span.kind` not `span_kind`), wrap string values in single quotes, use `CONTAINS` for free-text fields |
 | `unknown attribute` in filter | The attribute path is wrong or not indexed. Try browsing a small sample first to see actual column names: `ax spans export PROJECT -l 5 --stdout \| jq '.[0] \| keys'` |
 | `Timeout on large export` | Use `--days 7` to narrow the time range |
