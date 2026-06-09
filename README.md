@@ -253,4 +253,4 @@ python tests/run_skill.py --skill arize-trace --prompt "Export trace abc123"
 
 ## License
 
-Apache 2.0
+MIT
