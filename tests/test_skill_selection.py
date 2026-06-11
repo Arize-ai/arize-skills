@@ -230,6 +230,22 @@ SPECIFIC_PROMPTS = [
         ["arize-admin"],
         ["specific", "admin"],
     ),
+    # arize-graphql-analytics
+    (
+        "Write a GraphQL query to list all spaces and the models in each space in Arize",
+        ["arize-graphql-analytics"],
+        ["specific", "graphql-analytics"],
+    ),
+    (
+        "My Arize GraphQL mutation keeps returning a validation error, help me fix the query",
+        ["arize-graphql-analytics"],
+        ["specific", "graphql-analytics"],
+    ),
+    (
+        "Run an introspection query against the Arize GraphQL API to see what mutations are available",
+        ["arize-graphql-analytics"],
+        ["specific", "graphql-analytics"],
+    ),
 ]
 
 # Single-skill: vague/ambiguous prompts (harder to route correctly)
@@ -385,6 +401,17 @@ VAGUE_PROMPTS = [
         "I need a service account for my data pipeline",
         ["arize-admin"],
         ["vague", "admin"],
+    ),
+    # Should route to graphql-analytics
+    (
+        "I want to write my own custom queries against the Arize API instead of the prebuilt tools",
+        ["arize-graphql-analytics"],
+        ["vague", "graphql-analytics"],
+    ),
+    (
+        "Can you help me format and validate a GraphQL query for Arize?",
+        ["arize-graphql-analytics"],
+        ["vague", "graphql-analytics"],
     ),
 ]
 
