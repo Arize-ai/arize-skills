@@ -124,8 +124,11 @@ One service key per tenant space — scoped permissions, no org-admin required:
 ax api-keys create --name "tenant-acme-key" --key-type service --space "tenant-acme"
 ax api-keys create --name "tenant-beta-key" --key-type service --space "tenant-beta"
 
-# Rotate a key (zero-downtime, same scope)
+# Revoke a key (immediate invalidation)
 ax api-keys list --key-type service -o json   # find KEY_ID by name
+ax api-keys revoke KEY_ID --force
+
+# Rotate a key (zero-downtime, same scope)
 ax api-keys refresh KEY_ID
 ```
 
@@ -144,3 +147,4 @@ Service keys can only write traces to their scoped space — they cannot access 
 | Role create fails with duplicate name | Name already in use | Use `ax roles list --is-custom` to find the existing role |
 | Service key create fails | `--space` missing or space doesn't exist | Verify with `ax spaces list`; `--space` is required for service keys |
 | Key value not saved | Raw key was not captured at creation | Refresh the key: `ax api-keys refresh KEY_ID` |
+| `Unknown command delete` on `ax api-keys` | `delete` was removed; use `revoke` instead | `ax api-keys revoke KEY_ID --force` |

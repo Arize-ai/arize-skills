@@ -216,6 +216,11 @@ SPECIFIC_PROMPTS = [
         ["specific", "admin"],
     ),
     (
+        "Revoke an expired API key in Arize",
+        ["arize-admin"],
+        ["specific", "admin"],
+    ),
+    (
         "Create a custom RBAC role with dataset and experiment permissions",
         ["arize-admin"],
         ["specific", "admin"],
@@ -402,6 +407,11 @@ VAGUE_PROMPTS = [
         ["arize-admin"],
         ["vague", "admin"],
     ),
+    (
+        "I need to remove a compromised API key from my Arize account",
+        ["arize-admin"],
+        ["vague", "admin"],
+    ),
     # Should route to graphql-analytics
     (
         "I want to write my own custom queries against the Arize API instead of the prebuilt tools",
@@ -412,7 +422,7 @@ VAGUE_PROMPTS = [
         "Can you help me format and validate a GraphQL query for Arize?",
         ["arize-graphql-analytics"],
         ["vague", "graphql-analytics"],
-    ),
+    )
 ]
 
 # Negative/irrelevant prompts (should not match any skill strongly)

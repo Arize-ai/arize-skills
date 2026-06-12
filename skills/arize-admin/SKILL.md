@@ -13,12 +13,12 @@ Programmatic management of Arize users, organizations, spaces, roles, permission
 
 > **Privilege requirement:** Most operations require **org-admin** or **account-admin** privileges. If commands return `403 Forbidden`, the authenticated profile lacks sufficient permissions.
 
-> **Destructive-action rule:** Commands that delete, remove, or irreversibly modify resources (`delete`, `remove-user`, `unrestrict`) require **explicit user confirmation before execution**. When a user asks you to perform one of these operations:
-> 1. Summarize exactly what will happen (e.g., "This will delete user jane@example.com and cascade-remove all their org/space memberships, API keys, and role bindings.")
+> **Destructive-action rule:** Commands that delete, revoke, remove, or irreversibly modify resources (`delete`, `revoke`, `remove-user`, `unrestrict`) require **explicit user confirmation before execution**. When a user asks you to perform one of these operations:
+> 1. Summarize exactly what will happen (e.g., "This will delete user jane@example.com and cascade-revoke their API keys and remove all their org/space memberships and role bindings.")
 > 2. Ask the user to confirm (use `AskUserQuestion`).
 > 3. Only after the user confirms, run the command with `--force` to skip the CLI's interactive prompt.
 >
-> Never run a `--force` deletion without confirming with the user first.
+> Never run a `--force` destructive command without confirming with the user first.
 
 ## When to Use
 
@@ -57,6 +57,13 @@ Ask before running any commands:
 - **Name and email** — for each user to invite
 - **Role** — `admin`, `member`, or `read-only` (present as options)
 - **Invite mode** — `email_link` (default), `temporary_password`, or `none`
+
+### Revoking or rotating an API key
+Ask before running any commands:
+- **Which key?** — run `ax api-keys list -o json` and present options by name and status; or ask for `KEY_ID`
+- **Revoke or rotate?** — `revoke` invalidates immediately; `refresh` issues a new key with the same scope (zero-downtime rotation)
+
+If the user says "delete" an API key, use `ax api-keys revoke` — there is no `delete` subcommand for API keys.
 
 ## Concepts
 
@@ -102,7 +109,7 @@ ax users create \
 ax users update USER_ID --full-name "Jane Smith"
 ax users update USER_ID --is-developer          # grant developer flag
 
-ax users delete USER_ID --force   # ⚠ confirm first — cascades: org/space memberships, API keys, role bindings
+ax users delete USER_ID --force   # ⚠ confirm first — cascades: org/space memberships, API key revocation, role bindings
 
 ax users resend-invitation USER_ID
 ax users reset-password USER_ID
@@ -244,7 +251,7 @@ ax api-keys create-service-key \
   --space-role member \
   --expires-at "2027-01-01T00:00:00"
 
-ax api-keys delete KEY_ID --force   # ⚠ confirm first
+ax api-keys revoke KEY_ID --force   # ⚠ confirm first — invalidates the key immediately
 
 # Zero-downtime rotation — revokes old key, issues new one with same scope
 ax api-keys refresh KEY_ID
