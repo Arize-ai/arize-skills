@@ -69,7 +69,7 @@ Expected: `{"data":{"__typename":"Query"}}`. If you get a `401`, a non-JSON body
 
 The schema is the source of truth. Field names, argument types, and enum values change between API versions, so build queries from a fresh introspection rather than from memory or from earlier examples.
 
-Run the introspection query in [references/EXAMPLES.md](references/EXAMPLES.md) under **"Full Schema Introspection"** — it's a single curl command that returns every type, field, argument, enum value, and relationship in the API. (It lives in the references file rather than inline here so this workflow stays readable; copy it as-is, don't retype it from memory.)
+Run the introspection query in `references/EXAMPLES.md` under **"Full Schema Introspection"** — it's a single curl command that returns every type, field, argument, enum value, and relationship in the API. (It lives in the references file rather than inline here so this workflow stays readable; copy it as-is, don't retype it from memory.)
 
 ### What "up to 10 levels deep" means
 
@@ -128,7 +128,7 @@ Wrapping a plain list in `edges`/`node` (or querying a connection as if it were 
 3. Build the mutation with all required `inputFields` (the ones wrapped in `NON_NULL` with no default).
 4. **If the user hasn't supplied a value for a required input field**, ask them for it. Never invent IDs, names, or other values — a guessed `organizationId` or `modelId` will either error or, worse, mutate the wrong resource.
 
-See [references/PATTERNS.md](references/PATTERNS.md) for detailed patterns.
+See `references/PATTERNS.md` for detailed patterns.
 
 ---
 
@@ -259,5 +259,5 @@ mutation Op($input: InputType!) {
 
 ## References
 
-- [references/PATTERNS.md](references/PATTERNS.md) - Detailed GraphQL patterns
-- [references/EXAMPLES.md](references/EXAMPLES.md) - Ready-to-use examples, including the full introspection query
+- `references/PATTERNS.md` - Detailed GraphQL patterns
+- `references/EXAMPLES.md` - Ready-to-use examples, including the full introspection query
