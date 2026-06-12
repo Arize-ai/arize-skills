@@ -235,21 +235,21 @@ SPECIFIC_PROMPTS = [
         ["arize-admin"],
         ["specific", "admin"],
     ),
-    # arize-graphql-analytics
+    # arize-graphql-api
     (
         "Write a GraphQL query to list all spaces and the models in each space in Arize",
-        ["arize-graphql-analytics"],
-        ["specific", "graphql-analytics"],
+        ["arize-graphql-api"],
+        ["specific", "graphql-api"],
     ),
     (
         "My Arize GraphQL mutation keeps returning a validation error, help me fix the query",
-        ["arize-graphql-analytics"],
-        ["specific", "graphql-analytics"],
+        ["arize-graphql-api"],
+        ["specific", "graphql-api"],
     ),
     (
         "Run an introspection query against the Arize GraphQL API to see what mutations are available",
-        ["arize-graphql-analytics"],
-        ["specific", "graphql-analytics"],
+        ["arize-graphql-api"],
+        ["specific", "graphql-api"],
     ),
 ]
 
@@ -412,16 +412,16 @@ VAGUE_PROMPTS = [
         ["arize-admin"],
         ["vague", "admin"],
     ),
-    # Should route to graphql-analytics
+    # Should route to graphql-api
     (
         "I want to write my own custom queries against the Arize API instead of the prebuilt tools",
-        ["arize-graphql-analytics"],
-        ["vague", "graphql-analytics"],
+        ["arize-graphql-api"],
+        ["vague", "graphql-api"],
     ),
     (
         "Can you help me format and validate a GraphQL query for Arize?",
-        ["arize-graphql-analytics"],
-        ["vague", "graphql-analytics"],
+        ["arize-graphql-api"],
+        ["vague", "graphql-api"],
     )
 ]
 

@@ -155,7 +155,7 @@ For interactive setup, `ax profiles create` also offers **Advanced → Single en
 | [arize-link](skills/arize-link/SKILL.md) | Generate deep links to traces, spans, and sessions in the Arize UI. |
 | [arize-compliance-audit](skills/arize-compliance-audit/SKILL.md) | Audit an AI agent for regulatory compliance (EU AI Act, NIST AI RMF, GDPR, HIPAA). Produces a tailored remediation checklist. |
 | [arize-admin](skills/arize-admin/SKILL.md) | Manage organizations, spaces, roles, role bindings, resource restrictions, and API keys. Enterprise admin workflows: team onboarding, SAML/SSO role mapping, service key management, and access control. |
-| [arize-graphql-analytics](skills/arize-graphql-analytics/SKILL.md) | Query and analyze any Arize platform data via the GraphQL API, or write, format, and debug custom GraphQL queries and mutations. |
+| [arize-graphql-api](skills/arize-graphql-api/SKILL.md) | Query and analyze any Arize platform data via the GraphQL API, or write, format, and debug custom GraphQL queries and mutations. |
 
 > [!WARNING]
 > **arize-compliance-audit is for guidance only and does not constitute legal advice or a complete compliance assessment.** It identifies common technical patterns based on publicly available regulatory frameworks and cannot account for your organisation's specific legal obligations, contractual commitments, or operational context. Always consult a qualified attorney or compliance specialist for binding assessments.

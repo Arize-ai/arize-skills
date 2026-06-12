@@ -1,5 +1,5 @@
 ---
-name: arize-graphql-analytics
+name: arize-graphql-api
 description: Query and analyze data from the Arize platform using GraphQL, or help build/validate GraphQL queries and mutations. Use when users want to explore spaces, models, monitors, datasets, any Arize platform data, OR when they need help writing, formatting, or debugging GraphQL queries/mutations for the Arize API.
 metadata:
   author: arize
@@ -7,7 +7,7 @@ metadata:
 compatibility: Requires curl and jq. User must have an ARIZE_API_KEY environment variable set.
 ---
 
-# Arize GraphQL Analytics
+# Arize GraphQL API
 
 Query and analyze data from the Arize ML observability platform using GraphQL via curl, or help users write and debug GraphQL queries and mutations.
 
