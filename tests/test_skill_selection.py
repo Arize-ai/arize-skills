@@ -216,6 +216,11 @@ SPECIFIC_PROMPTS = [
         ["specific", "admin"],
     ),
     (
+        "Revoke an expired API key in Arize",
+        ["arize-admin"],
+        ["specific", "admin"],
+    ),
+    (
         "Create a custom RBAC role with dataset and experiment permissions",
         ["arize-admin"],
         ["specific", "admin"],
@@ -383,6 +388,11 @@ VAGUE_PROMPTS = [
     ),
     (
         "I need a service account for my data pipeline",
+        ["arize-admin"],
+        ["vague", "admin"],
+    ),
+    (
+        "I need to remove a compromised API key from my Arize account",
         ["arize-admin"],
         ["vague", "admin"],
     ),
