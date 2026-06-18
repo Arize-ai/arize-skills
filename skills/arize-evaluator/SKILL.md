@@ -75,58 +75,7 @@ At session granularity, `{conversation}` is a special template variable that ren
 
 At span or trace granularity, `{conversation}` is treated as a regular template variable and resolved via column mappings like any other.
 
-### Emitting `session.id` from your application
-
-`{conversation}` only works if your spans actually carry `attributes.session.id`. This section covers the application side — how to emit the attribute — so you do not have to discover it by trial and error.
-
-**The pattern (Python / OpenTelemetry):**
-
-```python
-import uuid
-
-# Generate once per conversation, reuse for every turn
-session_id = str(uuid.uuid4())
-
-def chat(question: str, session_id: str, chat_history: list | None = None) -> str:
-    with tracer.start_as_current_span("chat") as span:
-        span.set_attribute("openinference.span.kind", "CHAIN")
-        span.set_attribute("input.value", question)
-        span.set_attribute("session.id", session_id)   # key line
-        # ... your LLM call ...
-        span.set_attribute("output.value", answer)
-        return answer
-```
-
-Rules:
-- **Same `session_id` for every turn in one conversation.** Each call to `chat()` gets its own span, but all spans in the conversation share the same `session_id`. Arize groups them by this value.
-- **New `session_id` when the user starts a fresh conversation.** Generate a new UUID at the start of each new session, not at each turn.
-- **Pass `session_id` in from the caller**, not inside `chat()`. The caller (your app frontend, request handler, or notebook cell) owns the session boundary.
-
-**Flushing spans (Jupyter notebooks and short-lived scripts):**
-
-The OTLP batch exporter holds spans in memory and ships them on a timer or when the buffer fills. In a Jupyter notebook or short-lived script the process may end before the buffer flushes, meaning spans are emitted correctly but never reach Arize.
-
-Call `force_flush()` after finishing a conversation you want to inspect:
-
-```python
-# After your conversation ends, before checking the Arize UI
-tracer_provider.force_flush()   # ships buffered spans immediately
-```
-
-Call `shutdown()` only when you are done tracing entirely — it closes the exporter:
-
-```python
-tracer_provider.force_flush()
-tracer_provider.shutdown()
-```
-
-After `shutdown()`, re-initialize the tracer provider before tracing more spans.
-
-**Checklist before debugging missing session data in Arize:**
-1. Is `session.id` set on the CHAIN span, not a child LLM span?
-2. Is the same `session_id` passed to every `chat()` call in the conversation?
-3. Was `force_flush()` called after the conversation ended?
-4. Did you wait ~30 seconds for ingestion before checking the Arize UI?
+> **Note:** For `{conversation}` to work, spans must carry `attributes.session.id`. See the **arize-instrumentation** skill for how to emit `session.id` from application code, including the `force_flush()` pattern required for Jupyter notebooks and short-lived scripts.
 
 ### Multi-evaluator tasks
 
