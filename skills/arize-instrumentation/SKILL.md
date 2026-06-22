@@ -1,6 +1,10 @@
 ---
 name: arize-instrumentation
-description: "INVOKE THIS SKILL when adding Arize AX tracing to an application. Follow the Agent-Assisted Tracing two-phase flow: analyze the codebase (read-only), then implement instrumentation after user confirmation. When the app uses LLM tool/function calling, add manual CHAIN + TOOL spans so traces show each tool's input and output. Leverages https://arize.com/docs/ax/alyx/tracing-assistant and https://arize.com/docs/PROMPT.md."
+description: Adds Arize AX tracing to an LLM application for the first time. Follows a two-phase agent-assisted flow to analyze the codebase then implement instrumentation after user confirmation. Use when the user wants to instrument their app, add tracing from scratch, set up LLM observability, integrate OpenTelemetry or openinference, or get started with Arize tracing.
+metadata:
+  author: arize
+  version: "1.0"
+compatibility: Python and TypeScript/JavaScript apps use openinference-instrumentation packages for auto-instrumentation. Go apps use arize-otel-go for setup plus per-provider instrumentors openinference-instrumentation-openai-go (official openai/openai-go SDK) and openinference-instrumentation-anthropic-sdk-go (anthropics/anthropic-sdk-go), or manual spans via openinference-semantic-conventions. Java apps use the OpenTelemetry SDK with manual OpenInference spans. See https://arize.com/docs/PROMPT.md for setup details.
 ---
 
 # Arize Instrumentation Skill
@@ -36,6 +40,14 @@ Before changing code:
 3. Do NOT proactively check `ax` installation or version. If `ax` is needed for verification later, just run it when the time comes. If it fails, see references/ax-profiles.md.
 4. Never silently replace a user-provided space ID, project name, or project ID. If the CLI, collector, and user input disagree, surface that mismatch as a concrete blocker.
 
+### When you must ask the user first
+
+If monorepo scope, service entrypoint, or target app is still unclear after quick inspection — or you would otherwise open with a bare list of questions — use this opening pattern:
+
+1. Acknowledge the skill, e.g.: **I found the arize-instrumentation skill in this repo** (you may add `skills/arize-instrumentation/SKILL.md` if helpful).
+2. Then a clear pause line, e.g.: **A few clarifying questions before I invoke it:**
+3. Ask **minimal** numbered or short bullet questions — only what blocks Phase 1 or Phase 2.
+
 ## Phase 1: Analysis (read-only)
 
 **Do not write any code or create any files during this phase.**
@@ -46,6 +58,7 @@ Before changing code:
    - Python: `pyproject.toml`, `requirements.txt`, `setup.py`, `Pipfile`
    - TypeScript/JavaScript: `package.json`
    - Java: `pom.xml`, `build.gradle`, `build.gradle.kts`
+   - Go: `go.mod`
 
 2. **Scan import statements** in source files to confirm what is actually used.
 
@@ -57,14 +70,14 @@ Before changing code:
 
 | Item | Examples |
 |------|----------|
-| Language | Python, TypeScript/JavaScript, Java |
-| Package manager | pip/poetry/uv, npm/pnpm/yarn, maven/gradle |
+| Language | Python, TypeScript/JavaScript, Java, Go |
+| Package manager | pip/poetry/uv, npm/pnpm/yarn, maven/gradle, go modules |
 | LLM providers | OpenAI, Anthropic, LiteLLM, Bedrock, etc. |
 | Frameworks | LangChain, LangGraph, LlamaIndex, Vercel AI SDK, Mastra, etc. |
 | Existing tracing | Any OTel or vendor setup |
 | Tool/function use | LLM tool use, function calling, or custom tools the app executes (e.g. in an agent loop) |
 
-**Key rule:** When a framework is detected alongside an LLM provider, inspect the framework-specific tracing docs first and prefer the framework-native integration path when it already captures the model and tool spans you need. Add separate provider instrumentation only when the framework docs require it or when the framework-native integration leaves obvious gaps. If the app runs tools and the framework integration does not emit tool spans, add manual TOOL spans so each invocation appears with input/output (see **Enriching traces** below).
+**Key rule:** When a framework is detected alongside an LLM provider, inspect the framework-specific tracing docs first and prefer the framework-native integration path when it already captures the model and tool spans you need. Add separate provider instrumentation only when the framework docs require it or when the framework-native integration leaves obvious gaps. If the app runs tools and the framework integration does not emit tool spans, add manual TOOL spans so each invocation appears with input/output (see references/manual-spans.md).
 
 ### Phase 1 output
 
@@ -80,18 +93,9 @@ If the user explicitly asked you to instrument the app now, and the target servi
 
 ## Integration routing and docs
 
-The **canonical list** of supported integrations and doc URLs is in the [Agent Setup Prompt](https://arize.com/docs/PROMPT.md). Use it to map detected signals to implementation docs.
+Use the [Agent Setup Prompt](https://arize.com/docs/PROMPT.md) routing table to map detected signals to integration docs and fetch the matched pages for exact installation steps and code snippets. Use [llms.txt](https://arize.com/docs/llms.txt) as a fallback for doc discovery.
 
-- **LLM providers:** [OpenAI](https://arize.com/docs/ax/integrations/llm-providers/openai), [Anthropic](https://arize.com/docs/ax/integrations/llm-providers/anthropic), [LiteLLM](https://arize.com/docs/ax/integrations/llm-providers/litellm), [Google Gen AI](https://arize.com/docs/ax/integrations/llm-providers/google-gen-ai), [Bedrock](https://arize.com/docs/ax/integrations/llm-providers/amazon-bedrock), [Ollama](https://arize.com/docs/ax/integrations/llm-providers/llama), [Groq](https://arize.com/docs/ax/integrations/llm-providers/groq), [MistralAI](https://arize.com/docs/ax/integrations/llm-providers/mistralai), [OpenRouter](https://arize.com/docs/ax/integrations/llm-providers/openrouter), [VertexAI](https://arize.com/docs/ax/integrations/llm-providers/vertexai).
-- **Python frameworks:** [LangChain](https://arize.com/docs/ax/integrations/python-agent-frameworks/langchain), [LangGraph](https://arize.com/docs/ax/integrations/python-agent-frameworks/langgraph), [LlamaIndex](https://arize.com/docs/ax/integrations/python-agent-frameworks/llamaindex), [CrewAI](https://arize.com/docs/ax/integrations/python-agent-frameworks/crewai), [DSPy](https://arize.com/docs/ax/integrations/python-agent-frameworks/dspy), [AutoGen](https://arize.com/docs/ax/integrations/python-agent-frameworks/autogen), [Semantic Kernel](https://arize.com/docs/ax/integrations/python-agent-frameworks/semantic-kernel), [Pydantic AI](https://arize.com/docs/ax/integrations/python-agent-frameworks/pydantic), [Haystack](https://arize.com/docs/ax/integrations/python-agent-frameworks/haystack), [Guardrails AI](https://arize.com/docs/ax/integrations/python-agent-frameworks/guardrails-ai), [Hugging Face Smolagents](https://arize.com/docs/ax/integrations/python-agent-frameworks/hugging-face-smolagents), [Instructor](https://arize.com/docs/ax/integrations/python-agent-frameworks/instructor), [Agno](https://arize.com/docs/ax/integrations/python-agent-frameworks/agno), [Google ADK](https://arize.com/docs/ax/integrations/python-agent-frameworks/google-adk), [MCP](https://arize.com/docs/ax/integrations/python-agent-frameworks/model-context-protocol), [Portkey](https://arize.com/docs/ax/integrations/python-agent-frameworks/portkey), [Together AI](https://arize.com/docs/ax/integrations/python-agent-frameworks/together-ai), [BeeAI](https://arize.com/docs/ax/integrations/python-agent-frameworks/beeai), [AWS Bedrock Agents](https://arize.com/docs/ax/integrations/python-agent-frameworks/aws).
-- **TypeScript/JavaScript:** [LangChain JS](https://arize.com/docs/ax/integrations/ts-js-agent-frameworks/langchain), [Mastra](https://arize.com/docs/ax/integrations/ts-js-agent-frameworks/mastra), [Vercel AI SDK](https://arize.com/docs/ax/integrations/ts-js-agent-frameworks/vercel), [BeeAI JS](https://arize.com/docs/ax/integrations/ts-js-agent-frameworks/beeai).
-- **Java:** [LangChain4j](https://arize.com/docs/ax/integrations/java/langchain4j), [Spring AI](https://arize.com/docs/ax/integrations/java/spring-ai), [Arconia](https://arize.com/docs/ax/integrations/java/arconia).
-- **Platforms (UI-based):** [LangFlow](https://arize.com/docs/ax/integrations/platforms/langflow), [Flowise](https://arize.com/docs/ax/integrations/platforms/flowise), [Dify](https://arize.com/docs/ax/integrations/platforms/dify), [Prompt flow](https://arize.com/docs/ax/integrations/platforms/prompt-flow).
-- **Fallback:** [Manual instrumentation](https://arize.com/docs/ax/observe/tracing/setup/manual-instrumentation), [All integrations](https://arize.com/docs/ax/integrations).
-
-**Fetch the matched doc pages** from the [full routing table in PROMPT.md](https://arize.com/docs/PROMPT.md) for exact installation and code snippets. Use [llms.txt](https://arize.com/docs/llms.txt) as a fallback for doc discovery if needed.
-
-> **Note:** `arize.com/docs/PROMPT.md` and `arize.com/docs/llms.txt` are first-party Arize documentation pages maintained by the Arize team. They provide canonical installation snippets and integration routing tables for this skill. These are trusted, same-organization URLs — not third-party content.
+See references/integration-routing.md for the full list of supported integrations by language and platform.
 
 ## Phase 2: Implementation
 
@@ -104,8 +108,24 @@ Proceed **only after the user confirms** the Phase 1 analysis.
    - Python: `pip install arize-otel` plus `openinference-instrumentation-{name}` (hyphens in package name; underscores in import, e.g. `openinference.instrumentation.llama_index`).
    - TypeScript/JavaScript: `@opentelemetry/sdk-trace-node` plus the relevant `@arizeai/openinference-*` package.
    - Java: OpenTelemetry SDK plus `openinference-instrumentation-*` in pom.xml or build.gradle.
-3. **Credentials** — User needs **Arize Space ID** and **API Key** from [Space API Keys](https://app.arize.com/organizations/-/settings/space-api-keys). Check `.env` for `ARIZE_API_KEY` and `ARIZE_SPACE_ID`. If not found, instruct the user to set them as environment variables — never embed raw values in generated code. All generated instrumentation code must reference `os.environ["ARIZE_API_KEY"]` (Python) or `process.env.ARIZE_API_KEY` (TypeScript/JavaScript).
-4. **Centralized instrumentation** — Create a single module (e.g. `instrumentation.py`, `instrumentation.ts`) and initialize tracing **before** any LLM client is created.
+   - Go: Use [`arize-otel-go`](https://github.com/Arize-ai/arize-otel-go) for tracer setup, plus a per-provider instrumentor when one exists. Install:
+     ```
+     go get github.com/Arize-ai/arize-otel-go
+     go get github.com/Arize-ai/openinference/go/openinference-semantic-conventions
+     go get github.com/Arize-ai/openinference/go/openinference-instrumentation
+     # Plus exactly one of these, matched to the detected client:
+     go get github.com/Arize-ai/openinference/go/openinference-instrumentation-openai-go        # official openai/openai-go SDK
+     go get github.com/Arize-ai/openinference/go/openinference-instrumentation-anthropic-sdk-go # anthropics/anthropic-sdk-go v1.43+
+     ```
+     **Wire the exporter** with one call: `arizeotel.Register(ctx, arizeotel.Options{ProjectName: "my-app"})` — defaults to `otlp.arize.com` (US), use `arizeotel.EndpointArizeEurope` for EU. It reads `ARIZE_SPACE_ID` / `ARIZE_API_KEY` / `ARIZE_PROJECT_NAME` / `ARIZE_COLLECTOR_ENDPOINT` from env when the matching `Options` fields are unset. **Wire the OpenAI instrumentor** by passing `option.WithMiddleware(openaiotel.Middleware(otel.Tracer("my-app")))` to `openai.NewClient(...)` (alongside `option.WithAPIKey(...)`). **Wire the Anthropic instrumentor** by passing `option.WithMiddleware(anthropicotel.Middleware(otel.Tracer("my-app")))` to `anthropic.NewClient(...)`. Both instrumentors expose `WithTraceConfig(instrumentation.TraceConfig{...})` for in-code overrides of the `OPENINFERENCE_HIDE_*` env-driven masking config. Module floor is Go 1.25 (the openinference Go modules require it; `arize-otel-go` itself is Go 1.23+).
+3. **Credentials** — User needs an **Arize API Key** and **Space ID**. Check existing `ax` profiles for `ARIZE_API_KEY` and `ARIZE_SPACE` — never read `.env` files:
+   - Run `ax profiles show` to check for an existing profile. Run `ax profiles validate` to verify an existing profile's credentials are still valid.
+   - If no profile exists, guide the user to run `ax profiles create` which provides an **interactive wizard** that walks through API key and space setup. See [CLI profiles docs](https://arize.com/docs/api-clients/cli/profiles) for details.
+   - **OAuth alternative (v0.18.0+):** Users can authenticate via browser-based OAuth PKCE instead of API keys by running `ax auth login`. Inform users of this option if they prefer not to manage API keys — do **not** run `ax auth login` yourself as it opens a browser.
+   - If the user needs to find their API key manually, direct them to **https://app.arize.com** and to navigate to the settings page (do not use organization-specific URLs with placeholder IDs — they won't resolve for new users).
+   - If credentials are not set, instruct the user to set them as environment variables — never embed raw values in generated code. All generated instrumentation code must reference `os.environ["ARIZE_API_KEY"]` / `os.environ["ARIZE_SPACE"]` (Python), `process.env.ARIZE_API_KEY` / `process.env.ARIZE_SPACE` (TypeScript/JavaScript), or `os.Getenv("ARIZE_API_KEY")` / `os.Getenv("ARIZE_SPACE_ID")` (Go — `arize-otel-go` reads `ARIZE_SPACE_ID`, not `ARIZE_SPACE`). With the recommended `arizeotel.Register(ctx, arizeotel.Options{...})` flow, generated Go code does not need to call `os.Getenv` at all — `Register` reads both env vars when the matching `Options` fields are unset.
+   - See references/ax-profiles.md for full profile setup and troubleshooting.
+4. **Centralized instrumentation** — Create a single module (e.g. `instrumentation.py`, `instrumentation.ts`, `instrumentation.go`) and initialize tracing **before** any LLM client is created.
 5. **Existing OTel** — If there is already a TracerProvider, add Arize as an **additional** exporter (e.g. BatchSpanProcessor with Arize OTLP). Do not replace existing setup unless the user asks.
 
 ### Implementation rules
@@ -114,65 +134,12 @@ Proceed **only after the user confirms** the Phase 1 analysis.
 - Prefer the repo's native integration surface before adding generic OpenTelemetry plumbing. If the framework ships an exporter or observability package, use that first unless there is a documented gap.
 - **Fail gracefully** if env vars are missing (warn, do not crash).
 - **Import order:** register tracer → attach instrumentors → then create LLM clients.
-- **Project name attribute (required):** Arize rejects spans with HTTP 500 if the project name is missing — `service.name` alone is not accepted. Set it as a **resource attribute** on the TracerProvider (recommended — one place, applies to all spans): Python: `register(project_name="my-app")` handles it automatically (sets `"openinference.project.name"` on the resource); TypeScript: Arize accepts both `"model_id"` (shown in the official TS quickstart) and `"openinference.project.name"` via `SEMRESATTRS_PROJECT_NAME` from `@arizeai/openinference-semantic-conventions` (shown in the manual instrumentation docs) — both work. For routing spans to different projects in Python, use `set_routing_context(space_id=..., project_name=...)` from `arize.otel`.
-- **CLI/script apps — flush before exit:** `provider.shutdown()` (TS) / `provider.force_flush()` then `provider.shutdown()` (Python) must be called before the process exits, otherwise async OTLP exports are dropped and no traces appear.
-- **When the app has tool/function execution:** add manual CHAIN + TOOL spans (see **Enriching traces** below) so the trace tree shows each tool call and its result — otherwise traces will look sparse (only LLM API spans, no tool input/output).
-
-## Enriching traces: manual spans for tool use and agent loops
-
-### Why doesn't the auto-instrumentor do this?
-
-**Provider instrumentors (Anthropic, OpenAI, etc.) only wrap the LLM *client* — the code that sends HTTP requests and receives responses.** They see:
-
-- One span per API call: request (messages, system prompt, tools) and response (text, tool_use blocks, etc.).
-
-They **cannot** see what happens *inside your application* after the response:
-
-- **Tool execution** — Your code parses the response, calls `run_tool("check_loan_eligibility", {...})`, and gets a result. That runs in your process; the instrumentor has no hook into your `run_tool()` or the actual tool output. The *next* API call (sending the tool result back) is just another `messages.create` span — the instrumentor doesn't know that the message content is a tool result or what the tool returned.
-- **Agent/chain boundary** — The idea of "one user turn → multiple LLM calls + tool calls" is an *application-level* concept. The instrumentor only sees separate API calls; it doesn't know they belong to the same logical "run_agent" run.
-
-So TOOL and CHAIN spans have to be added **manually** (or by a *framework* instrumentor like LangChain/LangGraph that knows about tools and chains). Once you add them, they appear in the same trace as the LLM spans because they use the same TracerProvider.
-
----
-
-To avoid sparse traces where tool inputs/outputs are missing:
-
-1. **Detect** agent/tool patterns: a loop that calls the LLM, then runs one or more tools (by name + arguments), then calls the LLM again with tool results.
-2. **Add manual spans** using the same TracerProvider (e.g. `opentelemetry.trace.get_tracer(...)` after `register()`):
-   - **CHAIN span** — Wrap the full agent run (e.g. `run_agent`): set `openinference.span.kind` = `"CHAIN"`, `input.value` = user message, `output.value` = final reply.
-   - **TOOL span** — Wrap each tool invocation: set `openinference.span.kind` = `"TOOL"`, `input.value` = JSON of arguments, `output.value` = JSON of result. Use the tool name as the span name (e.g. `check_loan_eligibility`).
-
-**OpenInference attributes (use these so Arize shows spans correctly):**
-
-| Attribute | Use |
-|-----------|-----|
-| `openinference.span.kind` | `"CHAIN"` or `"TOOL"` |
-| `input.value` | string (e.g. user message or JSON of tool args) |
-| `output.value` | string (e.g. final reply or JSON of tool result) |
-
-**Python pattern:** Get the global tracer (same provider as Arize), then use context managers so tool spans are children of the CHAIN span and appear in the same trace as the LLM spans:
-
-```python
-from opentelemetry.trace import get_tracer
-
-tracer = get_tracer("my-app", "1.0.0")
-
-# In your agent entrypoint:
-with tracer.start_as_current_span("run_agent") as chain_span:
-    chain_span.set_attribute("openinference.span.kind", "CHAIN")
-    chain_span.set_attribute("input.value", user_message)
-    # ... LLM call ...
-    for tool_use in tool_uses:
-        with tracer.start_as_current_span(tool_use["name"]) as tool_span:
-            tool_span.set_attribute("openinference.span.kind", "TOOL")
-            tool_span.set_attribute("input.value", json.dumps(tool_use["input"]))
-            result = run_tool(tool_use["name"], tool_use["input"])
-            tool_span.set_attribute("output.value", result)
-        # ... append tool result to messages, call LLM again ...
-    chain_span.set_attribute("output.value", final_reply)
-```
-
-See [Manual instrumentation](https://arize.com/docs/ax/observe/tracing/setup/manual-instrumentation) for more span kinds and attributes.
+- **Project name attribute (required):** Arize rejects spans with HTTP 500 if the project name is missing — `service.name` alone is not accepted. Set it as a **resource attribute** on the TracerProvider (recommended — one place, applies to all spans):
+  - **Python:** `register(project_name="my-app")` handles it automatically (sets `"openinference.project.name"` on the resource). For routing spans to different projects, use `set_routing_context(space_id=..., project_name=...)` from `arize.otel`.
+  - **TypeScript:** Arize accepts both `"model_id"` (shown in the official TS quickstart) and `"openinference.project.name"` via `SEMRESATTRS_PROJECT_NAME` from `@arizeai/openinference-semantic-conventions` (shown in the manual instrumentation docs) — both work.
+  - **Go:** `arizeotel.Register(ctx, arizeotel.Options{ProjectName: "my-app"})` handles this automatically (sets `openinference.project.name` and `service.name` on the resource). If you're wiring `sdktrace.NewTracerProvider` directly (multi-exporter, on-prem collector), pass `attribute.String("openinference.project.name", "my-app")` to `resource.New(...)` manually.
+- **CLI/script apps — flush before exit:** `provider.shutdown()` (TS) / `provider.force_flush()` then `provider.shutdown()` (Python) / `tp.Shutdown(ctx)` (Go) must be called before the process exits, otherwise async OTLP exports are dropped and no traces appear.
+- **When the app has tool/function execution:** add manual CHAIN + TOOL spans (see references/manual-spans.md) so the trace tree shows each tool call and its result — otherwise traces will look sparse (only LLM API spans, no tool input/output).
 
 ## Verification
 
@@ -187,7 +154,7 @@ After implementation:
 
 1. Run the application and trigger at least one LLM call.
 2. **Use the `arize-trace` skill** to confirm traces arrived. If empty, retry shortly. Verify spans have expected `openinference.span.kind`, `input.value`/`output.value`, and parent-child relationships.
-3. If no traces: verify `ARIZE_SPACE_ID` and `ARIZE_API_KEY`, ensure tracer is initialized before instrumentors and clients, check connectivity to `otlp.arize.com:443`, and inspect app/runtime exporter logs so you can tell whether spans are being emitted locally but rejected remotely. For debug set `GRPC_VERBOSITY=debug` or pass `log_to_console=True` to `register()`. Common gotchas: (a) missing project name resource attribute causes HTTP 500 rejections — `service.name` alone is not enough; Python: pass `project_name` to `register()`; TypeScript: set `"model_id"` or `SEMRESATTRS_PROJECT_NAME` on the resource; (b) CLI/script processes exit before OTLP exports flush — call `provider.force_flush()` then `provider.shutdown()` before exit; (c) CLI-visible spaces/projects can disagree with a collector-targeted space ID — report the mismatch instead of silently rewriting credentials.
+3. If no traces: verify `ARIZE_SPACE` and `ARIZE_API_KEY`, ensure tracer is initialized before instrumentors and clients, check connectivity to `otlp.arize.com:443`, and inspect app/runtime exporter logs so you can tell whether spans are being emitted locally but rejected remotely. For debug set `GRPC_VERBOSITY=debug` or pass `log_to_console=True` to `register()`. Common gotchas: (a) missing project name resource attribute causes HTTP 500 rejections — `service.name` alone is not enough; Python: pass `project_name` to `register()`; TypeScript: set `"model_id"` or `SEMRESATTRS_PROJECT_NAME` on the resource; Go: add `attribute.String("openinference.project.name", "my-app")` to `resource.New(...)`; (b) CLI/script processes exit before OTLP exports flush — call `provider.force_flush()` then `provider.shutdown()` (Python/TS) or `tp.Shutdown(ctx)` (Go) before exit; (c) CLI-visible spaces/projects can disagree with a collector-targeted space ID — report the mismatch instead of silently rewriting credentials.
 4. If the app uses tools: confirm CHAIN and TOOL spans appear with `input.value` / `output.value` so tool calls and results are visible.
 
 When verification is blocked by CLI or account issues, end with a concrete status:
@@ -196,28 +163,6 @@ When verification is blocked by CLI or account issues, end with a concrete statu
 - latest local trace ID or run ID
 - whether exporter logs show local span emission
 - whether the failure is credential, space/project resolution, network, or collector rejection
-
-## Leveraging the Tracing Assistant (MCP)
-
-For deeper instrumentation guidance inside the IDE, the user can enable:
-
-- **Arize AX Tracing Assistant MCP** — instrumentation guides, framework examples, and support. In Cursor: **Settings → MCP → Add** and use:
-  ```json
-  "arize-tracing-assistant": {
-    "command": "uvx",
-    "args": ["arize-tracing-assistant@latest"]
-  }
-  ```
-- **Arize AX Docs MCP** — searchable docs. In Cursor:
-  ```json
-  "arize-ax-docs": {
-    "url": "https://arize.com/docs/mcp"
-  }
-  ```
-
-Then the user can ask things like: *"Instrument this app using Arize AX"*, *"Can you use manual instrumentation so I have more control over my traces?"*, *"How can I redact sensitive information from my spans?"*
-
-See the full setup at [Agent-Assisted Tracing Setup](https://arize.com/docs/ax/alyx/tracing-assistant).
 
 ## Emitting `session.id` for multi-turn session tracking
 
@@ -278,6 +223,7 @@ tracer_provider.shutdown()
 3. Was `force_flush()` called after the conversation ended?
 4. Did you wait ~30 seconds for ingestion before checking the Arize UI?
 
+
 ## Reference links
 
 | Resource | URL |
@@ -287,6 +233,10 @@ tracer_provider.shutdown()
 | Arize AX Docs | https://arize.com/docs/ax |
 | Full integration list | https://arize.com/docs/ax/integrations |
 | Doc index (llms.txt) | https://arize.com/docs/llms.txt |
+
+## IDE Integration (MCP)
+
+If the user asks about IDE-based instrumentation guidance or MCP setup, see references/tracing-assistant-mcp.md.
 
 ## Save Credentials for Future Use
 

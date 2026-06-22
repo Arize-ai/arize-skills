@@ -4,7 +4,7 @@ Skills that guide AI coding agents to help you add observability, run experiment
 
 These skills encode the workflows we've refined building the [Arize](https://arize.com) platform and helping teams debug LLM apps in production. They handle the `ax` CLI flags, data shape quirks, and multi-step recipes so you don't have to.
 
-Works with Cursor, Claude Code, Codex, Windsurf, and [40+ other agents](https://github.com/nicepkg/agent-skills).
+Works with Cursor, Claude Code, Codex, GitHub Copilot, Windsurf, and [40+ other agents](https://github.com/vercel-labs/skills#supported-agents).
 
 ## New to Arize? Start Here
 
@@ -50,10 +50,21 @@ cd arize-skills
 
 The installer detects installed agents and optionally installs the `ax` CLI. Use `--global` / `-Global` instead to install to `~/.<agent>/skills/`.
 
-### Option 3: Claude Code plugin
+### Option 3: ax CLI
+
+If you already have `ax` installed (v0.9.0+):
+
+```bash
+ax skills install
+```
+
+### Option 4: Claude Code plugin
+
+Open up a Claude Code session and execute the following:
 
 ```
-/plugin add https://github.com/Arize-ai/arize-skills
+/plugin marketplace add Arize-ai/arize-skills
+/plugin install arize-skills@arize-skills
 ```
 
 ## Prerequisites
@@ -77,46 +88,37 @@ pip install arize-ax-cli
 
 Set up your API key once and it persists across all sessions and projects:
 ```bash
-# Interactive wizard
+# Interactive wizard (creates 'default' profile if no profiles exist)
 ax profiles create
 
-# Or pass the key directly
+# Or pass the key directly (optional profile name as positional arg)
 ax profiles create --api-key YOUR_API_KEY
+ax profiles create staging --api-key YOUR_STAGING_KEY
 
 # Update an existing profile (patches only what you specify)
 ax profiles update --api-key NEW_API_KEY
 ax profiles update --region us-east-1b
+
+# Other profile management
+ax profiles list
+ax profiles show
+ax profiles use staging
+ax profiles delete staging
 ```
 
-You'll also need a space ID. Find yours in the Arize URL (`/spaces/{SPACE_ID}/...`) or run `ax spaces list -o json`, then persist it:
+You'll also need a space name or ID. Find yours by running `ax spaces list -o json` (use the `name` or base64 `id`), then persist it:
 ```bash
 # macOS/Linux — add to ~/.zshrc or ~/.bashrc
-export ARIZE_SPACE_ID="U3BhY2U6..."
+export ARIZE_SPACE="my-workspace"        # name, or base64 ID like U3BhY2U6...
 ```
 
-**Option B — `.env` file** (project-scoped credentials + provider keys):
-
-Copy the example and fill in your keys:
-```bash
-cp .env.example .env
-# Edit .env with your credentials
-```
-
-The `.env` file supports all credentials used by the skills:
-```bash
-ARIZE_API_KEY=your-api-key               # from https://app.arize.com/admin > API Keys
-ARIZE_SPACE_ID=U3BhY2U6...              # base64 space ID from your Arize URL
-# ARIZE_DEFAULT_PROJECT=my-project       # optional default project
-# OPENAI_API_KEY=sk-...                  # for AI integrations and evaluators
-# ANTHROPIC_API_KEY=sk-ant-...           # for AI integrations and evaluators
-```
-
-Skills automatically load this file during their prerequisite check. The `.env` file is gitignored — never commit it.
-
-**Option C — Environment variables** (CI/CD):
+**Option B — Environment variables**:
 ```bash
 export ARIZE_API_KEY="your-api-key"       # from https://app.arize.com/admin > API Keys
-export ARIZE_SPACE_ID="U3BhY2U6..."       # base64 space ID from your Arize URL
+export ARIZE_SPACE="my-workspace"         # space name or base64 ID from ax spaces list
+# export ARIZE_DEFAULT_PROJECT=my-project # optional default project
+# export OPENAI_API_KEY="sk-..."          # for AI integrations and evaluators
+# export ANTHROPIC_API_KEY="sk-ant-..."   # for AI integrations and evaluators
 ```
 
 ### Verify
@@ -149,7 +151,13 @@ For interactive setup, `ax profiles create` also offers **Advanced → Single en
 | [arize-ai-provider-integration](skills/arize-ai-provider-integration/SKILL.md) | Create and manage LLM provider credentials (OpenAI, Anthropic, Azure, Bedrock, Vertex, and more). |
 | [arize-annotation](skills/arize-annotation/SKILL.md) | Create and manage annotation configs (categorical, continuous, freeform); bulk-annotate project spans via the Python SDK. |
 | [arize-prompt-optimization](skills/arize-prompt-optimization/SKILL.md) | Optimize prompts using trace data, experiments, and meta-prompting. |
+| [arize-prompts](skills/arize-prompts/SKILL.md) | Manage Prompt Hub templates and versions with `ax prompts` (create, versions, labels). |
 | [arize-link](skills/arize-link/SKILL.md) | Generate deep links to traces, spans, and sessions in the Arize UI. |
+| [arize-compliance-audit](skills/arize-compliance-audit/SKILL.md) | Audit an AI agent for regulatory compliance (EU AI Act, NIST AI RMF, GDPR, HIPAA). Produces a tailored remediation checklist. |
+| [arize-admin](skills/arize-admin/SKILL.md) | Manage organizations, spaces, roles, role bindings, resource restrictions, and API keys. Enterprise admin workflows: team onboarding, SAML/SSO role mapping, service key management, and access control. |
+
+> [!WARNING]
+> **arize-compliance-audit is for guidance only and does not constitute legal advice or a complete compliance assessment.** It identifies common technical patterns based on publicly available regulatory frameworks and cannot account for your organisation's specific legal obligations, contractual commitments, or operational context. Always consult a qualified attorney or compliance specialist for binding assessments.
 
 ## Installer Flags
 
@@ -162,7 +170,7 @@ For interactive setup, `ax profiles create` also offers **Advanced → Single en
 | `--copy` | Copy files instead of symlinking |
 | `--force` | Overwrite existing skills |
 | `--skip-cli` | Don't install `ax` CLI even if missing |
-| `--agent <name>` | Manually specify agent (cursor, claude, codex) — repeatable |
+| `--agent <name>` | Manually specify agent (cursor, claude, codex, copilot) — repeatable |
 | `--skill <name>` | Only install/uninstall specific skills — repeatable (e.g. `--skill arize-trace --skill arize-dataset`) |
 | `--yes` | Skip confirmation prompts |
 | `--list` | List all available skills and exit |
@@ -177,7 +185,7 @@ For interactive setup, `ax profiles create` also offers **Advanced → Single en
 | `-Copy` | Copy files instead of symlinking |
 | `-Force` | Overwrite existing skills |
 | `-SkipCli` | Don't install `ax` CLI even if missing |
-| `-Agent <name>` | Manually specify agent (cursor, claude, codex) — repeatable |
+| `-Agent <name>` | Manually specify agent (cursor, claude, codex, copilot) — repeatable |
 | `-Skill <name>` | Only install/uninstall specific skills — repeatable |
 | `-Yes` | Skip confirmation prompts |
 | `-Uninstall` | Remove previously installed skill symlinks |
@@ -191,6 +199,17 @@ For interactive setup, `ax profiles create` also offers **Advanced → Single en
 ## Testing Skills
 
 `tests/run_skill.py` is an interactive test harness that runs a skill end-to-end using the Claude Agent SDK. It creates a temporary workspace, passes in your Arize credentials, and streams the agent's output.
+
+Export the required environment variables before running:
+
+```bash
+export ARIZE_API_KEY="your-api-key"       # from https://app.arize.com/admin > API Keys
+export ARIZE_SPACE="my-workspace"         # space name or base64 ID from ax spaces list
+export TEST_PROJECT_NAME="my-project"     # optional: Arize project for trace tests
+export TEST_MODEL="claude-sonnet-4-6"     # optional: Claude model override
+```
+
+Then run the harness:
 
 ```bash
 python tests/run_skill.py --skill arize-trace --prompt "Export trace abc123"
@@ -234,4 +253,4 @@ python tests/run_skill.py --skill arize-trace --prompt "Export trace abc123"
 
 ## License
 
-Apache 2.0
+MIT

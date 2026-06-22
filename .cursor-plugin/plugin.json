@@ -1,0 +1,25 @@
+{
+  "name": "arize-skills",
+  "displayName": "Arize Skills",
+  "version": "1.0.0",
+  "description": "Add Arize AX observability to LLM applications — auto-instrumentation, trace export, dataset management, experiment workflows, prompt optimization, and deep linking via the ax CLI.",
+  "author": {
+    "name": "Arize AI",
+    "email": "support@arize.com",
+    "url": "https://arize.com"
+  },
+  "homepage": "https://arize.com/docs/ax",
+  "repository": "https://github.com/Arize-ai/arize-skills",
+  "license": "MIT",
+  "keywords": [
+    "arize",
+    "observability",
+    "tracing",
+    "opentelemetry",
+    "llm",
+    "evals",
+    "datasets",
+    "experiments",
+    "instrumentation"
+  ]
+}
