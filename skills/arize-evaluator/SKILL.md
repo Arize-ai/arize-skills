@@ -83,6 +83,8 @@ At session granularity, `{conversation}` is a special template variable that ren
 
 At span or trace granularity, `{conversation}` is treated as a regular template variable and resolved via column mappings like any other.
 
+> **Note:** For `{conversation}` to work, spans must carry `attributes.session.id`. See the **arize-instrumentation** skill for how to emit `session.id` from application code, including the `force_flush()` pattern required for Jupyter notebooks and short-lived scripts.
+
 ### Multi-evaluator tasks
 
 A task can contain evaluators at different granularities. At runtime the system uses the **highest** granularity (session > trace > span) for data fetching and automatically **splits into one child run per evaluator**. Per-evaluator `query_filter` in the task's evaluators JSON further narrows which spans are included (e.g., only tool-call spans within a session).
