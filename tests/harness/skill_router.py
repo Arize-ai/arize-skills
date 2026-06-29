@@ -342,6 +342,7 @@ class SkillSelectionRunner:
             setting_sources=["project"],
             # Typical list of tools (to exclude all unknown tools of the tester)
             tools=_TEST_TOOLS,
+            skills=ALL_SKILLS,
             max_turns=max_turns,
             max_budget_usd=self.max_budget_usd,
             model=self.model,
