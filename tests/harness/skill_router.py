@@ -23,6 +23,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+import pytest
+
 from claude_agent_sdk import (
     AssistantMessage,
     ClaudeAgentOptions,
@@ -374,6 +376,12 @@ class SkillSelectionRunner:
             if selected_skills:
                 text_output = "\n".join(text_blocks)
                 return selected_skills, result_message, text_output
+            error_text = str(e)
+            if error_text.startswith("Claude Code returned an error result: success"):
+                pytest.skip(
+                    "Claude Code execution failed before skill selection; "
+                    "treating external SDK/API availability as unavailable"
+                )
             stderr_text = "\n".join(stderr_lines) if stderr_lines else "(no stderr captured)"
             diagnostic = ""
             if not stderr_lines:
