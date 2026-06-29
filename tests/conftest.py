@@ -28,4 +28,4 @@ if str(_tests_dir) not in sys.path:
 
 @pytest.fixture(scope="session")
 def test_model():
-    return os.environ.get("TEST_MODEL", None)
+    return os.environ.get("TEST_MODEL") or None
