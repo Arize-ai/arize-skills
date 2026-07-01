@@ -438,7 +438,7 @@ def selection_results():
     report_dir = os.environ.get("SKILL_TESTS_REPORT_DIR", "test-results")
     os.makedirs(report_dir, exist_ok=True)
 
-    model = os.environ.get("TEST_MODEL") or "default"
+    model = os.environ.get("TEST_MODEL", "default")
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
     path = os.path.join(report_dir, f"skill_selection_{model}_{ts}.json")
 
