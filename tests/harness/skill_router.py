@@ -30,6 +30,7 @@ from claude_agent_sdk import (
     query,
 )
 from claude_agent_sdk.types import (
+    PermissionResultDeny,
     TextBlock,
     ToolUseBlock,
 )
@@ -315,8 +316,21 @@ class SkillSelectionRunner:
         result_message: ResultMessage | None = None
         selected_skills: list[str] = []
         stderr_lines: list[str] = []
+
         def _capture_stderr(line: str) -> None:
             stderr_lines.append(line)
+
+        def _record_skill(skill_name: str) -> None:
+            if skill_name and skill_name not in selected_skills:
+                selected_skills.append(skill_name)
+
+        async def _capture_tool_request(tool_name, tool_input, _context):
+            if tool_name == "Skill":
+                _record_skill(str(tool_input.get("skill", "")).strip())
+            return PermissionResultDeny(
+                message="Skill selection captured by test harness",
+                interrupt=True,
+            )
 
         # Give more turns for multi-skill prompts so the agent has room to
         # invoke each skill in sequence.  5 turns per expected skill, min 5.
@@ -328,11 +342,13 @@ class SkillSelectionRunner:
             setting_sources=["project"],
             # Typical list of tools (to exclude all unknown tools of the tester)
             tools=_TEST_TOOLS,
+            skills=ALL_SKILLS,
             max_turns=max_turns,
             max_budget_usd=self.max_budget_usd,
             model=self.model,
             cwd=str(_REPO_ROOT),
             stderr=_capture_stderr,
+            can_use_tool=_capture_tool_request,
             # Don't pollute the user's Claude Code session history with test runs
             extra_args={"no-session-persistence": None},
         )
@@ -346,7 +362,7 @@ class SkillSelectionRunner:
                         if isinstance(block, ToolUseBlock):
                             if block.name == "Skill":
                                 skill_name = block.input.get("skill", "").strip()
-                                selected_skills.append(skill_name)
+                                _record_skill(skill_name)
                 elif isinstance(message, ResultMessage):
                     result_message = message
                 # Exit early once we've captured the target number of distinct skills
