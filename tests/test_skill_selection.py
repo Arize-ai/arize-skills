@@ -271,6 +271,11 @@ VAGUE_PROMPTS = [
         ["arize-instrumentation"],
         ["vague", "instrumentation"],
     ),
+    (
+        "Where do I get my Arize API key and Space ID to start sending traces?",
+        ["arize-instrumentation"],
+        ["vague", "instrumentation", "onboarding"],
+    ),
     # Should route to dataset
     (
         "I need some test data for my model",
