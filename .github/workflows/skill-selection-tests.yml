@@ -37,25 +37,15 @@ jobs:
           done
 
       - name: Check required secrets
-        id: check-secrets
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          IS_FORK: ${{ github.event.pull_request.head.repo.fork }}
         run: |
           if [ -z "$ANTHROPIC_API_KEY" ]; then
-            if [ "$IS_FORK" = "true" ]; then
-              echo "::warning::Skipping skill selection tests — fork PR, ANTHROPIC_API_KEY unavailable. A maintainer will run these before merge."
-              echo "skip=true" >> $GITHUB_OUTPUT
-            else
-              echo "::error::ANTHROPIC_API_KEY secret is not set. Go to Settings > Secrets and variables > Actions to add it."
-              exit 1
-            fi
-          else
-            echo "skip=false" >> $GITHUB_OUTPUT
+            echo "::error::ANTHROPIC_API_KEY secret is not set. Go to Settings > Secrets and variables > Actions to add it."
+            exit 1
           fi
 
       - name: Run skill selection tests
-        if: steps.check-secrets.outputs.skip != 'true'
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           TEST_MODEL: ${{ inputs.test_model || '' }}

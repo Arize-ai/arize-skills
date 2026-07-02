@@ -101,6 +101,33 @@ When you have both a project ID and trace ID, this is the most reliable verifica
 ax spans export PROJECT --trace-id TRACE_ID --output-dir .arize-tmp-traces
 ```
 
+### Inspect per-span attributes and tool calls
+
+Use `ax spans export` for per-span inspection. Do not use model column discovery to decide whether attribute values are present: column discovery only tells you which columns/attributes exist in the project schema; it does not return span-level values.
+
+The export output contains one JSON object per span. For a specific trace, span, or session, inspect the exported span objects directly:
+
+```bash
+ax spans export PROJECT --trace-id TRACE_ID --stdout \
+  | jq '.[] | {
+      span_id: .context.span_id,
+      parent_id,
+      name,
+      status_code,
+      kind: .attributes["openinference.span.kind"],
+      tool_name: .attributes["tool.name"],
+      tool_parameters: .attributes["tool.parameters"],
+      input: .attributes["input.value"],
+      output: .attributes["output.value"],
+      llm_input_messages: .attributes["llm.input_messages"],
+      llm_output_messages: .attributes["llm.output_messages"]
+    }'
+```
+
+To find tool calls or tool executions, look for spans where `attributes.openinference.span.kind = 'TOOL'` or where `attributes.tool.name` is present. Tool inputs and outputs usually live on the tool span as `attributes.input.value` and `attributes.output.value`. LLM spans can also contain proposed tool calls in `attributes.llm.output_messages` via message tool-call fields.
+
+If a user asks for a specific tool call's action, input, and output, export the trace/session/span and return the matching span's `context.span_id`, `parent_id`, `name`, `attributes.tool.name`, `attributes.tool.parameters`, `attributes.input.value`, `attributes.output.value`, and relevant `attributes.llm.input_messages` / `attributes.llm.output_messages`. If those fields are missing, report that the specific span does not contain them; do not conclude that Arize is only for aggregate monitoring or that attributes cannot be retrieved.
+
 ### Bulk export with `--all`
 
 By default, `ax spans export` is capped at 500 spans by `-l`. Pass `--all` for unlimited bulk export.
@@ -444,6 +471,7 @@ ax spans export PROJECT --trace-id TRACE_ID --stdout | jq '.[]'
 | Expected traces missing from time-range query | Likely a timezone mismatch. Timestamps must be UTC — naive timestamps and `Z`-suffix timestamps are both treated as UTC; local times without conversion will shift the window. Re-run using `date -u "+%Y-%m-%dT%H:%M:%SZ"` to get current UTC and compute the correct window. If the user references UI-displayed times, ask what timezone their Arize account is set to and convert to UTC. |
 | `Filter error` or `invalid filter expression` | Check column name spelling (e.g., `attributes.openinference.span.kind` not `span_kind`), wrap string values in single quotes, use `CONTAINS` for free-text fields |
 | `unknown attribute` in filter | The attribute path is wrong or not indexed. Try browsing a small sample first to see actual column names: `ax spans export PROJECT -l 5 --stdout \| jq '.[0] \| keys'` |
+| Attribute columns exist but values look empty | Make sure you are inspecting exported spans, not model column discovery. Column discovery returns schema metadata only. For per-span values, run `ax spans export PROJECT --trace-id TRACE_ID --stdout` and inspect `.[] .attributes` or explicit fields like `.attributes["input.value"]`, `.attributes["output.value"]`, and `.attributes["tool.name"]`. |
 | `Timeout on large export` | Use `--days 7` to narrow the time range |
 
 ## Related Skills
