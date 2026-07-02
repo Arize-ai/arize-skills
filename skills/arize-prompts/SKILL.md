@@ -11,7 +11,7 @@ Official references (read the skill body first; open docs only if the user needs
 - CLI: https://arize.com/docs/api-clients/cli/prompts
 - Creating prompts in the product (Prompt Playground, variables, params): https://arize.com/docs/ax/prompts/tutorial/create-a-prompt
 
-See references/cli-prompts.md for full flag tables.
+See [references/cli-prompts.md](references/cli-prompts.md) for full flag tables.
 
 ---
 
@@ -52,8 +52,8 @@ The tutorial at https://arize.com/docs/ax/prompts/tutorial/create-a-prompt walks
 Proceed directly — run the `ax` subcommand you need. Do NOT check versions, env vars, or profiles upfront.
 
 If a command fails:
-- `command not found` or version errors → references/ax-setup.md
-- `401` / profile issues → `ax profiles show`, then references/ax-profiles.md; API keys: https://app.arize.com/admin
+- `command not found` or version errors → [references/ax-setup.md](references/ax-setup.md)
+- `401` / profile issues → `ax profiles show`, then [references/ax-profiles.md](references/ax-profiles.md); API keys: https://app.arize.com/admin
 - Space unknown → `ax spaces list`
 - LLM calls from Hub/Playground need provider credentials → **arize-ai-provider-integration** (`ax ai-integrations list --space SPACE`)
 - **Security:** Never read `.env` or search the filesystem for secrets. Use `ax profiles` and `ax ai-integrations` only.
@@ -385,7 +385,7 @@ Confirm the new name and space before `create`. Labels are **not** copied — us
 | Delete (all versions) | `ax prompts delete NAME_OR_ID [--space SPACE] --force` |
 | Duplicate (no single command) | `get -o json` → extract fields → `create` with new `--name` (see **Workflow D** step 4d) |
 
-For exhaustive flags and defaults, see references/cli-prompts.md.
+For exhaustive flags and defaults, see [references/cli-prompts.md](references/cli-prompts.md).
 
 ---
 
@@ -393,7 +393,7 @@ For exhaustive flags and defaults, see references/cli-prompts.md.
 
 | Symptom | Fix |
 |---------|-----|
-| `Unknown command prompts` | Upgrade `ax` — see references/ax-setup.md |
+| `Unknown command prompts` | Upgrade `ax` — see [references/ax-setup.md](references/ax-setup.md) |
 | `401 Unauthorized` | Check API key at https://app.arize.com/admin > API Keys |
 | Name not found | Pass `--space` when using a name instead of an ID |
 | Variables not interpolating | Confirm each placeholder is `{name}` (single `{` / `}` around the identifier) and `--input-variable-format f_string` |

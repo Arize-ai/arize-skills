@@ -25,8 +25,8 @@ The typical flow: export a dataset → process each example → collect outputs 
 Proceed directly with the task — run the `ax` command you need. Do NOT check versions, env vars, or profiles upfront.
 
 If an `ax` command fails, troubleshoot based on the error:
-- `command not found` or version error → see references/ax-setup.md
-- `401 Unauthorized` / missing API key → run `ax profiles show` to inspect the current profile. If the profile is missing or the API key is wrong, follow references/ax-profiles.md to create/update it. If the user doesn't have their key, direct them to https://app.arize.com/admin > API Keys
+- `command not found` or version error → see [references/ax-setup.md](references/ax-setup.md)
+- `401 Unauthorized` / missing API key → run `ax profiles show` to inspect the current profile. If the profile is missing or the API key is wrong, follow [references/ax-profiles.md](references/ax-profiles.md) to create/update it. If the user doesn't have their key, direct them to https://app.arize.com/admin > API Keys
 - Space unknown → run `ax spaces list` to pick by name, or ask the user
 - Project unclear → ask the user, or run `ax projects list -o json --limit 100` and present as selectable options
 - **Security:** Never read `.env` files or search the filesystem for credentials. Use `ax profiles` for Arize credentials and `ax ai-integrations` for LLM provider keys. If credentials are not available through these channels, ask the user.
@@ -415,9 +415,9 @@ ax experiments export EXPERIMENT_NAME --dataset DATASET_NAME --space SPACE --std
 
 | Problem | Solution |
 |---------|----------|
-| `ax: command not found` | See references/ax-setup.md |
-| `401 Unauthorized` | API key is wrong, expired, or doesn't have access to this space. Fix the profile using references/ax-profiles.md. |
-| `No profile found` | No profile is configured. See references/ax-profiles.md to create one. |
+| `ax: command not found` | See [references/ax-setup.md](references/ax-setup.md) |
+| `401 Unauthorized` | API key is wrong, expired, or doesn't have access to this space. Fix the profile using [references/ax-profiles.md](references/ax-profiles.md). |
+| `No profile found` | No profile is configured. See [references/ax-profiles.md](references/ax-profiles.md) to create one. |
 | `Experiment not found` | Verify experiment name with `ax experiments list --space SPACE` |
 | `Invalid runs file` | Each run must have `example_id` and `output` fields |
 | `example_id mismatch` | Ensure `example_id` values match IDs from the dataset (export dataset to verify) |
@@ -426,4 +426,4 @@ ax experiments export EXPERIMENT_NAME --dataset DATASET_NAME --space SPACE --std
 
 ## Save Credentials for Future Use
 
-See references/ax-profiles.md § Save Credentials for Future Use.
+See [references/ax-profiles.md](references/ax-profiles.md) § Save Credentials for Future Use.
