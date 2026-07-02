@@ -150,19 +150,40 @@ Treat instrumentation as complete only when all of the following are true:
 3. You trigger at least one real request or run that should produce spans.
 4. You either verify the resulting trace in Arize, or you provide a precise blocker that distinguishes app-side success from Arize-side failure.
 
-After implementation:
+Final status is **confirmed**, **confirmed with warnings**, or a **classified blocker** — never a bare "done" when warnings or blockers remain.
 
-1. Run the application and trigger at least one LLM call.
-2. **Use the `arize-trace` skill** to confirm traces arrived. If empty, retry shortly. Verify spans have expected `openinference.span.kind`, `input.value`/`output.value`, and parent-child relationships.
-3. If no traces: verify `ARIZE_SPACE` and `ARIZE_API_KEY`, ensure tracer is initialized before instrumentors and clients, check connectivity to `otlp.arize.com:443`, and inspect app/runtime exporter logs so you can tell whether spans are being emitted locally but rejected remotely. For debug set `GRPC_VERBOSITY=debug` or pass `log_to_console=True` to `register()`. Common gotchas: (a) missing project name resource attribute causes HTTP 500 rejections — `service.name` alone is not enough; Python: pass `project_name` to `register()`; TypeScript: set `"model_id"` or `SEMRESATTRS_PROJECT_NAME` on the resource; Go: add `attribute.String("openinference.project.name", "my-app")` to `resource.New(...)`; (b) CLI/script processes exit before OTLP exports flush — call `provider.force_flush()` then `provider.shutdown()` (Python/TS) or `tp.Shutdown(ctx)` (Go) before exit; (c) CLI-visible spaces/projects can disagree with a collector-targeted space ID — report the mismatch instead of silently rewriting credentials.
-4. If the app uses tools: confirm CHAIN and TOOL spans appear with `input.value` / `output.value` so tool calls and results are visible.
+### Deterministic verification recipe
 
-When verification is blocked by CLI or account issues, end with a concrete status:
+Do not probe `ax` by trial and error. Follow this fixed sequence, and lean on the **`arize-trace`** skill for export/inspection details so you don't rediscover flags:
 
-- app instrumentation status
-- latest local trace ID or run ID
-- whether exporter logs show local span emission
-- whether the failure is credential, space/project resolution, network, or collector rejection
+1. Run the app and trigger at least one LLM call. Capture the **project name** and, if the app logs it, the **trace ID** from runtime logs or exported span context.
+2. Resolve the project to its **base64 project ID once** — `ax spans export` takes the ID, not the name.
+3. Prefer a **targeted lookup by trace ID**, verifying against the same credential context the app exported to (same space/endpoint/project):
+   ```bash
+   ax spans export PROJECT_ID --trace-id TRACE_ID --output-dir .arize-tmp-traces
+   ```
+4. Trace-ID lookups are immediately consistent once the trace is ingested — if it isn't found after a few seconds, treat it as an emission/flush problem (see below), not index lag.
+
+Treat known CLI quirks as expected, not bugs to debug: non-JSON banner/notice lines mixed into stdout, and the default `-l` 500-span cap.
+
+**Emission vs. rejection** — if no traces arrive, inspect app/runtime exporter logs (set `GRPC_VERBOSITY=debug` or pass `log_to_console=True` to `register()`) to tell local emission from remote rejection. The usual causes are the three covered under **Implementation rules**: a missing project-name resource attribute (HTTP 500 rejection — `service.name` alone is not enough), CLI/script processes exiting before the exporter flushes, and a CLI-visible space that disagrees with the collector-targeted space ID (report that mismatch instead of silently rewriting credentials).
+
+**If verification still fails, classify the cause and stop** — do not continue with unrelated probes. The failure is one of: **no local span emission** (exporter logs show nothing sent), **credential / project resolution** (wrong space, or name used where a base64 ID is required), **indexing delay** (emitted and accepted, not yet queryable), **network** (cannot reach `otlp.arize.com:443`), or **collector rejection** (remote reject — see the causes above). Report: app instrumentation status, latest local trace/run ID, whether exporter logs show local emission, and which class applies.
+
+### Post-verification quality checks
+
+A trace can arrive and still be poorly instrumented. After confirming arrival, run a **lightweight quality check** on the emitted trace (or a small sample) before declaring success. For a newly instrumented agent/tool flow, check:
+
+1. **Root span** has `input.value` and `output.value` when the app has a request/response boundary.
+2. **Root status** is `OK` or `ERROR`, not null/`UNSET`, when the outcome is known.
+3. **Expected span kinds** are present for the flow: `AGENT`/`CHAIN`, `LLM`, and `TOOL`.
+4. **Tool spans** carry tool input and output (and non-zero duration) when the app runs local tools.
+5. **LLM spans** have token counts when the provider returns usage.
+6. **Parent-child relationships** match the agent → tool/LLM flow (no orphaned spans).
+7. **Span names** are distinct enough to read a multi-step trace.
+8. **No LLM span duplicated by stacked instrumentors** — the same call wrapped twice (framework + provider); legitimate repeated calls are fine.
+
+Report **both** arrival and quality status. If any check fails, end with **confirmed with warnings**: list each warning and attribute its likely cause — **skill wiring** (fix here), **app code**, **framework/instrumentor limitation**, or **product/UI behavior** — then give the next fix step. Do not bury warnings under a generic success message; when warnings exist, route to trace inspection/debugging before suggesting downstream workflows. For a broader, project-wide audit (more traces, more checks), use the **`arize-instrumentation-health`** skill if it is available; otherwise keep the check inline here rather than expanding it.
 
 ## Emitting `session.id` for multi-turn session tracking
 
