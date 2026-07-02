@@ -55,6 +55,22 @@ SPECIFIC_PROMPTS = [
         ["arize-instrumentation"],
         ["specific", "instrumentation"],
     ),
+    # arize-instrumentation-health
+    (
+        "Check whether my Arize instrumentation is healthy",
+        ["arize-instrumentation-health"],
+        ["specific", "instrumentation-health"],
+    ),
+    (
+        "Run an instrumentation health audit on my project spans",
+        ["arize-instrumentation-health"],
+        ["specific", "instrumentation-health"],
+    ),
+    (
+        "Why are my token and cost dashboards showing zero? Audit my instrumentation",
+        ["arize-instrumentation-health"],
+        ["specific", "instrumentation-health"],
+    ),
     # arize-dataset
     (
         "Create a new evaluation dataset with 10 examples",
@@ -270,6 +286,11 @@ VAGUE_PROMPTS = [
         "Set up monitoring for my AI application",
         ["arize-instrumentation"],
         ["vague", "instrumentation"],
+    ),
+    (
+        "Why do my traces look empty or flat?",
+        ["arize-instrumentation-health"],
+        ["vague", "instrumentation-health"],
     ),
     # Should route to dataset
     (

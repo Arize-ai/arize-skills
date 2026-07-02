@@ -15,6 +15,8 @@ They **cannot** see what happens *inside your application* after the response:
 
 So TOOL and CHAIN spans have to be added **manually** (or by a *framework* instrumentor like LangChain/LangGraph that knows about tools and chains). Once you add them, they appear in the same trace as the LLM spans because they use the same TracerProvider.
 
+**When you can skip manual spans:** if a *framework* instrumentor (LangChain, LangGraph, LlamaIndex, the Vercel AI SDK, etc.) already emits CHAIN/AGENT and TOOL spans, verify its spans first and add manual spans only for gaps. Manual spans are for **raw provider SDK / hand-rolled tool loops** (OpenAI, Anthropic, Bedrock, LiteLLM) where nothing above the LLM client is instrumented.
+
 ## Adding manual spans
 
 To avoid sparse traces where tool inputs/outputs are missing:
@@ -73,6 +75,47 @@ with tracer.start_as_current_span("run_agent") as chain_span:
         # ... append tool result to messages, call LLM again ...
     chain_span.set_attribute("output.value", final_reply)
 ```
+
+Because `start_as_current_span` makes the CHAIN/TOOL span the **active** span, provider LLM calls made inside the block auto-nest under it — no manual parenting needed. In notebooks or short-lived scripts, call `tracer_provider.force_flush()` (then `shutdown()`) before the process exits so these spans are exported.
+
+## TypeScript pattern
+
+Use `startActiveSpan` so tool spans — and the provider instrumentor's LLM spans — nest under the CHAIN span:
+
+```typescript
+import { trace, SpanStatusCode } from "@opentelemetry/api";
+
+const tracer = trace.getTracer("my-app", "1.0.0");
+
+export async function runAgent(userMessage: string): Promise<string> {
+  return tracer.startActiveSpan("run_agent", async (chainSpan) => {
+    chainSpan.setAttribute("openinference.span.kind", "CHAIN");
+    chainSpan.setAttribute("input.value", userMessage);
+    try {
+      // ... LLM call (auto-instrumented client spans nest here) ...
+      for (const toolUse of toolUses) {
+        await tracer.startActiveSpan(toolUse.name, async (toolSpan) => {
+          toolSpan.setAttribute("openinference.span.kind", "TOOL");
+          toolSpan.setAttribute("input.value", JSON.stringify(toolUse.input));
+          const result = await runTool(toolUse.name, toolUse.input);
+          toolSpan.setAttribute("output.value", JSON.stringify(result));
+          toolSpan.end();
+        });
+        // ... append tool result to messages, call LLM again ...
+      }
+      chainSpan.setAttribute("output.value", finalReply);
+      return finalReply;
+    } catch (err) {
+      chainSpan.setStatus({ code: SpanStatusCode.ERROR, message: String(err) });
+      throw err;
+    } finally {
+      chainSpan.end();
+    }
+  });
+}
+```
+
+In short-lived scripts, `await provider.forceFlush()` then `await provider.shutdown()` before exit so spans are not dropped.
 
 ## Go pattern
 
