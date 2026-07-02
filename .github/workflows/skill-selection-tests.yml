@@ -25,6 +25,14 @@ jobs:
         with:
           python-version: "3.12"
 
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "20"
+
+      - name: Install Claude Code CLI
+        # The claude-agent-sdk harness drives the `claude` binary; it must be on PATH.
+        run: npm install -g @anthropic-ai/claude-code
+
       - name: Install test dependencies
         run: pip install -r tests/requirements.txt
 
