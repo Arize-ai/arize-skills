@@ -1,6 +1,6 @@
 ---
 name: arize-instrumentation-health
-description: Audits the instrumentation health of existing Arize traces across a project or span sample. Exports a bounded span sample, groups by trace, runs deterministic health checks (orphaned spans, flat structure, uncategorized/duplicate spans, blank root I/O, unset status, missing token counts, missing children), and returns a ranked report. Use when the user asks why traces look empty/flat/broken, wants to check whether instrumentation is healthy, find instrumentation issues, or understand why evals or token/cost dashboards show n/a or zero.
+description: Audits instrumentation health of existing Arize traces across a project or span sample. Exports a bounded span sample, groups by trace, runs deterministic health checks (orphaned/uncategorized/duplicate spans, flat structure, blank root I/O, unset status, missing token counts or children), and returns a ranked report. Use when the user asks why traces look empty/flat/broken, wants to check whether instrumentation is healthy, find issues, or why evals or token/cost dashboards show n/a or zero.
 metadata:
   author: arize
   version: "1.0"
