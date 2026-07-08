@@ -172,18 +172,16 @@ Treat known CLI quirks as expected, not bugs to debug: non-JSON banner/notice li
 
 ### Post-verification quality checks
 
-A trace can arrive and still be poorly instrumented. After confirming arrival, run a **lightweight quality check** on the emitted trace (or a small sample) before declaring success. For a newly instrumented agent/tool flow, check:
+A trace can arrive and still be too sparse to be useful. After confirming arrival, run only a **smoke check** on the emitted trace before declaring success. This is not a full instrumentation-health audit. For the newly instrumented request/run, check:
 
-1. **Root span** has `input.value` and `output.value` when the app has a request/response boundary.
-2. **Root status** is `OK` or `ERROR`, not null/`UNSET`, when the outcome is known.
-3. **Expected span kinds** are present for the flow: `AGENT`/`CHAIN`, `LLM`, and `TOOL`.
-4. **Tool spans** carry tool input and output (and non-zero duration) when the app runs local tools.
-5. **LLM spans** have token counts when the provider returns usage.
-6. **Parent-child relationships** match the agent → tool/LLM flow (no orphaned spans).
-7. **Span names** are distinct enough to read a multi-step trace.
-8. **No LLM span duplicated by stacked instrumentors** — the same call wrapped twice (framework + provider); legitimate repeated calls are fine.
+1. **Semantic entrypoint:** when the app has a request/response boundary, the root or intended entrypoint span has `input.value`, `output.value`, and final status when known.
+2. **Expected structure:** the flow contains the expected high-level span kinds (for example `AGENT`/`CHAIN`, `LLM`, and `TOOL` for an agent/tool flow).
+3. **Local tool visibility:** tool spans carry tool input and output when the app runs local tools.
+4. **Parent-child shape:** the trace tree is readable and the main agent/chain -> LLM/tool relationships are intact.
 
-Report **both** arrival and quality status. If any check fails, end with **confirmed with warnings**: list each warning and attribute its likely cause — **skill wiring** (fix here), **app code**, **framework/instrumentor limitation**, or **product/UI behavior** — then give the next fix step. Do not bury warnings under a generic success message; when warnings exist, route to trace inspection/debugging before suggesting downstream workflows. For a broader, project-wide audit (more traces, more checks), use the **`arize-instrumentation-health`** skill if it is available; otherwise keep the check inline here rather than expanding it.
+Report **both** arrival and smoke-check status. If any smoke check fails, end with **confirmed with warnings**: list each warning and attribute its likely cause — **skill wiring** (fix here), **app code**, **framework/instrumentor limitation**, or **product/UI behavior** — then give the next fix step. Do not bury warnings under a generic success message.
+
+For broader or repeated quality concerns — missing token counts across many traces, uncategorized spans, flat structures, orphaned spans, duplicate LLM spans, blank semantic roots, or project-wide health questions — hand off to **`arize-instrumentation-health`** when that skill is available. Otherwise stop at the smoke-check findings and say a full health audit is outside `arize-instrumentation`'s scope.
 
 ## Emitting `session.id` for multi-turn session tracking
 
