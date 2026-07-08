@@ -63,9 +63,9 @@ and we can narrow down during the audit.
 ```
 
 Based on the selection:
-- **1 selected** — EU AI Act, GPAI Code of Practice, GDPR apply. See references/eu-ai-act-gpai.md.
-- **2 selected** — NIST AI RMF, Colorado AI Act, NYC LL144, HIPAA may apply. See references/us-ai-compliance.md.
-- **3 selected** — ISO 42001 AIMS controls apply. See references/iso-42001.md. Note: ISO 42001 is an organisational management system — the audit will cover technically-auditable controls only; purely organisational clauses (leadership review, internal audits) are flagged separately.
+- **1 selected** — EU AI Act, GPAI Code of Practice, GDPR apply. See [references/eu-ai-act-gpai.md](references/eu-ai-act-gpai.md).
+- **2 selected** — NIST AI RMF, Colorado AI Act, NYC LL144, HIPAA may apply. See [references/us-ai-compliance.md](references/us-ai-compliance.md).
+- **3 selected** — ISO 42001 AIMS controls apply. See [references/iso-42001.md](references/iso-42001.md). Note: ISO 42001 is an organisational management system — the audit will cover technically-auditable controls only; purely organisational clauses (leadership review, internal audits) are flagged separately.
 - **Multiple selected** — all selected frameworks apply; the audit covers the union of requirements, with cross-references where frameworks overlap.
 
 ### Step 2 — Determine use case category
@@ -83,7 +83,7 @@ Use the `AskUserQuestion` tool to ask: **What does your AI application do?**
 ### Step 3 — Determine risk tier
 
 Based on the use case and selected frameworks:
-- **EU selected**: Classify as Unacceptable / High / Limited / Minimal per references/eu-ai-act-gpai.md
+- **EU selected**: Classify as Unacceptable / High / Limited / Minimal per [references/eu-ai-act-gpai.md](references/eu-ai-act-gpai.md)
 - **US selected**: Classify as High-risk (consequential decisions per Colorado AI Act) or General
 - **ISO 42001 selected**: Risk tier is not a formal classification in ISO 42001, but note whether the system is high-stakes (which elevates the priority of impact assessment and bias controls)
 
@@ -201,7 +201,7 @@ Then proceed directly to Phase 2.
 
 ## Phase 2: Compliance checklist
 
-Using the Phase 1 findings and the template in references/compliance-checklist-template.md, generate a **tailored compliance checklist**.
+Using the Phase 1 findings and the template in [references/compliance-checklist-template.md](references/compliance-checklist-template.md), generate a **tailored compliance checklist**.
 
 ### Rules for checklist generation
 
@@ -308,7 +308,7 @@ If Arize tracing is **not** set up, this is a significant compliance gap. Offer:
 
 ## Reference files
 
-- references/eu-ai-act-gpai.md — EU AI Act and GPAI Code of Practice developer guide
-- references/us-ai-compliance.md — US compliance landscape (NIST AI RMF, Colorado, NYC LL144, HIPAA)
-- references/iso-42001.md — ISO/IEC 42001:2023 AI Management Systems developer guide (technically-auditable controls only)
-- references/compliance-checklist-template.md — Reusable checklist template for Phase 2 output
+- [references/eu-ai-act-gpai.md](references/eu-ai-act-gpai.md) — EU AI Act and GPAI Code of Practice developer guide
+- [references/us-ai-compliance.md](references/us-ai-compliance.md) — US compliance landscape (NIST AI RMF, Colorado, NYC LL144, HIPAA)
+- [references/iso-42001.md](references/iso-42001.md) — ISO/IEC 42001:2023 AI Management Systems developer guide (technically-auditable controls only)
+- [references/compliance-checklist-template.md](references/compliance-checklist-template.md) — Reusable checklist template for Phase 2 output

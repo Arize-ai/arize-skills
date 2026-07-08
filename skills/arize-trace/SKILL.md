@@ -44,8 +44,8 @@ When the user references times they see in the **Arize UI** (e.g., "I see a trac
 Proceed directly with the task — run the `ax` command you need. Do NOT check versions, env vars, or profiles upfront.
 
 If an `ax` command fails, troubleshoot based on the error:
-- `command not found` or version error → see references/ax-setup.md
-- `401 Unauthorized` / missing API key → run `ax profiles show` to inspect the current profile. If the profile is missing or the API key is wrong, follow references/ax-profiles.md to create/update it. If the user doesn't have their key, direct them to https://app.arize.com/admin > API Keys
+- `command not found` or version error → see [references/ax-setup.md](references/ax-setup.md)
+- `401 Unauthorized` / missing API key → run `ax profiles show` to inspect the current profile. If the profile is missing or the API key is wrong, follow [references/ax-profiles.md](references/ax-profiles.md) to create/update it. If the user doesn't have their key, direct them to https://app.arize.com/admin > API Keys
 - Space unknown → run `ax spaces list` to pick by name, or ask the user
 - **Security:** Never read `.env` files or search the filesystem for credentials. Use `ax profiles` for Arize credentials and `ax ai-integrations` for LLM provider keys. If credentials are not available through these channels, ask the user.
 - Project unclear → run `ax projects list -l 100 -o json` (add `--space SPACE` if known), present the names, and ask the user to pick one
@@ -100,6 +100,33 @@ When you have both a project ID and trace ID, this is the most reliable verifica
 ```bash
 ax spans export PROJECT --trace-id TRACE_ID --output-dir .arize-tmp-traces
 ```
+
+### Inspect per-span attributes and tool calls
+
+Use `ax spans export` for per-span inspection. Do not use model column discovery to decide whether attribute values are present: column discovery only tells you which columns/attributes exist in the project schema; it does not return span-level values.
+
+The export output contains one JSON object per span. For a specific trace, span, or session, inspect the exported span objects directly:
+
+```bash
+ax spans export PROJECT --trace-id TRACE_ID --stdout \
+  | jq '.[] | {
+      span_id: .context.span_id,
+      parent_id,
+      name,
+      status_code,
+      kind: .attributes["openinference.span.kind"],
+      tool_name: .attributes["tool.name"],
+      tool_parameters: .attributes["tool.parameters"],
+      input: .attributes["input.value"],
+      output: .attributes["output.value"],
+      llm_input_messages: .attributes["llm.input_messages"],
+      llm_output_messages: .attributes["llm.output_messages"]
+    }'
+```
+
+To find tool calls or tool executions, look for spans where `attributes.openinference.span.kind = 'TOOL'` or where `attributes.tool.name` is present. Tool inputs and outputs usually live on the tool span as `attributes.input.value` and `attributes.output.value`. LLM spans can also contain proposed tool calls in `attributes.llm.output_messages` via message tool-call fields.
+
+If a user asks for a specific tool call's action, input, and output, export the trace/session/span and return the matching span's `context.span_id`, `parent_id`, `name`, `attributes.tool.name`, `attributes.tool.parameters`, `attributes.input.value`, `attributes.output.value`, and relevant `attributes.llm.input_messages` / `attributes.llm.output_messages`. If those fields are missing, report that the specific span does not contain them; do not conclude that Arize is only for aggregate monitoring or that attributes cannot be retrieved.
 
 ### Bulk export with `--all`
 
@@ -434,16 +461,17 @@ ax spans export PROJECT --trace-id TRACE_ID --stdout | jq '.[]'
 
 | Problem | Solution |
 |---------|----------|
-| `ax: command not found` | See references/ax-setup.md |
+| `ax: command not found` | See [references/ax-setup.md](references/ax-setup.md) |
 | `SSL: CERTIFICATE_VERIFY_FAILED` | macOS: `export SSL_CERT_FILE=/etc/ssl/cert.pem`. Linux: `export SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt`. Windows: `$env:SSL_CERT_FILE = (python -c "import certifi; print(certifi.where())")` |
 | `No such command` on a subcommand that should exist | The installed `ax` is outdated. Reinstall: `uv tool install --force --reinstall arize-ax-cli` (requires shell access to install packages) |
-| `No profile found` | No profile is configured. See references/ax-profiles.md to create one. |
-| `401 Unauthorized` with valid API key | For `ax traces export` with a project name, add `--space SPACE`. For `ax spans export`, try resolving to a base64 project ID: `ax projects list -l 100 -o json` and use the project's `id`. If the key itself is wrong or expired, fix the profile using references/ax-profiles.md. |
+| `No profile found` | No profile is configured. See [references/ax-profiles.md](references/ax-profiles.md) to create one. |
+| `401 Unauthorized` with valid API key | For `ax traces export` with a project name, add `--space SPACE`. For `ax spans export`, try resolving to a base64 project ID: `ax projects list -l 100 -o json` and use the project's `id`. If the key itself is wrong or expired, fix the profile using [references/ax-profiles.md](references/ax-profiles.md). |
 | `No spans found` | Expand `--days` (default 30), verify project ID |
 | Results don't include recent traces | Time-range queries lag 6–12h. Use `--trace-id` for immediate lookups of known traces. For time-range queries, set `--start-time` at least 12h in the past to ensure spans are indexed. |
 | Expected traces missing from time-range query | Likely a timezone mismatch. Timestamps must be UTC — naive timestamps and `Z`-suffix timestamps are both treated as UTC; local times without conversion will shift the window. Re-run using `date -u "+%Y-%m-%dT%H:%M:%SZ"` to get current UTC and compute the correct window. If the user references UI-displayed times, ask what timezone their Arize account is set to and convert to UTC. |
 | `Filter error` or `invalid filter expression` | Check column name spelling (e.g., `attributes.openinference.span.kind` not `span_kind`), wrap string values in single quotes, use `CONTAINS` for free-text fields |
 | `unknown attribute` in filter | The attribute path is wrong or not indexed. Try browsing a small sample first to see actual column names: `ax spans export PROJECT -l 5 --stdout \| jq '.[0] \| keys'` |
+| Attribute columns exist but values look empty | Make sure you are inspecting exported spans, not model column discovery. Column discovery returns schema metadata only. For per-span values, run `ax spans export PROJECT --trace-id TRACE_ID --stdout` and inspect `.[] .attributes` or explicit fields like `.attributes["input.value"]`, `.attributes["output.value"]`, and `.attributes["tool.name"]`. |
 | `Timeout on large export` | Use `--days 7` to narrow the time range |
 
 ## Related Skills
@@ -455,4 +483,4 @@ ax spans export PROJECT --trace-id TRACE_ID --stdout | jq '.[]'
 
 ## Save Credentials for Future Use
 
-See references/ax-profiles.md § Save Credentials for Future Use.
+See [references/ax-profiles.md](references/ax-profiles.md) § Save Credentials for Future Use.
