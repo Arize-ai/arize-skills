@@ -2,7 +2,7 @@
 
 Deterministic checks over an exported span sample grouped by trace. Each check has a **trigger** (when to flag), a **guardrail** (when to downgrade confidence because a benign cause is plausible), and a **fix direction**. Report a finding as high confidence only when the trigger fires and the guardrail does not apply.
 
-## Span-kind classification precedence
+## Span-kind classification and expected attributes
 
 When a check needs a span's kind, classify in this order and stop at the first match:
 
@@ -10,7 +10,20 @@ When a check needs a span's kind, classify in this order and stop at the first m
 2. `openinference.span.kind` attribute (`LLM`, `AGENT`, `CHAIN`, `TOOL`, `RETRIEVER`, `EMBEDDING`, `RERANKER`, `GUARDRAIL`, `EVALUATOR`).
 3. OTel GenAI attributes (`gen_ai.*`).
 4. Arize built-in mappings.
-5. Otherwise **unclassified**.
+5. Otherwise mark the span **uncategorized** and recommend setting `openinference.span.kind`; do not treat unknown span kind as healthy for AI/workflow spans.
+
+Key attributes by span kind:
+
+| Span kind | Expected attributes |
+|-----------|---------------------|
+| All AI/workflow spans | `openinference.span.kind`; meaningful `input.value` / `output.value` when the span represents an inspectable operation; parent-child linkage; status on completed operations. |
+| `LLM` | `llm.model_name`; `llm.provider` or `llm.system`; input/output message attributes; `llm.token_count.prompt`, `llm.token_count.completion`, and `llm.token_count.total` when available. |
+| `CHAIN` / `AGENT` | `input.value` for the user request or run input; `output.value` for the final response or run result; child `LLM`, `TOOL`, `RETRIEVER`, or nested `AGENT` spans for the internal steps. |
+| `TOOL` | Tool name as the span name or an equivalent tool-name attribute; `input.value` containing arguments; `output.value` containing the tool result; error status when the tool fails. |
+| `RETRIEVER` | Query/input value plus retrieved document ids, content/snippets, and scores when available. |
+| `EMBEDDING` | Model name plus embedded text/chunks and vector metadata when emitted by the instrumentor. |
+| `RERANKER` | Query/input value, candidate documents, ranked outputs, and scores when available. |
+| `GUARDRAIL` / `EVALUATOR` | Input being checked, result/output, label/score/violation metadata, and error status when the check fails. |
 
 ## Severity
 
@@ -32,9 +45,9 @@ When a check needs a span's kind, classify in this order and stop at the first m
 - **Fix direction:** initialize tracing and instrumentors **before** app imports and client initialization.
 
 ### 3. Uncategorized spans
-- **Trigger:** fewer than 50% of spans classify to a known span kind (see precedence above).
-- **Guardrail:** none beyond the classification precedence itself.
-- **Fix direction:** add semantic attributes or configure source mappings.
+- **Trigger:** any AI/workflow span cannot be classified to a known span kind after applying the precedence above; raise severity as the share of uncategorized semantic spans grows.
+- **Guardrail:** do not require raw infrastructure spans (HTTP, DB, queue, cron, exporter internals) to carry OpenInference span kinds unless they are intended to appear as AI workflow steps.
+- **Fix direction:** set `openinference.span.kind` and the expected attributes for the span kind, or configure source mappings.
 - **Min data:** ≥5 traces.
 
 ### 4. Repeated span names
@@ -43,9 +56,10 @@ When a check needs a span's kind, classify in this order and stop at the first m
 - **Fix direction:** give logical steps unique, descriptive span names.
 
 ### 5. Blank root input/output
-- **Trigger:** more than 60% of root spans are missing `input.value` or `output.value`.
-- **Guardrail:** root span only — child LLM I/O does not satisfy this check.
-- **Fix direction:** set end-to-end user input and final response on the root span.
+- **Trigger:** more than 25% of semantic root spans are missing the expected `input.value` or `output.value`.
+- **Semantic root evidence:** the root span represents a user-facing request, agent/chain/workflow run, eval case, or trace-level operation that someone would inspect as the entrypoint.
+- **Guardrail:** skip or downgrade when the root is infrastructure-only, a background/maintenance job, intentionally redacted, partially exported, failed before producing output, or when a child span is intentionally the semantic entrypoint.
+- **Fix direction:** set end-to-end user input and final response on the semantic root span, or make the semantic entrypoint explicit so infrastructure parent spans are not treated as missing payloads.
 
 ### 6. Root status unset
 - **Trigger:** more than 80% of root spans are null/`UNSET` **and** there is impact evidence (child `ERROR` spans, or status-based eval/filter usage).

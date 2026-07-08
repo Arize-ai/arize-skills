@@ -38,7 +38,7 @@ Run the nine deterministic checks defined in references/checks.md. Each has a tr
 2. **Flat trace structure** — multi-span traces stuck at depth 1 in a known multi-step framework.
 3. **Uncategorized spans** — too few spans classify to a known span kind.
 4. **Repeated span names** — a few names dominate multi-step traces.
-5. **Blank root input/output** — root spans missing `input.value`/`output.value`.
+5. **Blank root input/output** — semantic root spans missing expected `input.value`/`output.value`.
 6. **Root status unset** — root `UNSET`/null with impact evidence.
 7. **Missing token counts** — confidently-classified LLM spans with null/zero total tokens.
 8. **Missing child spans / payload truncation** — traces losing expected children.
