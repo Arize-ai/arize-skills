@@ -175,9 +175,9 @@ EOF
 
 Additional columns are passed through as `additionalProperties` on the run.
 
-> **`example_id` must be the Arize row id** — the top-level `id` field on each exported dataset example (`ex["id"]`). Do **not** use a value nested inside the example's input fields or `additional_properties`; a wrong value fails silently or attaches the run to the wrong example. Verify with `ax datasets export DATASET_NAME --space SPACE --stdout | jq '.[0].id'`.
+> **`example_id` must be the Arize row id** — the top-level `id` field on each exported dataset example (`ex["id"]`). Do **not** use a value nested inside the example's input fields or `additional_properties`; a wrong value fails silently or attaches the run to the wrong example. Export the dataset and inspect the top-level `id` field before creating runs.
 
-> **⚠️ Inline evaluations in the create file do NOT attach as scores.** `create` only reads `example_id` and `output`; every other column — including an `evaluations` object — is stored as a passthrough additional field, **not** as an experiment evaluation, and will **not** appear as a score in the UI. This fails silently (no error). To attach scores/labels, create the experiment first, then run [`ax experiments annotate-runs`](#annotate-runs-ax-experiments-annotate-runs). The `evaluations` object in the schemas below is the **export (read)** shape returned once annotations exist — it is not an input to `create`.
+> **⚠️ Inline evaluations in the create file do NOT attach as scores.** `create` only reads `example_id` and `output`; every other column — including an `evaluations` object — is stored as a passthrough additional field, **not** as an experiment evaluation, and will **not** appear as a score in the UI. This fails silently (no error). To attach scores/labels, create the experiment first, then run `ax experiments annotate-runs`. The `evaluations` object in the schemas below is the **export (read)** shape returned once annotations exist — it is not an input to `create`.
 
 ## Delete Experiment: `ax experiments delete`
 
@@ -198,7 +198,7 @@ ax experiments delete NAME_OR_ID --force   # skip confirmation prompt
 
 ## Annotate Runs: `ax experiments annotate-runs`
 
-**This is the required step to attach evaluation scores/labels to an experiment and make them show up in the UI.** Evaluations cannot be attached through `create` (see the warning in [Create Experiment](#create-experiment-ax-experiments-create)) — you write them here, after the experiment exists. Upsert semantics — resubmitting the same annotation `name` for the same run overwrites the previous value. Up to 1000 runs per request; unmatched record IDs are silently ignored.
+**This is the required step to attach evaluation scores/labels to an experiment and make them show up in the UI.** Evaluations cannot be attached through `create`; see the warning under Create Experiment. You write them here, after the experiment exists. Upsert semantics — resubmitting the same annotation `name` for the same run overwrites the previous value. Up to 1000 runs per request; unmatched record IDs are silently ignored.
 
 ```bash
 ax experiments annotate-runs NAME_OR_ID --file annotations.json --dataset DATASET_NAME --space SPACE
@@ -243,7 +243,7 @@ A JSON array; each item annotates one run:
 
 ## Experiment Run Schema
 
-Each run corresponds to one dataset example. **On `create`, only `example_id` and `output` are consumed** — `evaluations` shown here is the shape `export` returns *after* you attach scores via [`annotate-runs`](#annotate-runs-ax-experiments-annotate-runs); it is not an input to `create`.
+Each run corresponds to one dataset example. **On `create`, only `example_id` and `output` are consumed** — `evaluations` shown here is the shape `export` returns *after* you attach scores via `annotate-runs`; it is not an input to `create`.
 
 ```json
 {
@@ -373,23 +373,19 @@ At least one of `label`, `score`, or `explanation` should be present per evaluat
 
    **Attach evaluation scores (required for scores to show in the UI).** Evaluations do **not** come from the create file — you attach them with `annotate-runs`, which keys on each run's `id` (assigned at create time), so you must export first to learn those IDs.
 
-7. Export the experiment to get each run's `id` mapped to its `example_id`:
-   ```bash
-   ax experiments export "gpt-4o-baseline" --dataset DATASET_NAME --space SPACE --stdout > created_runs.json
-   jq '.[0] | {id, example_id}' created_runs.json   # confirm the id field
+7. Export the experiment to structured data so you can read each run's `id` alongside its `example_id`. Confirm that the exported run records include both fields.
+8. Build the annotation file with structured JSON handling, keyed by `record_id` (the run `id`). Score/label each run via an LLM-as-judge, a code check, or human review; never fabricate scores. Emit this shape:
+   ```json
+   [
+     {
+       "record_id": "RUN_ID_FROM_EXPERIMENT_EXPORT",
+       "values": [
+         { "name": "correctness", "score": 1.0, "label": "correct" }
+       ]
+     }
+   ]
    ```
-8. Build the annotation file, keyed by `record_id` (the run `id`). Score/label each run — via an LLM-as-judge, a code check, or human review — then emit the `record_id` → `values` schema:
-   ```bash
-   # Example: turn a {example_id -> score} judgment into the annotate-runs schema.
-   # Replace the score logic with your real evaluator; never fabricate scores.
-   jq '[.[] | {record_id: .id, values: [{name: "correctness", score: 1.0, label: "correct"}]}]' \
-     created_runs.json > annotations.json
-   ```
-9. Attach the scores, then confirm they appear:
-   ```bash
-   ax experiments annotate-runs "gpt-4o-baseline" --dataset DATASET_NAME --space SPACE --file annotations.json
-   ax experiments export "gpt-4o-baseline" --dataset DATASET_NAME --space SPACE --stdout | jq '.[0].evaluations'
-   ```
+9. Attach the scores with `ax experiments annotate-runs ... --file annotations.json`, then export or inspect the experiment to confirm the evaluations are attached.
    The scores now render in the experiment view in the Arize UI.
 
 ### Compare two experiments
@@ -472,7 +468,7 @@ ax experiments export EXPERIMENT_NAME --dataset DATASET_NAME --space SPACE --std
 | `No profile found` | No profile is configured. See references/ax-profiles.md to create one. |
 | `Experiment not found` | Verify experiment name with `ax experiments list --space SPACE` |
 | `Invalid runs file` | Each run must have `example_id` and `output` fields |
-| `example_id mismatch` | `example_id` must be the dataset row's **top-level `id`** from `ax datasets export` — not a value nested in the example's fields or `additional_properties`. Verify with `jq '.[0].id'`. |
+| `example_id mismatch` | `example_id` must be the dataset row's **top-level `id`** from `ax datasets export` — not a value nested in the example's fields or `additional_properties`. Export the dataset and inspect the top-level `id` field. |
 | Runs created but no scores / evals in the UI | Evaluations in the create file are silently ignored. Attach them with `ax experiments annotate-runs` (keyed by run `id`) after creating the experiment — see the workflow steps 7–9. |
 | `annotate-runs` reports success but nothing changes | `record_id` must be the **run `id`** (from `ax experiments export`), not the `example_id`. Unmatched record IDs are silently ignored. |
 | `No runs found` | Export returned empty -- verify experiment has runs via `ax experiments get` |
