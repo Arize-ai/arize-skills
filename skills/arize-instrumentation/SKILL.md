@@ -4,7 +4,7 @@ description: Adds Arize AX tracing to an LLM application for the first time. Fol
 metadata:
   author: arize
   version: "1.0"
-compatibility: Python and TypeScript/JavaScript apps use openinference-instrumentation packages for auto-instrumentation. Go apps use arize-otel-go for setup plus per-provider instrumentors openinference-instrumentation-openai-go (official openai/openai-go SDK) and openinference-instrumentation-anthropic-sdk-go (anthropics/anthropic-sdk-go), or manual spans via openinference-semantic-conventions. Java apps use the OpenTelemetry SDK with manual OpenInference spans. See https://arize.com/docs/PROMPT.md for setup details.
+compatibility: Python and TypeScript/JavaScript apps use openinference-instrumentation packages for auto-instrumentation. Go apps use arize-otel-go for setup plus per-provider instrumentors openinference-instrumentation-openai-go and openinference-instrumentation-anthropic-sdk-go, or manual spans via openinference-semantic-conventions. Java apps use the OpenTelemetry SDK with manual OpenInference spans. See https://arize.com/docs/PROMPT.md for setup details.
 ---
 
 # Arize Instrumentation Skill
@@ -27,17 +27,18 @@ Then execute the two phases below.
 - **Follow existing code style** and project conventions.
 - **Keep output concise and production-focused** — do not generate extra documentation or summary files.
 - **NEVER embed literal credential values in generated code** — always reference environment variables (e.g., `os.environ["ARIZE_API_KEY"]`, `process.env.ARIZE_API_KEY`). This includes API keys, space IDs, and any other secrets. The user sets these in their own environment; the agent must never output raw secret values.
+- **Ask before creating persistent local state.** Do not create or update `ax` profiles, edit shell startup files (`.zshrc`/`.bashrc`), persist environment variables, or write memory/note files without explicit user consent. Prefer non-persistent verification (env vars set for the run, temp `--output-dir` exports); offer to persist only after the user approves (see references/ax-profiles.md § Save Credentials for Future Use).
 
 ## Phase 0: Environment preflight
 
 Before changing code:
 
-1. Confirm the repo/service scope is clear. For monorepos, do not assume the whole repo should be instrumented.
+1. **Confirm scope before touching anything.** Identify the exact target — service, entrypoint, framework, and tracing type. If it is ambiguous, do read-only inspection only and **ask the minimal scope question before installing packages or editing code** (see *When you must ask the user first*). Do not assume the whole repo, and do not pick a service or framework for the user.
 2. Identify the local runtime surface you will need for verification:
    - package manager and app start command
    - whether the app is long-running, server-based, or a short-lived CLI/script
    - whether `ax` will be needed for post-change verification
-3. Do NOT proactively check `ax` installation or version. If `ax` is needed for verification later, just run it when the time comes. If it fails, see references/ax-profiles.md.
+3. Do NOT proactively check `ax` installation or version. If `ax` is needed for verification later, just run it when the time comes. If it fails, see [references/ax-profiles.md](references/ax-profiles.md).
 4. Never silently replace a user-provided space ID, project name, or project ID. If the CLI, collector, and user input disagree, surface that mismatch as a concrete blocker.
 
 ### When you must ask the user first
@@ -47,6 +48,8 @@ If monorepo scope, service entrypoint, or target app is still unclear after quic
 1. Acknowledge the skill, e.g.: **I found the arize-instrumentation skill in this repo** (you may add `skills/arize-instrumentation/SKILL.md` if helpful).
 2. Then a clear pause line, e.g.: **A few clarifying questions before I invoke it:**
 3. Ask **minimal** numbered or short bullet questions — only what blocks Phase 1 or Phase 2.
+
+Cases that require a scope question before acting: a **monorepo** with several packages; **multiple deployable services** (e.g. an API and a worker); or **multiple LLM frameworks/entrypoints** in one codebase (e.g. a LangChain service alongside a raw-OpenAI script). Name the candidates you found and ask which to instrument.
 
 ## Phase 1: Analysis (read-only)
 
@@ -77,7 +80,7 @@ If monorepo scope, service entrypoint, or target app is still unclear after quic
 | Existing tracing | Any OTel or vendor setup |
 | Tool/function use | LLM tool use, function calling, or custom tools the app executes (e.g. in an agent loop) |
 
-**Key rule:** When a framework is detected alongside an LLM provider, inspect the framework-specific tracing docs first and prefer the framework-native integration path when it already captures the model and tool spans you need. Add separate provider instrumentation only when the framework docs require it or when the framework-native integration leaves obvious gaps. If the app runs tools and the framework integration does not emit tool spans, add manual TOOL spans so each invocation appears with input/output (see references/manual-spans.md).
+**Key rule:** When a framework is detected alongside an LLM provider, inspect the framework-specific tracing docs first and prefer the framework-native integration path when it already captures the model and tool spans you need. Add separate provider instrumentation only when the framework docs require it or when the framework-native integration leaves obvious gaps. If the app runs tools and the framework integration does not emit tool spans, add manual TOOL spans so each invocation appears with input/output (see [references/manual-spans.md](references/manual-spans.md)).
 
 ### Phase 1 output
 
@@ -95,11 +98,11 @@ If the user explicitly asked you to instrument the app now, and the target servi
 
 Use the [Agent Setup Prompt](https://arize.com/docs/PROMPT.md) routing table to map detected signals to integration docs and fetch the matched pages for exact installation steps and code snippets. Use [llms.txt](https://arize.com/docs/llms.txt) as a fallback for doc discovery.
 
-See references/integration-routing.md for the full list of supported integrations by language and platform.
+See [references/integration-routing.md](references/integration-routing.md) for the full list of supported integrations by language and platform.
 
 ## Phase 2: Implementation
 
-Proceed **only after the user confirms** the Phase 1 analysis.
+Proceed **only after the user confirms** the Phase 1 analysis — and, when scope was ambiguous, only after the specific service/framework is confirmed.
 
 ### Steps
 
@@ -125,7 +128,7 @@ Proceed **only after the user confirms** the Phase 1 analysis.
    - **OAuth alternative (v0.18.0+):** Users can authenticate via browser-based OAuth PKCE instead of API keys by running `ax auth login`. Inform users of this option if they prefer not to manage API keys — do **not** run `ax auth login` yourself as it opens a browser.
    - If the user needs to find their API key manually, direct them to **https://app.arize.com** and to navigate to the settings page (do not use organization-specific URLs with placeholder IDs — they won't resolve for new users).
    - If credentials are not set, instruct the user to set them as environment variables — never embed raw values in generated code. All generated instrumentation code must reference `os.environ["ARIZE_API_KEY"]` / `os.environ["ARIZE_SPACE"]` (Python), `process.env.ARIZE_API_KEY` / `process.env.ARIZE_SPACE` (TypeScript/JavaScript), or `os.Getenv("ARIZE_API_KEY")` / `os.Getenv("ARIZE_SPACE_ID")` (Go — `arize-otel-go` reads `ARIZE_SPACE_ID`, not `ARIZE_SPACE`). With the recommended `arizeotel.Register(ctx, arizeotel.Options{...})` flow, generated Go code does not need to call `os.Getenv` at all — `Register` reads both env vars when the matching `Options` fields are unset.
-   - See references/ax-profiles.md for full profile setup and troubleshooting.
+   - See [references/ax-profiles.md](references/ax-profiles.md) for full profile setup and troubleshooting.
 4. **Centralized instrumentation** — Create a single module (e.g. `instrumentation.py`, `instrumentation.ts`, `instrumentation.go`) and initialize tracing **before** any LLM client is created.
 5. **Existing OTel** — If there is already a TracerProvider, add Arize as an **additional** exporter (e.g. BatchSpanProcessor with Arize OTLP). Do not replace existing setup unless the user asks.
 
@@ -140,7 +143,7 @@ Proceed **only after the user confirms** the Phase 1 analysis.
   - **TypeScript:** Arize accepts both `"model_id"` (shown in the official TS quickstart) and `"openinference.project.name"` via `SEMRESATTRS_PROJECT_NAME` from `@arizeai/openinference-semantic-conventions` (shown in the manual instrumentation docs) — both work.
   - **Go:** `arizeotel.Register(ctx, arizeotel.Options{ProjectName: "my-app"})` handles this automatically (sets `openinference.project.name` and `service.name` on the resource). If you're wiring `sdktrace.NewTracerProvider` directly (multi-exporter, on-prem collector), pass `attribute.String("openinference.project.name", "my-app")` to `resource.New(...)` manually.
 - **CLI/script apps — flush before exit:** `provider.shutdown()` (TS) / `provider.force_flush()` then `provider.shutdown()` (Python) / `tp.Shutdown(ctx)` (Go) must be called before the process exits, otherwise async OTLP exports are dropped and no traces appear.
-- **When the app has tool/function execution:** add manual CHAIN + TOOL spans (see references/manual-spans.md) so the trace tree shows each tool call and its result — otherwise traces will look sparse (only LLM API spans, no tool input/output).
+- **When the app has tool/function execution:** add manual CHAIN + TOOL spans (see [references/manual-spans.md](references/manual-spans.md)) so the trace tree shows each tool call and its result — otherwise traces will look sparse (only LLM API spans, no tool input/output).
 
 ## Verification
 
@@ -164,6 +167,27 @@ When verification is blocked by CLI or account issues, end with a concrete statu
 - latest local trace ID or run ID
 - whether exporter logs show local span emission
 - whether the failure is credential, space/project resolution, network, or collector rejection
+
+## Progress and status reporting
+
+Instrumentation spans several slow steps. Keep the user oriented:
+
+- Emit a short milestone at each checkpoint: **dependency install → tracing wiring → app run → trace export → verification**.
+- Summarize recovered errors in plain language and mark them **resolved** — do not present a recovered dependency/CLI error as if it were a blocker.
+- Don't make raw command output the primary status; quote only the decisive line when it matters.
+- End with a concise summary that separates **completed work** from any **remaining verification blockers**.
+
+## Next steps after verification
+
+Trace confirmation is the start of the observability workflow, not the end. After a confirmed trace, briefly offer the next relevant step based on the user's goal — keep it short and optional, not a pitch:
+
+- Inspect or debug traces → **`arize-trace`**
+- Curate examples into a dataset → **`arize-dataset`**
+- Add LLM-as-judge or code evaluators → **`arize-evaluator`**
+- Compare models or prompts on a test set → **`arize-experiment`**
+- Improve a prompt → **`arize-prompt-optimization`**
+
+If the trace has obvious quality issues, point to trace inspection/debugging (**`arize-trace`**) first, before suggesting downstream workflows.
 
 ## Emitting `session.id` for multi-turn session tracking
 
@@ -237,8 +261,8 @@ tracer_provider.shutdown()
 
 ## IDE Integration (MCP)
 
-If the user asks about IDE-based instrumentation guidance or MCP setup, see references/tracing-assistant-mcp.md.
+If the user asks about IDE-based instrumentation guidance or MCP setup, see [references/tracing-assistant-mcp.md](references/tracing-assistant-mcp.md).
 
 ## Save Credentials for Future Use
 
-See references/ax-profiles.md § Save Credentials for Future Use.
+See [references/ax-profiles.md](references/ax-profiles.md) § Save Credentials for Future Use.

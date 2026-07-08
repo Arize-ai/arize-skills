@@ -25,6 +25,14 @@ jobs:
         with:
           python-version: "3.12"
 
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "20"
+
+      - name: Install Claude Code CLI
+        # The claude-agent-sdk harness drives the `claude` binary; it must be on PATH.
+        run: npm install -g @anthropic-ai/claude-code
+
       - name: Install test dependencies
         run: pip install -r tests/requirements.txt
 
@@ -37,25 +45,15 @@ jobs:
           done
 
       - name: Check required secrets
-        id: check-secrets
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          IS_FORK: ${{ github.event.pull_request.head.repo.fork }}
         run: |
           if [ -z "$ANTHROPIC_API_KEY" ]; then
-            if [ "$IS_FORK" = "true" ]; then
-              echo "::warning::Skipping skill selection tests — fork PR, ANTHROPIC_API_KEY unavailable. A maintainer will run these before merge."
-              echo "skip=true" >> $GITHUB_OUTPUT
-            else
-              echo "::error::ANTHROPIC_API_KEY secret is not set. Go to Settings > Secrets and variables > Actions to add it."
-              exit 1
-            fi
-          else
-            echo "skip=false" >> $GITHUB_OUTPUT
+            echo "::error::ANTHROPIC_API_KEY secret is not set. Go to Settings > Secrets and variables > Actions to add it."
+            exit 1
           fi
 
       - name: Run skill selection tests
-        if: steps.check-secrets.outputs.skip != 'true'
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           TEST_MODEL: ${{ inputs.test_model || '' }}

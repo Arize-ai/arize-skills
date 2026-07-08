@@ -288,9 +288,9 @@ VAGUE_PROMPTS = [
         ["vague", "instrumentation"],
     ),
     (
-        "Why do my traces look empty or flat?",
-        ["arize-instrumentation-health"],
-        ["vague", "instrumentation-health"],
+        "Help me instrument traces",
+        ["arize-instrumentation"],
+        ["vague", "instrumentation", "scope"],
     ),
     # Should route to dataset
     (
