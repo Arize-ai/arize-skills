@@ -100,6 +100,16 @@ Use the [Agent Setup Prompt](https://arize.com/docs/PROMPT.md) routing table to 
 
 See [references/integration-routing.md](references/integration-routing.md) for the full list of supported integrations by language and platform.
 
+## Credentials and configuration
+
+Instrumentation needs three values the user sets — **Arize API key**, **Space** (name or base64 ID), and **project name** — plus the **collector endpoint** (defaults to US `otlp.arize.com`). Key rules:
+
+- **Follow config precedence and never silently override what the app is configured with** (project name, space, IDs, endpoint). If sources disagree, surface the mismatch instead of rewriting config.
+- **Emit and verify with the same credential context** — a trace exported to one space but verified with an `ax` profile pointing elsewhere looks missing; report that as a credential-context blocker.
+- **Read only the target app's own config for credentials** — never scan sibling repos, unrelated `.env` files, or shell startup files. If credentials are missing, ask the user to set them; never accept a pasted key in chat.
+
+See references/credentials-and-config.md for precedence, export/verify context matching, safe env parsing, and the missing-credentials onboarding response. See references/ax-profiles.md for getting an API key and profile setup.
+
 ## Phase 2: Implementation
 
 Proceed **only after the user confirms** the Phase 1 analysis — and, when scope was ambiguous, only after the specific service/framework is confirmed.
@@ -121,7 +131,7 @@ Proceed **only after the user confirms** the Phase 1 analysis — and, when scop
      go get github.com/Arize-ai/openinference/go/openinference-instrumentation-anthropic-sdk-go # anthropics/anthropic-sdk-go v1.43+
      ```
      **Wire the exporter** with one call: `arizeotel.Register(ctx, arizeotel.Options{ProjectName: "my-app"})` — defaults to `otlp.arize.com` (US), use `arizeotel.EndpointArizeEurope` for EU. It reads `ARIZE_SPACE_ID` / `ARIZE_API_KEY` / `ARIZE_PROJECT_NAME` / `ARIZE_COLLECTOR_ENDPOINT` from env when the matching `Options` fields are unset. **Wire the OpenAI instrumentor** by passing `option.WithMiddleware(openaiotel.Middleware(otel.Tracer("my-app")))` to `openai.NewClient(...)` (alongside `option.WithAPIKey(...)`). **Wire the Anthropic instrumentor** by passing `option.WithMiddleware(anthropicotel.Middleware(otel.Tracer("my-app")))` to `anthropic.NewClient(...)`. Both instrumentors expose `WithTraceConfig(instrumentation.TraceConfig{...})` for in-code overrides of the `OPENINFERENCE_HIDE_*` env-driven masking config. Module floor is Go 1.25 (the openinference Go modules require it; `arize-otel-go` itself is Go 1.23+).
-3. **Credentials** — User needs an **Arize API Key** and **Space ID**. Check existing `ax` profiles for `ARIZE_API_KEY` and `ARIZE_SPACE` — never read `.env` files:
+3. **Credentials** — the app needs an **Arize API key** and **Space**. See **Credentials and configuration** above and references/credentials-and-config.md for precedence, safe handling, and the missing-credentials onboarding response. Inspect only the target app's own config to learn what it exports; never scan unrelated projects, and never surface secret values.
    - Run `ax profiles show` to check for an existing profile. Run `ax profiles validate` to verify an existing profile's credentials are still valid.
    - If no profile exists, guide the user to run `ax profiles create` which provides an **interactive wizard** that walks through API key and space setup. See [CLI profiles docs](https://arize.com/docs/api-clients/cli/profiles) for details.
    - **OAuth alternative (v0.18.0+):** Users can authenticate via browser-based OAuth PKCE instead of API keys by running `ax auth login`. Inform users of this option if they prefer not to manage API keys — do **not** run `ax auth login` yourself as it opens a browser.
@@ -157,7 +167,7 @@ After implementation:
 
 1. Run the application and trigger at least one LLM call.
 2. **Use the `arize-trace` skill** to confirm traces arrived. If empty, retry shortly. Verify spans have expected `openinference.span.kind`, `input.value`/`output.value`, and parent-child relationships.
-3. If no traces: verify `ARIZE_SPACE` and `ARIZE_API_KEY`, ensure tracer is initialized before instrumentors and clients, check connectivity to `otlp.arize.com:443`, and inspect app/runtime exporter logs so you can tell whether spans are being emitted locally but rejected remotely. For debug set `GRPC_VERBOSITY=debug` or pass `log_to_console=True` to `register()`. Common gotchas: (a) missing project name resource attribute causes HTTP 500 rejections — `service.name` alone is not enough; Python: pass `project_name` to `register()`; TypeScript: set `"model_id"` or `SEMRESATTRS_PROJECT_NAME` on the resource; Go: add `attribute.String("openinference.project.name", "my-app")` to `resource.New(...)`; (b) CLI/script processes exit before OTLP exports flush — call `provider.force_flush()` then `provider.shutdown()` (Python/TS) or `tp.Shutdown(ctx)` (Go) before exit; (c) CLI-visible spaces/projects can disagree with a collector-targeted space ID — report the mismatch instead of silently rewriting credentials.
+3. If no traces: verify `ARIZE_SPACE` and `ARIZE_API_KEY`, ensure tracer is initialized before instrumentors and clients, check connectivity to `otlp.arize.com:443`, and inspect app/runtime exporter logs so you can tell whether spans are being emitted locally but rejected remotely. For debug set `GRPC_VERBOSITY=debug` or pass `log_to_console=True` to `register()`. Common gotchas: (a) missing project name resource attribute causes HTTP 500 rejections — `service.name` alone is not enough; Python: pass `project_name` to `register()`; TypeScript: set `"model_id"` or `SEMRESATTRS_PROJECT_NAME` on the resource; Go: add `attribute.String("openinference.project.name", "my-app")` to `resource.New(...)`; (b) CLI/script processes exit before OTLP exports flush — call `provider.force_flush()` then `provider.shutdown()` (Python/TS) or `tp.Shutdown(ctx)` (Go) before exit; (c) CLI-visible spaces/projects can disagree with a collector-targeted space ID — report the mismatch instead of silently rewriting credentials (see references/credentials-and-config.md § Same credential context for export and verification).
 4. If the app uses tools: confirm CHAIN and TOOL spans appear with `input.value` / `output.value` so tool calls and results are visible.
 
 When verification is blocked by CLI or account issues, end with a concrete status:
