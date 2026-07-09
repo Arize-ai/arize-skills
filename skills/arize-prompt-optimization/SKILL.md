@@ -59,8 +59,8 @@ These columns carry the feedback data used for optimization:
 Proceed directly with the task — run the `ax` command you need. Do NOT check versions, env vars, or profiles upfront.
 
 If an `ax` command fails, troubleshoot based on the error:
-- `command not found` or version error → see references/ax-setup.md
-- `401 Unauthorized` / missing API key → run `ax profiles show` to inspect the current profile. If the profile is missing or the API key is wrong, follow references/ax-profiles.md to create/update it. If the user doesn't have their key, direct them to https://app.arize.com/admin > API Keys
+- `command not found` or version error → see [references/ax-setup.md](references/ax-setup.md)
+- `401 Unauthorized` / missing API key → run `ax profiles show` to inspect the current profile. If the profile is missing or the API key is wrong, follow [references/ax-profiles.md](references/ax-profiles.md) to create/update it. If the user doesn't have their key, direct them to https://app.arize.com/admin > API Keys
 - Space unknown → run `ax spaces list` to pick by name, or ask the user
 - Project unclear → ask the user, or run `ax projects list -o json --limit 100` and present as selectable options
 - LLM provider call fails (missing OPENAI_API_KEY / ANTHROPIC_API_KEY) → run `ax ai-integrations list --space SPACE` to check for platform-managed credentials. If none exist, ask the user to provide the key or create an integration via the **arize-ai-provider-integration** skill
@@ -458,8 +458,8 @@ When optimizing prompts that use template variables:
 
 | Problem | Solution |
 |---------|----------|
-| `ax: command not found` | See references/ax-setup.md |
-| `No profile found` | No profile is configured. See references/ax-profiles.md to create one. |
+| `ax: command not found` | See [references/ax-setup.md](references/ax-setup.md) |
+| `No profile found` | No profile is configured. See [references/ax-profiles.md](references/ax-profiles.md) to create one. |
 | No `input_messages` on span | Check span kind -- Chain/Agent spans store prompts on child LLM spans, not on themselves |
 | Prompt template is `null` | Not all instrumentations emit `prompt_template`. Use `input_messages` or `input.value` instead |
 | Variables lost after optimization | Verify the revised prompt preserves all `{var}` placeholders from the original |

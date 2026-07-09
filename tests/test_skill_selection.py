@@ -271,6 +271,11 @@ VAGUE_PROMPTS = [
         ["arize-instrumentation"],
         ["vague", "instrumentation"],
     ),
+    (
+        "Help me instrument traces",
+        ["arize-instrumentation"],
+        ["vague", "instrumentation", "scope"],
+    ),
     # Should route to dataset
     (
         "I need some test data for my model",
