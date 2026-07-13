@@ -8,11 +8,19 @@ Works with Cursor, Claude Code, Codex, GitHub Copilot, Windsurf, and [40+ other 
 
 ## New to Arize? Start Here
 
-**Adding tracing to your app** — give your coding agent this prompt:
+**One prompt, from nothing to a trace.** Give your coding agent (Cursor, Claude Code, Codex, …) this single prompt:
 
-> Follow the instructions from https://arize.com/docs/PROMPT.md and ask me questions as needed.
+> Install the Arize skills from https://github.com/Arize-ai/arize-skills and use them to add Arize tracing to this application following best practices.
 
-This walks through a two-phase flow: analyze your codebase for LLM providers and frameworks, then add Arize AX tracing with the right instrumentors. No skill installation needed.
+That's it. The agent installs the skills non-interactively, analyzes your codebase, adds the right instrumentation, and verifies a trace lands in Arize AX — all in one session. The only things it needs from you are your Arize credentials (`ax profiles create`) and a quick confirmation of the code changes before it applies them.
+
+Under the hood the agent follows [AGENT-INSTALL.md](AGENT-INSTALL.md), which runs the non-interactive install (`npx skills add Arize-ai/arize-skills --skill "*" --yes`) and then drives the `arize-instrumentation` skill end-to-end.
+
+**No coding agent?** (CI, Docker builds, headless SSH.) Install the skills with the one-liner below — note this installs skills only and does not instrument your app or send a trace:
+
+```bash
+npx skills add Arize-ai/arize-skills --skill "*" --yes
+```
 
 **Already have traces?** Give your agent this prompt to install the skills and start debugging:
 
@@ -20,19 +28,25 @@ This walks through a two-phase flow: analyze your codebase for LLM providers and
 
 ## Installation
 
-### Option 1: npx (recommended)
+### Option 1: Agent hero prompt (recommended)
+
+The primary path — installs the skills *and* instruments your app in one agent session. Paste into any coding agent:
+
+> Install the Arize skills from https://github.com/Arize-ai/arize-skills and use them to add Arize tracing to this application following best practices.
+
+See [AGENT-INSTALL.md](AGENT-INSTALL.md) for the exact flow the agent follows.
+
+### Option 2: npx one-liner (skills only)
+
+A single non-interactive command that installs all skills with auto-detected defaults. Use it in CI, Docker builds, or headless environments where no agent is available to run the hero prompt — it installs skills but does **not** instrument your app:
 
 ```bash
-# Interactive — choose skills, agent, and scope
-npx skills add Arize-ai/arize-skills
-
-# Non-interactive — install everything with auto-detected defaults
 npx skills add Arize-ai/arize-skills --skill "*" --yes
 ```
 
-Both options auto-detect your agent (Cursor, Claude Code, Codex, etc.) and symlink skills into place.
+`--skill "*"` installs every skill, `--yes` accepts defaults (agent auto-detected, current-project scope, security summary skipped). Drop both flags for the interactive wizard.
 
-### Option 2: git clone
+### Option 3: git clone
 
 **macOS / Linux:**
 ```bash
@@ -50,7 +64,7 @@ cd arize-skills
 
 The installer detects installed agents and optionally installs the `ax` CLI. Use `--global` / `-Global` instead to install to `~/.<agent>/skills/`.
 
-### Option 3: ax CLI
+### Option 4: ax CLI
 
 If you already have `ax` installed (v0.9.0+):
 
@@ -58,7 +72,7 @@ If you already have `ax` installed (v0.9.0+):
 ax skills install
 ```
 
-### Option 4: Claude Code plugin
+### Option 5: Claude Code plugin
 
 Open up a Claude Code session and execute the following:
 
