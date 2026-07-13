@@ -80,9 +80,9 @@ Proceed directly — run the `ax` command you need. Do NOT check versions or pro
 
 If an `ax` command fails:
 - `command not found` or version error → see [references/ax-setup.md](references/ax-setup.md)
-- `401 Unauthorized` / missing API key → run `ax profiles show`; follow [references/ax-profiles.md](references/ax-profiles.md)
-- `403 Forbidden` → the active profile lacks admin privileges; ask the user to authenticate with an admin key
-- **Security:** Never read `.env` files or search the filesystem for credentials. Use `ax profiles` for Arize credentials. Never echo, log, or display raw API key values.
+- `401 Unauthorized` / missing API key → run `ax profiles show`; follow references/ax-profiles.md
+- `403 Forbidden` → the active profile lacks admin privileges; instruct the user to set an admin API key as an environment variable in their app `.env` or their own shell (never paste into chat)
+- **Security:** Never read `.env` files or search the filesystem for credentials. Use `ax profiles` for Arize credentials. Never ask the user to paste secrets into chat. Never echo, log, or display raw API key values.
 
 > **OAuth login option (v0.18.0+):** Users can authenticate via browser-based OAuth PKCE instead of API keys by running `ax auth login` (then `ax auth logout` to revoke). Inform users of this option if they ask about authentication alternatives — do **not** run `ax auth login` yourself, as it opens a browser interactively.
 
