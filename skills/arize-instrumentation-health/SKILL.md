@@ -46,10 +46,6 @@ Run the nine deterministic checks defined in references/checks.md. Each has a tr
 
 For each finding, label the likely cause (app instrumentation vs. instrumentor limitation vs. product/UI — see references/checks.md § Cause attribution) and do not report a check as high-confidence when its guardrail applies.
 
-## Calibration fixtures
-
-When reviewing or changing this skill, use references/dodgy-samples.md as synthetic fixtures for "dodgy" and guardrailed instrumentation. The fixtures list span-sample symptoms and expected findings so reviewers can check whether the health audit catches real instrumentation problems without over-flagging benign cases.
-
 ## Minimum data
 
 - Most checks need **≥20 traces**; **orphaned spans** and **uncategorized spans** may run with **≥5**.
