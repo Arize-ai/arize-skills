@@ -140,6 +140,49 @@ ax evaluators create-code-evaluator \
 
 **Custom Python code evaluators:**
 
+> **CRITICAL — the class contract, not a bare function.** Custom code evaluators run
+> server-side as a Python **class that subclasses `CodeEvaluator`** — not a standalone
+> `def evaluate(...):` function. Get any of the three things below wrong and the task
+> run **cancels in ~3 seconds with `num_successes=0`, `num_errors=0`, `num_skipped=0`** —
+> no error is surfaced, it just silently scores nothing.
+>
+> 1. **Import path.** The sandbox that executes the evaluator requires:
+>    ```python
+>    from arize.experimental.datasets.experiments.evaluators.base import (
+>        EvaluationResult,
+>        CodeEvaluator,
+>    )
+>    ```
+>    NOT `arize.experiments` / `arize.experiments.evaluators.base`. That path exists in
+>    the locally-installed `arize` (v8) SDK, so it imports fine and *looks* correct if
+>    you test it locally — but the platform's runtime is a different namespace and does
+>    not expose it. Always put imports in `--imports`, never inline in `--code`.
+> 2. **Named parameters on `evaluate()`, not just `**kwargs`.** The platform introspects
+>    the named keyword parameters of `evaluate()` to build the list of variables shown
+>    in the UI ("Add an arg for each data point you want to evaluate — mapped to dataset
+>    columns or span attributes"). `def evaluate(self, **kwargs)` exposes **zero**
+>    mappable variables, so the task matches 0 rows and cancels immediately. Name every
+>    variable you need explicitly, with a default:
+>    ```python
+>    def evaluate(self, *, prediction=None, actual=None, **kwargs) -> EvaluationResult:
+>        ...
+>        return EvaluationResult(label=..., score=..., explanation=...)
+>    ```
+>    Return `EvaluationResult`, not a bare `dict`. Each named parameter must exactly
+>    match an entry in `--variables` and, at the task level, a `column_mappings` key.
+> 3. **`--imports` vs `--code` are separate, like the UI's two panes.** The Arize UI has
+>    distinct "Define Imports" and "Define Code Evaluator Class" sections — `--imports`
+>    and `--code` map directly to them. `--code` must contain **only the class
+>    definition** (no `import` statements inside it); all imports go in `--imports`.
+>
+> If a run still cancels at `0/0/0` after fixing the contract, confirm `num_skipped`
+> increments on the next run — that means the platform is now reaching and invoking
+> your evaluator (it may still skip rows for unrelated reasons, e.g. missing column data).
+
+Static configuration (thresholds, keyword lists, regex patterns) that should NOT vary
+per row goes through `--static-params` and is read inside `evaluate()` as `self.<name>`
+— never declare these as named `evaluate()` parameters.
+
 ```bash
 # Custom Python: inline code
 ax evaluators create-code-evaluator \
@@ -149,12 +192,24 @@ ax evaluators create-code-evaluator \
   --commit-message "Initial version" \
   --code-type custom \
   --code-name "word_count_eval" \
-  --variables '[{"name": "max_words", "value": 100}]' \
-  --code 'def evaluate(output, max_words):
-    count = len(output.split())
-    return {"label": "pass" if count <= max_words else "fail", "score": count}'
+  --variables '["prediction"]' \
+  --static-params '[{"name": "max_words", "type": "STRING", "default_value": "100"}]' \
+  --imports 'from arize.experimental.datasets.experiments.evaluators.base import (
+    EvaluationResult,
+    CodeEvaluator,
+)' \
+  --code 'class WordCountEval(CodeEvaluator):
+    def evaluate(self, *, prediction=None, **kwargs) -> EvaluationResult:
+        max_words = int(self.max_words)
+        count = len((prediction or "").split())
+        passed = count <= max_words
+        return EvaluationResult(
+            label="pass" if passed else "fail",
+            score=float(passed),
+            explanation=f"{count} words (max {max_words})",
+        )'
 
-# Custom Python: from file
+# Custom Python: from file (imports + class both loaded from disk)
 ax evaluators create-code-evaluator \
   --name "Custom Evaluator" \
   --space SPACE \
@@ -162,7 +217,8 @@ ax evaluators create-code-evaluator \
   --commit-message "Initial version" \
   --code-type custom \
   --code-name "my_eval" \
-  --variables '[]' \
+  --variables '["prediction", "actual"]' \
+  --imports @./my_evaluator_imports.py \
   --code @./my_evaluator.py
 
 # Create a new version of a code evaluator
@@ -182,13 +238,13 @@ ax evaluators create-code-evaluator-version NAME_OR_ID \
 | `--space` | yes | Space name or ID to create in |
 | `--template-name` | yes | Eval column name — alphanumeric, spaces, hyphens, underscores |
 | `--commit-message` | yes | Description of this version |
-| `--code-type` | yes | `managed` (built-in pattern) or `custom` (Python function) |
+| `--code-type` | yes | `managed` (built-in pattern) or `custom` (Python class) |
 | `--code-name` | yes | Internal identifier for the code evaluator |
-| `--variables` | yes | JSON array of variable definitions `[{"name": "...", "value": ...}]` |
+| `--variables` | yes | For `custom`: JSON array of span-attribute/column names to pass into `evaluate()`, e.g. `'["prediction", "actual"]'` — each must match a named `evaluate()` parameter. For `managed`: JSON array of `{"name": "...", "value": ...}` definitions expected by that managed evaluator. |
 | `--managed-evaluator` | managed only | One of: `MatchesRegex`, `JSONParseable`, `ContainsAnyKeyword`, `ContainsAllKeywords`, `ExactMatch` |
-| `--code` | custom only | Python code string (or `@filepath` to read from file) |
-| `--imports` | custom only | Python import block for the code |
-| `--static-params` | no | JSON of static parameters passed to the evaluator function |
+| `--code` | custom only | Python source for the `CodeEvaluator` subclass only — no imports (or `@filepath` to read from file) |
+| `--imports` | custom only | Python import block for `--code`, e.g. the `arize.experimental.datasets.experiments.evaluators.base` import (or `@filepath`) |
+| `--static-params` | no | JSON array of static config parameters read via `self.<name>` inside `evaluate()`. Each item: `{"name": ..., "type": "STRING"\|"STRING_ARRAY"\|"REGEX", "default_value": "..."}` — `default_value` is always a string; cast numerics explicitly (`int(self.max_words)`) |
 | `--query-filter` | no | SQL-style filter to restrict which spans are evaluated |
 | `--description` | no | Human-readable description |
 | `--data-granularity` | no | `span` (default), `trace`, or `session` |
