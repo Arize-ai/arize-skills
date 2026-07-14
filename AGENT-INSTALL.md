@@ -62,28 +62,55 @@ In brief, the skill will:
 
 ## Step 3 — Credentials (the one input that can't be eliminated)
 
-The app cannot send traces without an Arize **API key** and **space**. Let the
-`arize-instrumentation` skill drive this — it checks for an existing `ax` profile
-before asking the user to create one. In short:
+The app cannot send traces without an Arize **API key** and **space**. Prefer
+the simplest path that already works for the user. Do **not** require the `ax`
+CLI to finish onboarding.
 
-- Check for an existing profile: `ax profiles show` (and `ax profiles validate`).
-- If none exists, ask the user to run `ax profiles create` (interactive wizard),
-  or `ax auth login` for browser-based OAuth (do not run `ax auth login`
-  yourself — it opens a browser).
-- If `ax` is not installed, see the Prerequisites section of README.md.
+In order:
+
+1. If `ARIZE_API_KEY` and `ARIZE_SPACE` (or `ARIZE_SPACE_ID`) are already set in
+   the environment (or the user will set them), use those. Generated code must
+   read env vars only — never embed literal secrets.
+2. If they want a persistent CLI profile and `ax` is installed, use
+   `ax profiles show` / `ax profiles create` / `ax auth login` (do not run
+   `ax auth login` yourself — it opens a browser).
+3. If `ax` is missing and env vars are enough for the app, continue. Only
+   suggest installing `ax` if the user wants CLI profile setup or CLI-based
+   verification later.
 
 Never read `.env` files for secrets, and never print raw credential values.
 
 ## Step 4 — Verify a trace landed
 
-Instrumentation is only "done" when a span actually reaches Arize:
+"Done" for first-trace onboarding means: instrumentation is in place, the app
+ran at least one LLM call, spans flushed, and the user has a clear way to see
+the trace in Arize. Prefer the lightest verification path — do **not** install
+`ax`, write custom SpanProcessor capture scripts, or wait on time-range export
+lag unless needed.
 
-1. Run the app (or trigger one real request) so it makes at least one LLM call.
-2. Use the **`arize-trace`** skill to confirm the trace arrived, with the
-   expected `openinference.span.kind`, `input.value` / `output.value`, and
-   parent-child structure.
-3. For CLI / short-lived scripts, make sure spans are flushed before exit
-   (`force_flush()` then `shutdown()`), or they will never leave the process.
+Verification ladder (stop at the first that succeeds):
+
+1. **Run the app** and trigger at least one real LLM call. For CLI/scripts,
+   ensure flush before exit (`force_flush()` then `shutdown()`), or spans never
+   leave the process.
+2. **Prefer a known `trace_id`:** if the app logs one, or you can add a single
+   temporary log line for the root span's trace ID, use that for a
+   deterministic check. Do not invent scratchpad exporters or custom OTel
+   processors to "capture" IDs.
+3. **Arize UI is a valid verify:** tell the user the project name and where to
+   look (recent root CHAIN / agent spans with tools). UI confirm is enough to
+   call onboarding successful when `ax` is not installed.
+4. **Optional CLI verify** (only if `ax` is already installed, or the user
+   explicitly wants it): use the `arize-trace` skill with
+   `ax spans export PROJECT --trace-id TRACE_ID`. Never use time-range queries
+   (`--days`, `--start-time`) to verify a trace from seconds ago — that index
+   lags **6–12 hours** and will false-negative. If you only have a time window,
+   say so and point the user at the UI instead of looping on empty exports.
+
+If verification is blocked, end with a concrete status: app instrumentation
+status, whether flush succeeded, latest local `trace_id` if any, and whether
+the blocker is credentials, project name, network/collector, or missing CLI —
+not another unverified install attempt.
 
 ## Edge cases — don't strand the user
 
@@ -100,8 +127,10 @@ plainly and give the user the next action:
 - **Verification fails** (code applied but no spans arrive): distinguish the
   cause instead of retrying blindly — wrong/expired credentials, missing project
   name resource attribute (HTTP 500), exporter not flushed, no traffic yet, or a
-  network/collector issue. The Verification section of
-  `skills/arize-instrumentation/SKILL.md` has the full triage checklist.
+  network/collector issue. Do **not** treat "ax not installed" or empty
+  time-range exports (6–12h lag) as proof spans failed. The Verification
+  section of `skills/arize-instrumentation/SKILL.md` has the full triage
+  checklist.
 
 ## Path 1 fallback — skills only, no agent
 
