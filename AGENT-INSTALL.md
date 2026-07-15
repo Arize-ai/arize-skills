@@ -3,8 +3,8 @@
 This file is the playbook a coding agent follows when a user pastes the Arize
 hero prompt:
 
-> Install the Arize skills from https://github.com/Arize-ai/arize-skills and use
-> them to add Arize tracing to this application following best practices.
+> Install Arize skills from https://github.com/Arize-ai/arize-skills and use the
+> arize-instrumentation skill to add tracing to this application.
 
 Goal: **one prompt → skills installed → app instrumented → a trace visible in
 Arize AX**, with the fewest possible interruptions. Run the whole flow in a
@@ -36,7 +36,7 @@ is expected; you do not need to act on them. When it finishes, the skills are
 available in this project — most relevant here is `arize-instrumentation`.
 
 If `npx` is unavailable, fall back to the git-clone installer documented in
-README.md ("Option 2: git clone"). Do not block on this — pick whichever install
+README.md ("Option 3: git clone"). Do not block on this — pick whichever install
 path works in the current environment and continue.
 
 ## Step 2 — Instrument the app
