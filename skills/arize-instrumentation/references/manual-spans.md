@@ -54,14 +54,33 @@ All three languages expose these names as constants via their respective `openin
 
 ## Python pattern
 
-Get the global tracer (same provider as Arize), then use context managers so tool spans are children of the CHAIN span:
+**Prefer decorators where possible.** Wrap the Arize tracer provider in an `OITracer`, then decorate your agent/chain and tool functions with `@tracer.agent` / `@tracer.chain` / `@tracer.tool` / `@tracer.llm`. Each decorator auto-captures the function arguments as `input.value`, the return value as `output.value`, and sets the span kind; `@tracer.tool` also reads the name, docstring, and signature for the tool's name/description/parameters. Nesting follows the call graph automatically — a tool called inside an `@tracer.agent` function becomes a child TOOL span.
+
+```python
+from arize.otel import register
+from openinference.instrumentation import OITracer, TraceConfig
+
+tracer_provider = register(project_name="my-app")   # space_id / api_key read from env
+tracer = OITracer(tracer_provider.get_tracer(__name__), config=TraceConfig())
+
+@tracer.tool
+def get_weather(city: str, units: str = "fahrenheit") -> str:
+    """Look up the current weather for a city."""    # -> tool description on the span
+    return fetch_weather(city, units)
+
+@tracer.agent                # use @tracer.chain for a non-agentic pipeline step
+def run_agent(user_message: str) -> str:
+    # ... LLM call; call get_weather(...) etc. — the TOOL span nests automatically ...
+    return final_reply
+```
+
+**Context-manager alternative** — use this when you can't decorate a function: wrapping an auto-instrumented LLM call to attach `session.id`, or a tool dispatched dynamically by name in a loop. Tool spans nest as children of the CHAIN span:
 
 ```python
 from opentelemetry.trace import get_tracer
 
-tracer = get_tracer("my-app", "1.0.0")
+tracer = get_tracer("my-app")
 
-# In your agent entrypoint:
 with tracer.start_as_current_span("run_agent") as chain_span:
     chain_span.set_attribute("openinference.span.kind", "CHAIN")
     chain_span.set_attribute("input.value", user_message)
