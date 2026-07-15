@@ -76,6 +76,61 @@ with tracer.start_as_current_span("run_agent") as chain_span:
     chain_span.set_attribute("output.value", final_reply)
 ```
 
+## TypeScript / JavaScript pattern
+
+Get a tracer, then use `startActiveSpan` so tool spans nest as children of the CHAIN span. Span kind uses `SemanticConventions.OPENINFERENCE_SPAN_KIND` + the `OpenInferenceSpanKind` enum; `INPUT_VALUE`/`OUTPUT_VALUE` are direct exports of `@arizeai/openinference-semantic-conventions`.
+
+```typescript
+import { trace, SpanStatusCode } from "@opentelemetry/api";
+import {
+  INPUT_VALUE,
+  OUTPUT_VALUE,
+  SemanticConventions,
+  OpenInferenceSpanKind,
+} from "@arizeai/openinference-semantic-conventions";
+
+const tracer = trace.getTracer("my-app");
+
+await tracer.startActiveSpan("run_agent", async (chainSpan) => {
+  chainSpan.setAttribute(SemanticConventions.OPENINFERENCE_SPAN_KIND, OpenInferenceSpanKind.CHAIN);
+  chainSpan.setAttribute(INPUT_VALUE, userMessage);
+  // ... LLM call ...
+  for (const toolUse of toolUses) {
+    await tracer.startActiveSpan(toolUse.name, async (toolSpan) => {
+      toolSpan.setAttribute(SemanticConventions.OPENINFERENCE_SPAN_KIND, OpenInferenceSpanKind.TOOL);
+      toolSpan.setAttribute(INPUT_VALUE, JSON.stringify(toolUse.input));
+      const result = await runTool(toolUse.name, toolUse.input);
+      toolSpan.setAttribute(OUTPUT_VALUE, JSON.stringify(result));
+      toolSpan.setStatus({ code: SpanStatusCode.OK });
+      toolSpan.end();
+    });
+    // ... append tool result to messages, call the LLM again ...
+  }
+  chainSpan.setAttribute(OUTPUT_VALUE, finalReply);
+  chainSpan.setStatus({ code: SpanStatusCode.OK });
+  chainSpan.end();
+});
+```
+
+## Java pattern (annotation-based)
+
+Java manual tracing is **annotation-driven**, not imperative span-building like the others: annotate methods and a ByteBuddy agent creates the spans at class load, auto-capturing parameters as `input.value` and the return value as `output.value`. Deps: `com.arize:openinference-instrumentation-annotation` + `com.arize:openinference-semantic-conventions`. Annotate the agent-loop method `@Chain` (or `@Agent`) and each tool method `@Tool`:
+
+```java
+import com.arize.instrumentation.annotation.Agent;
+import com.arize.instrumentation.annotation.Chain;
+import com.arize.instrumentation.annotation.Tool;
+import com.arize.instrumentation.annotation.ExcludeFromSpan;
+
+@Chain(name = "run_agent")                       // CHAIN span; or @Agent for the top-level boundary
+public String runAgent(String userMessage) { ... }
+
+@Tool(name = "check_loan_eligibility", description = "Checks eligibility")   // TOOL span
+public Map<String, Object> checkLoanEligibility(String applicantId) { ... }
+```
+
+`@LLM` marks a model call, `@Agent` a top-level orchestration method; `@ExcludeFromSpan` drops a parameter from `input.value`. Setup requires installing the ByteBuddy agent **before any annotated class loads**, then an `OITracer` registered via `OpenInferenceAgent.register(tracer)` — see [java/annotation/annotation-tracing](https://arize.com/docs/ax/integrations/java/annotation/annotation-tracing) for the exact startup sequence. Annotations only trace on the calling thread; across `CompletableFuture`/executors/reactive frameworks, propagate context explicitly or use the programmatic span API from that doc.
+
 ## Go pattern
 
 Go manual-span patterns — the CHAIN/TOOL nesting example, the `WithSession`/`WithUser`/`WithMetadata`/`WithTags`/`WithSuppression` context helpers, and `semconv` constants — live in [go.md](go.md), alongside Go setup and wiring.
