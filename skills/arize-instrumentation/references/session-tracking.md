@@ -4,7 +4,7 @@ Consult this when the user wants multi-turn session tracking, or when spans emit
 
 ## Emitting `session.id` for multi-turn session tracking
 
-For session-level evaluations in Arize (e.g. the `{conversation}` template variable in `arize-evaluator`), spans must carry `attributes.session.id`.
+For session-level evaluations in Arize (e.g. the `{conversation}` template variable in `arize-evaluator`), spans must carry a `session.id` attribute.
 
 **Pattern (Python / OpenTelemetry):**
 
@@ -36,7 +36,7 @@ Rules:
 - **New `session_id` when a fresh conversation starts.** Generate a new UUID at the start of each session, not at each turn.
 - **Pass `session_id` in from the caller** — the caller (request handler, notebook cell, app frontend) owns the session boundary.
 
-**Auto-instrumentation note:** If using OpenInference auto-instrumentation (e.g. for LiteLLM or OpenAI), you do not control span creation directly. Wrap the LLM call in a manually-created CHAIN span and set `session.id` there — the auto-instrumented LLM spans will nest under it as children. (Go: use `instrumentation.WithSession(ctx, sessionID)` — the provider instrumentors apply it automatically. See references/manual-spans.md.)
+**Auto-instrumentation note:** If using OpenInference auto-instrumentation (e.g. for LiteLLM or OpenAI), you do not control span creation directly. Wrap the LLM call in a manually-created CHAIN span and set `session.id` there — the auto-instrumented LLM spans will nest under it as children. (Go: use `instrumentation.WithSession(ctx, sessionID)` — the provider instrumentors apply it automatically. See manual-spans.md.)
 
 ## Flushing spans (Jupyter notebooks and short-lived scripts)
 

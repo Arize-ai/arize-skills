@@ -83,17 +83,17 @@ Confirm the API key and region are correct, then retry the original command.
 
 ## Space
 
-There is no profile flag for space. Save it as an environment variable — accepts a space **name** (e.g., `my-workspace`) or a base64 space **ID** (e.g., `U3BhY2U6...`). Find yours with `ax spaces list -o json`.
+There is no profile flag for space. Save it as an environment variable. `ARIZE_SPACE_ID` takes the **base64 Space ID** (e.g. `U3BhY2U6...`) — the SDK exporter needs the ID, not the space name. Find it with `ax spaces list -o json`. (A space *name* is only accepted by `ax` CLI `--space` resolution, not by `ARIZE_SPACE_ID`.)
 
 **macOS/Linux** — add to `~/.zshrc` or `~/.bashrc`:
 ```bash
-export ARIZE_SPACE_ID="my-workspace"    # name or base64 ID
+export ARIZE_SPACE_ID="U3BhY2U6..."    # base64 Space ID
 ```
 Then `source ~/.zshrc` (or restart terminal).
 
 **Windows (PowerShell):**
 ```powershell
-[System.Environment]::SetEnvironmentVariable('ARIZE_SPACE_ID', 'my-workspace', 'User')
+[System.Environment]::SetEnvironmentVariable('ARIZE_SPACE_ID', 'U3BhY2U6...', 'User')
 ```
 Restart terminal for it to take effect.
 

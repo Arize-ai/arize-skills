@@ -37,7 +37,7 @@ The app emits traces with **its** exporter config; you verify with the **`ax`** 
 The user sets these in their own terminal or app config — never in chat:
 
 - **API key** — from https://app.arize.com → Settings → API Keys; a **scoped service key** is recommended for app/CI use.
-- **Space** — the workspace. Its **name** and base64 **Space ID** are distinct but interchangeable in config; find either with `ax spaces list`.
+- **Space** — the workspace. Its **name** and base64 **Space ID** are distinct: the `ARIZE_SPACE_ID` exporter env var needs the **base64 ID** (the name is only accepted for `ax` CLI resolution). Find the ID with `ax spaces list`.
 - **Project name** — the logical grouping traces land in; the user chooses it, and it's created on first export.
 
 Keep the three distinct — **space name** ≠ **space ID** ≠ **project name** — since conflating them is a common cause of "wrong account" verification failures. For the export commands and `ax profiles create` setup, see ax-profiles.md.
