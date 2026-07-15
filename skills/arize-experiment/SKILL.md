@@ -29,7 +29,7 @@ If an `ax` command fails, troubleshoot based on the error:
 - `401 Unauthorized` / missing API key → run `ax profiles show` to inspect the current profile. If the profile is missing or the API key is wrong, follow [references/ax-profiles.md](references/ax-profiles.md) to create/update it. If the user doesn't have their key, direct them to https://app.arize.com/admin > API Keys
 - Space unknown → run `ax spaces list` to pick by name, or ask the user
 - Project unclear → ask the user, or run `ax projects list -o json --limit 100` and present as selectable options
-- **Security:** Never read `.env` files or search the filesystem for credentials. Use `ax profiles` for Arize credentials and `ax ai-integrations` for LLM provider keys. If credentials are missing, instruct the user to set them as environment variables in their app `.env` or their own shell — never ask them to paste secrets into chat. See references/ax-profiles.md.
+- **Security:** Never read `.env` files or search the filesystem for credentials. Use `ax profiles` for Arize credentials and `ax ai-integrations` for LLM provider keys. Never ask the user to paste secrets into chat. For missing credentials, see references/ax-profiles.md.
 - **CRITICAL — Never fabricate outputs:** When running an experiment, you MUST call the real model API specified by the user for every dataset example. Never fabricate, simulate, or hardcode model outputs, latencies, or evaluation scores. If you cannot call the API (missing SDK, missing credentials, network error), stop and tell the user what is needed before proceeding.
 
 ## List Experiments: `ax experiments list`
