@@ -52,7 +52,7 @@ Both instrumentors expose `WithTraceConfig(instrumentation.TraceConfig{...})` fo
 
 ## Manual spans (agent loops / tools / clients with no instrumentor)
 
-Provider instrumentors wrap only the LLM client — one span per API call. Tool execution and the agent/chain boundary happen in your code and need manual spans. A client with no instrumentor also needs manual spans, built from [`openinference-semantic-conventions`](https://github.com/Arize-ai/openinference/tree/main/go/openinference-semantic-conventions) constants (`semconv.OpenInferenceSpanKind`, `semconv.SpanKindChain`/`SpanKindTool`, `semconv.InputValue`, `semconv.OutputValue`, `semconv.LLMModelName`, …).
+Provider instrumentors (`openai-go`, `anthropic-sdk-go`) wrap only the LLM client — one span per API call, **not** your tool loop. Tool execution and the agent/chain boundary happen in your code and need manual spans. A client with no instrumentor also needs manual spans, built from [`openinference-semantic-conventions`](https://github.com/Arize-ai/openinference/tree/main/go/openinference-semantic-conventions) constants (`semconv.OpenInferenceSpanKind`, `semconv.SpanKindChain`/`SpanKindTool`, `semconv.InputValue`, `semconv.OutputValue`, `semconv.LLMModelName`, …).
 
 Nest spans with `tracer.Start` so tool spans become children of the CHAIN span:
 

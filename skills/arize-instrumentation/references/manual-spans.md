@@ -2,6 +2,8 @@
 
 Consult this when the app uses LLM tool/function calling and you need to add CHAIN + TOOL spans so tool calls and results appear in the trace.
 
+> **The OpenAI and Anthropic SDK auto-instrumentors trace only the LLM API call — NOT your tool executions or the agent-loop boundary.** If a raw OpenAI- or Anthropic-SDK app runs tools (parses a `tool_use` / tool-call, executes it, feeds the result back on the next call), you **must** create the CHAIN and TOOL spans manually as shown below — otherwise the tool calls, their inputs, and their outputs never appear in the trace; you get only a flat series of LLM API spans. *Framework* instrumentors (LangChain, LangGraph, CrewAI, OpenAI Agents SDK, …) already capture tools and chains, so apps built on those do **not** need manual tool spans.
+
 ## Why auto-instrumentors don't capture tool execution
 
 **Provider instrumentors (Anthropic, OpenAI, etc.) only wrap the LLM *client* — the code that sends HTTP requests and receives responses.** They see:
