@@ -10,13 +10,13 @@ Works with Cursor, Claude Code, Codex, GitHub Copilot, Windsurf, and [40+ other 
 
 **Adding tracing to your app** — give your coding agent this prompt:
 
-> Install Arize skills from github.com/Arize-ai/arize-skills and use the arize-instrumentation skill to add tracing to this application.
+> Install Arize skills from https://github.com/Arize-ai/arize-skills and use the arize-instrumentation skill to add tracing to this application.
 
 The agent installs the skills, instruments your app, and verifies a trace reaches Arize AX — all in one session. You'll just need to provide your Arize credentials and approve the code changes.
 
 **Already have traces?** Give your agent this prompt to install the skills and start debugging:
 
-> Install Arize skills from github.com/Arize-ai/arize-skills, then use the arize-trace skill to export and analyze recent traces from my project. Summarize any errors or latency issues you find.
+> Install Arize skills from https://github.com/Arize-ai/arize-skills, then use the arize-trace skill to export and analyze recent traces from my project. Summarize any errors or latency issues you find.
 
 ## Installation
 
