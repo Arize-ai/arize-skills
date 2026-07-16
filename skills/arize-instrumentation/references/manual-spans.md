@@ -52,6 +52,17 @@ Every manual span sets `openinference.span.kind`, `input.value`, and `output.val
 | `llm.token_count.completion` | int — completion/output tokens |
 | `llm.token_count.total` | int — total tokens |
 
+**TOOL-span attributes (set with the kind + the three core attributes; `input.value` = call args, `output.value` = tool result):**
+
+| Attribute | Use |
+|-----------|-----|
+| `tool.name` | tool name, e.g. `"check_loan_eligibility"` (also use as the span name) |
+| `tool.description` | what the tool does |
+| `tool.parameters` | JSON schema of the tool's parameters |
+| `tool.id` | id linking this execution to the model's `tool_call.id`, when available |
+
+The model's *request* to call a tool is captured by the provider instrumentor on the LLM span's output message as `message.tool_calls.{i}.tool_call.function.name` and `.tool_call.function.arguments`; your manual TOOL span records the *execution and result*.
+
 **RAG / retrieval-span attributes (RETRIEVER, EMBEDDING, RERANKER — set with the kind + the three core attributes):**
 
 | Attribute | Use |
