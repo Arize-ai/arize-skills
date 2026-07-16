@@ -37,6 +37,7 @@ Every manual span sets `openinference.span.kind`, `input.value`, and `output.val
 | `openinference.span.kind` | Pick the right value: `"LLM"` for raw provider API calls (OpenAI, Anthropic, etc.); `"CHAIN"` for orchestration / agent-loop boundaries; `"TOOL"` for tool/function execution; `"RETRIEVER"` for vector-store / search lookups; `"EMBEDDING"` for embedding API calls; `"AGENT"` for an autonomous sub-agent run nested inside a larger chain; `"RERANKER"` for rerank API calls; `"GUARDRAIL"` for guardrail/policy checks; `"EVALUATOR"` for online eval calls. |
 | `input.value` | string (e.g. user message or JSON of tool args) |
 | `output.value` | string (e.g. final reply or JSON of tool result) |
+| span **status** | The OTel span status (not an OI attribute): set `OK` on success, and `ERROR` + record the exception on failure so failed spans surface in Arize. Python `span.set_status(StatusCode.ERROR)` + `span.record_exception(e)`; TS `span.setStatus({ code: SpanStatusCode.ERROR })`; Go `span.SetStatus(codes.Error, err.Error())` + `span.RecordError(err)`. The `@tracer.*` decorators set this automatically. |
 
 **LLM-span attributes (set in addition to the three above for actual LLM calls):**
 
