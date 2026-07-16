@@ -19,12 +19,14 @@ So TOOL and CHAIN spans have to be added **manually** (or by a *framework* instr
 
 ## Adding manual spans
 
-To avoid sparse traces where tool inputs/outputs are missing:
+Manual spans capture the parts of a request an auto-instrumentor can't see. The classic case is an agent/tool loop, but the same applies to a **RAG pipeline** (retrieval + embedding), **rerankers**, **guardrails**, and **eval calls** — each is its own span kind (see the span-kind table below).
 
-1. **Detect** agent/tool patterns: a loop that calls the LLM, then runs one or more tools (by name + arguments), then calls the LLM again with tool results.
-2. **Add manual spans** using the same TracerProvider (e.g. `opentelemetry.trace.get_tracer(...)` after `register()`):
-   - **CHAIN span** — Wrap the full agent run (e.g. `run_agent`): set `openinference.span.kind` = `"CHAIN"`, `input.value` = user message, `output.value` = final reply.
-   - **TOOL span** — Wrap each tool invocation: set `openinference.span.kind` = `"TOOL"`, `input.value` = JSON of arguments, `output.value` = JSON of result. Use the tool name as the span name (e.g. `check_loan_eligibility`).
+**Python: prefer decorators.** Decorate the function with the matching kind — `@tracer.chain`, `@tracer.agent`, `@tracer.tool`, `@tracer.llm` — and it auto-captures arguments as `input.value`, the return as `output.value`, and sets the span kind (see the Python pattern below). Only those four decorators exist; for **RETRIEVER, EMBEDDING, RERANKER, GUARDRAIL, EVALUATOR** spans, use the context-manager form (also below) and set `openinference.span.kind` yourself. TS / Java / Go: use the patterns below.
+
+Every manual span sets `openinference.span.kind`, `input.value`, and `output.value`; pick the kind from the table below. Common shapes:
+
+- **Agent / tool loop:** a CHAIN (or AGENT) span for the turn; a TOOL span per tool execution (args → `input.value`, result → `output.value`).
+- **RAG:** a CHAIN for the query; a RETRIEVER span for the vector lookup (query → `input.value`, retrieved chunks → `retrieval.documents.*`, and `output.value` for a readable summary); an EMBEDDING span if you embed the query yourself; then the LLM generation span (auto-instrumented if the client has an instrumentor). Add a RERANKER span if you rerank retrieved docs.
 
 ## OpenInference attributes
 
@@ -49,6 +51,20 @@ To avoid sparse traces where tool inputs/outputs are missing:
 | `llm.token_count.prompt` | int — prompt/input tokens |
 | `llm.token_count.completion` | int — completion/output tokens |
 | `llm.token_count.total` | int — total tokens |
+
+**RAG / retrieval-span attributes (RETRIEVER, EMBEDDING, RERANKER — set with the kind + the three core attributes):**
+
+| Attribute | Use |
+|-----------|-----|
+| `retrieval.documents.{i}.document.content` | content of the i-th retrieved document (RETRIEVER) |
+| `retrieval.documents.{i}.document.id` | id of the i-th document |
+| `retrieval.documents.{i}.document.score` | relevance score of the i-th document |
+| `retrieval.documents.{i}.document.metadata` | JSON metadata for the i-th document |
+| `embedding.model_name` | embedding model, e.g. `"text-embedding-3-small"` (EMBEDDING) |
+| `embedding.embeddings.{i}.embedding.text` | text embedded |
+| `embedding.embeddings.{i}.embedding.vector` | the embedding vector |
+| `reranker.query` / `reranker.model_name` / `reranker.top_k` | rerank query, model, and K (RERANKER) |
+| `reranker.input_documents` / `reranker.output_documents` | documents in/out of the reranker |
 
 All three languages expose these names as constants via their respective `openinference-semantic-conventions` packages — `from openinference.semconv.trace import SpanAttributes` in Python, `@arizeai/openinference-semantic-conventions` in TypeScript, and `semconv "github.com/Arize-ai/openinference/go/openinference-semantic-conventions"` in Go (e.g. `semconv.LLMModelName`, `semconv.LLMProvider`, `semconv.LLMTokenCountPrompt`).
 
