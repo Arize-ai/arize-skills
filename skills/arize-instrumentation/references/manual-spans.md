@@ -102,7 +102,7 @@ def run_agent(user_message: str) -> str:
     return final_reply
 ```
 
-**Context-manager alternative** — use this when you can't decorate a function: wrapping an auto-instrumented LLM call to attach `session.id`, or a tool dispatched dynamically by name in a loop. Tool spans nest as children of the CHAIN span:
+**Context-manager alternative** — use this when you can't decorate a function: a tool dispatched dynamically by name in a loop, or a span kind with no decorator (RETRIEVER, EMBEDDING, etc.). (For `session.id`, use `using_session` — see session-tracking.md — not a wrapper span.) Tool spans nest as children of the CHAIN span:
 
 ```python
 from opentelemetry.trace import get_tracer
