@@ -83,13 +83,13 @@ tracer_provider = register(project_name="my-app")   # space_id / api_key read fr
 tracer = OITracer(tracer_provider.get_tracer(__name__), config=TraceConfig())
 
 @tracer.tool
-def get_weather(city: str, units: str = "fahrenheit") -> str:
-    """Look up the current weather for a city."""    # -> tool description on the span
-    return fetch_weather(city, units)
+def get_stock_price(symbol: str, currency: str = "USD") -> str:
+    """Look up the current price for a ticker symbol."""    # -> tool description on the span
+    return fetch_price(symbol, currency)
 
 @tracer.agent                # use @tracer.chain for a non-agentic pipeline step
 def run_agent(user_message: str) -> str:
-    # ... LLM call; call get_weather(...) etc. — the TOOL span nests automatically ...
+    # ... LLM call; call get_stock_price(...) etc. — the TOOL span nests automatically ...
     return final_reply
 ```
 
