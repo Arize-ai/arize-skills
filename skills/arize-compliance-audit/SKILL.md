@@ -31,7 +31,7 @@ Use this skill when the user wants to **audit their AI agent or LLM application 
 - **Cross-reference instrumentation** — compliance requires audit trails; check whether Arize tracing captures what regulators expect.
 - **Offer remediation, always confirm** — after presenting the checklist, offer to implement specific fixes, but never modify code without explicit user confirmation.
 - **Keep output concise and production-focused** — do not generate extra documentation or summary files unless requested.
-- **Never embed literal credential values** — always reference environment variables.
+- **Never embed literal credential values** — always reference environment variables. Never ask the user to paste secrets into the coding agent chat.
 
 ## Phase 0: Framework selection and use case
 

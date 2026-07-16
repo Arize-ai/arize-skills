@@ -56,7 +56,7 @@ If a command fails:
 - `401` / profile issues → `ax profiles show`, then [references/ax-profiles.md](references/ax-profiles.md); API keys: https://app.arize.com/admin
 - Space unknown → `ax spaces list`
 - LLM calls from Hub/Playground need provider credentials → **arize-ai-provider-integration** (`ax ai-integrations list --space SPACE`)
-- **Security:** Never read `.env` or search the filesystem for secrets. Use `ax profiles` and `ax ai-integrations` only.
+- **Security:** Never read `.env` or search the filesystem for secrets. Use `ax profiles` and `ax ai-integrations` only. Never ask the user to paste secrets into chat. For missing credentials, see references/ax-profiles.md.
 
 ### When you must ask the user first
 

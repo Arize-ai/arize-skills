@@ -12,7 +12,7 @@ Add **Arize AX tracing** to an app for the first time: **detect the stack → fe
 
 **Route locally.** Map the detected stack to a single doc page via [references/integration-routing.md](references/integration-routing.md) (exhaustive for tracing integrations) and fetch **only that page**. If the stack isn't listed there, it has no dedicated integration — use [manual instrumentation](https://arize.com/docs/ax/instrument/manual-instrumentation). Never bulk-fetch the [PROMPT.md](https://arize.com/docs/PROMPT.md)/[llms.txt](https://arize.com/docs/llms.txt) aggregates.
 
-**Rules:** inspect before mutating; tracing is additive, never change business logic; follow existing style; no secrets in code (reference `ARIZE_API_KEY`/`ARIZE_SPACE_ID` env vars only); ask before persistent local state (`ax` profiles, `.zshrc`, env vars) — see [references/ax-profiles.md](references/ax-profiles.md).
+**Rules:** inspect before mutating; tracing is additive, never change business logic; follow existing style; no secrets in code and **never ask the user to paste secrets (API keys, tokens) into the chat** — reference `ARIZE_API_KEY`/`ARIZE_SPACE_ID` env vars only, set by the user in their own `.env`/shell; ask before persistent local state (`ax` profiles, `.zshrc`, env vars) — see [references/ax-profiles.md](references/ax-profiles.md).
 
 ## Phase 1: Analysis (read-only — no code/files)
 
@@ -38,7 +38,7 @@ Output a short summary (stack, proposed integration, existing tracing, scope). I
 
 ## Verification
 
-Done only when: app builds/typechecks, starts with tracing, emits ≥1 real request, and you confirm the trace in Arize **or** give a precise app-vs-Arize blocker. Trigger an LLM call, then use the **`arize-trace`** skill to confirm spans (kind, `input.value`/`output.value`, parent-child; CHAIN+TOOL if tools run). No traces → check `ARIZE_SPACE_ID`/`ARIZE_API_KEY`, init order, `otlp.arize.com:443`, exporter logs (`GRPC_VERBOSITY=debug`); common causes: missing project name (500), unflushed short-lived process, or export/verify **credential-context mismatch** (report it, don't rewrite config — [references/credentials-and-config.md](references/credentials-and-config.md)).
+Done only when: app builds/typechecks, starts with tracing, emits ≥1 real request, and you confirm the trace in Arize **or** give a precise app-vs-Arize blocker. Trigger an LLM call, then use the **`arize-trace`** skill to confirm spans (kind, `input.value`/`output.value`, parent-child; CHAIN+TOOL if tools run). No traces → check `ARIZE_SPACE_ID`/`ARIZE_API_KEY`, init order, `otlp.arize.com:443`, exporter logs (`GRPC_VERBOSITY=debug`); common causes: missing project name (500), unflushed short-lived process, or export/verify **credential-context mismatch** (report it, don't rewrite config — [references/credentials-and-config.md](references/credentials-and-config.md)). For the deterministic trace-lookup sequence, blocker classification, and the post-arrival smoke check, follow [references/verification.md](references/verification.md).
 
 ## After a confirmed trace
 
@@ -46,4 +46,4 @@ Emit milestones (install → wiring → run → export → verify); mark recover
 
 ## References
 
-[integration-routing](references/integration-routing.md) (the router) · [credentials-and-config](references/credentials-and-config.md) · [ax-profiles](references/ax-profiles.md) · [manual-spans](references/manual-spans.md) · [go](references/go.md) (Go — no doc page exists) · [session-tracking](references/session-tracking.md) · [tracing-assistant-mcp](references/tracing-assistant-mcp.md).
+[integration-routing](references/integration-routing.md) (the router) · [credentials-and-config](references/credentials-and-config.md) · [ax-profiles](references/ax-profiles.md) · [manual-spans](references/manual-spans.md) · [go](references/go.md) (Go — no doc page exists) · [session-tracking](references/session-tracking.md) · [verification](references/verification.md) · [tracing-assistant-mcp](references/tracing-assistant-mcp.md).
