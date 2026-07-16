@@ -1,21 +1,12 @@
-# Manual Spans for Tool Use and Agent Loops
+# Manual Spans
 
-Consult this when the app uses LLM tool/function calling and you need to add CHAIN + TOOL spans so tool calls and results appear in the trace.
+Consult this when you need spans an auto-instrumentor won't create — tool executions and the agent/chain boundary in a tool loop, or RAG / reranker / guardrail / eval steps — so they appear in the trace with input/output.
 
 > **The OpenAI and Anthropic SDK auto-instrumentors capture the LLM API call — including the model's tool-call *request* (the tool name + arguments it wants) and the tool *definitions* you passed — but NOT the tool's *execution*, its *return value*, or the agent-loop/chain boundary.** So if a raw OpenAI- or Anthropic-SDK app runs tools (parses the `tool_use` / tool-call, executes it, feeds the result back on the next call), you **must** add a TOOL span per execution (to capture the actual result) and a CHAIN span to group the turn — otherwise you get only a flat series of LLM spans with no tool results and no grouping. *Framework* instrumentors (LangChain, LangGraph, CrewAI, OpenAI Agents SDK, …) *typically* capture tools and chains — verify in the matched integration doc before skipping manual spans.
 
-## Why auto-instrumentors don't capture tool execution
+## Why auto-instrumentors miss it
 
-**Provider instrumentors (Anthropic, OpenAI, etc.) only wrap the LLM *client* — the code that sends HTTP requests and receives responses.** They see:
-
-- One span per API call: request (messages, system prompt, tools) and response (text, tool_use blocks, etc.).
-
-They **cannot** see what happens *inside your application* after the response:
-
-- **Tool execution** — Your code parses the response, calls `run_tool("check_loan_eligibility", {...})`, and gets a result. That runs in your process; the instrumentor has no hook into your `run_tool()` or the actual tool output. The *next* API call (sending the tool result back) is just another `messages.create` span — the instrumentor doesn't know that the message content is a tool result or what the tool returned.
-- **Agent/chain boundary** — The idea of "one user turn → multiple LLM calls + tool calls" is an *application-level* concept. The instrumentor only sees separate API calls; it doesn't know they belong to the same logical "run_agent" run.
-
-So TOOL and CHAIN spans have to be added **manually** (or by a *framework* instrumentor like LangChain/LangGraph that knows about tools and chains). Once you add them, they appear in the same trace as the LLM spans because they use the same TracerProvider.
+Provider instrumentors wrap only the LLM *client* — they capture each API call's request (messages, tools) and response (text, `tool_use` blocks), but not what your code does next: running `run_tool(...)`, the tool's return value, or the fact that several API calls form one logical turn. Those are application-level, so the TOOL and CHAIN spans are yours to add (a *framework* instrumentor like LangChain/LangGraph adds them for you). Manual spans use the same TracerProvider, so they land in the same trace.
 
 ## Adding manual spans
 
@@ -78,7 +69,7 @@ The model's *request* to call a tool is captured by the provider instrumentor on
 | `reranker.query` / `reranker.model_name` / `reranker.top_k` | rerank query, model, and K (RERANKER) |
 | `reranker.input_documents` / `reranker.output_documents` | documents in/out of the reranker |
 
-All three languages expose these names as constants via their respective `openinference-semantic-conventions` packages — `from openinference.semconv.trace import SpanAttributes` in Python, `@arizeai/openinference-semantic-conventions` in TypeScript, and `semconv "github.com/Arize-ai/openinference/go/openinference-semantic-conventions"` in Go (e.g. `semconv.LLMModelName`, `semconv.LLMProvider`, `semconv.LLMTokenCountPrompt`).
+Python, TypeScript, and Go expose these names as constants via their respective `openinference-semantic-conventions` packages — `from openinference.semconv.trace import SpanAttributes` in Python, `@arizeai/openinference-semantic-conventions` in TypeScript, and `semconv "github.com/Arize-ai/openinference/go/openinference-semantic-conventions"` in Go (e.g. `semconv.LLMModelName`, `semconv.LLMProvider`, `semconv.LLMTokenCountPrompt`). Java sets them via annotations (see below), not these constants.
 
 ## Python pattern
 
