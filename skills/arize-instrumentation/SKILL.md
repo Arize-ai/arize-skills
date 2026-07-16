@@ -33,7 +33,8 @@ Output a short summary (stack, proposed integration, existing tracing, scope). I
 - **Project name is required** — missing it → HTTP 500 (`service.name` alone fails). Set as a resource attribute: Python `register(project_name=…)`; TS `SEMRESATTRS_PROJECT_NAME`/`model_id`; Go `Options{ProjectName}` or `openinference.project.name`.
 - **Don't hand-roll a `TracerProvider`/exporter** — use `register()`/`arize-otel-go`; raw OTel only when integrating an existing provider.
 - **Order:** register tracer → instrumentors → clients.
-- **Flush before exit** (CLI/scripts/notebooks) or async exports drop: Python `force_flush()`+`shutdown()`, TS `shutdown()`, Go `defer tp.Shutdown(ctx)` (never `log.Fatalf`/`os.Exit` mid-span). See [references/session-tracking.md](references/session-tracking.md) (also covers `session.id` for multi-turn).
+- **Flush before exit** (CLI/scripts/notebooks) or async exports drop: Python `force_flush()`+`shutdown()`, TS `shutdown()`, Go `defer tp.Shutdown(ctx)` (never `log.Fatalf`/`os.Exit` mid-span). See [references/session-tracking.md](references/session-tracking.md).
+- **Sessions:** for obvious multi-turn interactions (e.g. a multi-turn chatbot) or when the user asks, add `session.id` so turns group into one conversation — see [references/session-tracking.md](references/session-tracking.md).
 - **Never silently override** the app's project/space/IDs/endpoint — surface mismatches.
 
 ## Verification
