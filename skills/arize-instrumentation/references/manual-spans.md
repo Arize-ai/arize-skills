@@ -54,7 +54,7 @@ All three languages expose these names as constants via their respective `openin
 
 ## Python pattern
 
-**Prefer decorators where possible.** Wrap the Arize tracer provider in an `OITracer`, then decorate your agent/chain and tool functions with `@tracer.agent` / `@tracer.chain` / `@tracer.tool` / `@tracer.llm`. Each decorator auto-captures the function arguments as `input.value`, the return value as `output.value`, and sets the span kind; `@tracer.tool` also reads the name, docstring, and signature for the tool's name/description/parameters. Nesting follows the call graph automatically — a tool called inside an `@tracer.agent` function becomes a child TOOL span.
+**Prefer decorators where possible.** Wrap the Arize tracer provider in an `OITracer`, then decorate your agent/chain and tool functions with `@tracer.agent` / `@tracer.chain` / `@tracer.tool` / `@tracer.llm`. Each decorator auto-captures the function arguments as `input.value`, the return value as `output.value`, and sets the span kind; `@tracer.tool` also reads the name, docstring, and signature for the tool's name/description/parameters. Nesting follows the call graph automatically — a tool called inside an `@tracer.agent` function becomes a child TOOL span. See [manual instrumentation → decorators](https://arize.com/docs/ax/instrument/manual-instrumentation#use-decorators) for the current API.
 
 ```python
 from arize.otel import register
