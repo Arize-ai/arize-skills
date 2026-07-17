@@ -118,7 +118,8 @@ Proceed **only after the user confirms** the Phase 1 analysis — and, when scop
 ### Steps
 
 1. **Fetch integration docs** — Read the matched doc URLs and follow their installation and instrumentation steps.
-2. **Install packages** using the detected package manager **before** writing code:
+2. **Preflight the environment, then install packages** with the detected package manager **before** writing code:
+   - **Python — check the environment before `pip install`:** detect the active environment (venv / conda / uv / poetry / pipenv). If the install would land in **system Python**, warn and ask before proceeding. Confirm the interpreter version satisfies the selected integration. When a framework pins specific OpenTelemetry versions (e.g. Google ADK), install that pin set up front instead of recovering from cascading version conflicts. Stop and ask before creating a new environment or changing the dependency strategy.
    - Python: `pip install arize-otel` plus `openinference-instrumentation-{name}` (hyphens in package name; underscores in import, e.g. `openinference.instrumentation.llama_index`).
    - TypeScript/JavaScript: `@opentelemetry/sdk-trace-node` plus the relevant `@arizeai/openinference-*` package.
    - Java: OpenTelemetry SDK plus `openinference-instrumentation-*` in pom.xml or build.gradle.
