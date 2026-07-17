@@ -10,27 +10,31 @@ Works with Cursor, Claude Code, Codex, GitHub Copilot, Windsurf, and [40+ other 
 
 **Adding tracing to your app** — give your coding agent this prompt:
 
-> Follow the instructions from https://arize.com/docs/PROMPT.md and ask me questions as needed.
+> Install Arize skills from https://github.com/Arize-ai/arize-skills and use the arize-instrumentation skill to add tracing to this application.
 
-This walks through a two-phase flow: analyze your codebase for LLM providers and frameworks, then add Arize AX tracing with the right instrumentors. No skill installation needed.
+The agent installs the skills, instruments your app, and verifies a trace reaches Arize AX — all in one session. You'll just need to provide your Arize credentials and approve the code changes.
 
 **Already have traces?** Give your agent this prompt to install the skills and start debugging:
 
-> Install the Arize skills plugin from https://github.com/Arize-ai/arize-skills, then use the arize-trace skill to export and analyze recent traces from my project. Summarize any errors or latency issues you find.
+> Install Arize skills from https://github.com/Arize-ai/arize-skills, then use the arize-trace skill to export and analyze recent traces from my project. Summarize any errors or latency issues you find.
 
 ## Installation
 
 ### Option 1: npx (recommended)
 
-```bash
-# Interactive — choose skills, agent, and scope
-npx skills add Arize-ai/arize-skills
+Install all skills non-interactively — this is what the agent runs for the prompt above:
 
-# Non-interactive — install everything with auto-detected defaults
+```bash
 npx skills add Arize-ai/arize-skills --skill "*" --yes
 ```
 
-Both options auto-detect your agent (Cursor, Claude Code, Codex, etc.) and symlink skills into place.
+Want to hand-pick skills, agent, and scope yourself? Drop the flags for the interactive wizard:
+
+```bash
+npx skills add Arize-ai/arize-skills
+```
+
+Both auto-detect your agent (Cursor, Claude Code, Codex, etc.) and symlink skills into place.
 
 ### Option 2: git clone
 
