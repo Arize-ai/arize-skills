@@ -251,7 +251,7 @@ annotations_df = pd.DataFrame([
 ])
 
 response = client.spans.update_annotations(
-    space_id=os.environ["ARIZE_SPACE"],
+    space_id=os.environ["ARIZE_SPACE_ID"],
     project_name="your-project",
     dataframe=annotations_df,
     validate=True,
