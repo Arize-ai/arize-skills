@@ -1,6 +1,6 @@
 # Credentials and configuration
 
-How to resolve, source, and safely handle Arize credentials during instrumentation and verification. The values involved: **API key**, **Space** (name or base64 ID), **project name**, and **collector endpoint** (US default `otlp.arize.com`; EU alternative available). For getting an API key and profile setup, see ax-profiles.md.
+How to resolve, source, and safely handle Arize credentials during instrumentation and verification. The values involved: **API key**, **Space** (name or base64 ID), **project name**, and **collector endpoint** (US default `otlp.arize.com`; EU alternative available). For getting an API key and profile setup, see [ax-profiles.md](ax-profiles.md).
 
 ## Configuration precedence
 
@@ -25,7 +25,7 @@ The app emits traces with **its** exporter config; you verify with the **`ax`** 
 - **Read only the target app's own configuration** to learn what it exports — its `.env`, its process environment, or an `ax` profile the user points you to.
 - **Never search sibling repositories, unrelated `.env` files, or shell startup files** (`.bashrc`, `.zshrc`, `.profile`) for credentials — reusing another project's key silently sends traces to the wrong account.
 - If credentials are missing, ask the user to set them (below) — do not hunt elsewhere.
-- **Never ask the user to paste an API key into the chat**, and never surface a secret value. Reference the env var name only (see ax-profiles.md for key handling).
+- **Never ask the user to paste an API key into the chat**, and never surface a secret value. Reference the env var name only (see [ax-profiles.md](ax-profiles.md) for key handling).
 
 ## Safe environment parsing
 
@@ -40,4 +40,4 @@ The user sets these in their own terminal or app config — never in chat:
 - **Space** — the workspace. Its **name** and base64 **Space ID** are distinct: the `ARIZE_SPACE_ID` exporter env var needs the **base64 ID** (the name is only accepted for `ax` CLI resolution). Find the ID with `ax spaces list`.
 - **Project name** — the logical grouping traces land in; the user chooses it, and it's created on first export.
 
-Keep the three distinct — **space name** ≠ **space ID** ≠ **project name** — since conflating them is a common cause of "wrong account" verification failures. For the export commands and `ax profiles create` setup, see ax-profiles.md.
+Keep the three distinct — **space name** ≠ **space ID** ≠ **project name** — since conflating them is a common cause of "wrong account" verification failures. For the export commands and `ax profiles create` setup, see [ax-profiles.md](ax-profiles.md).

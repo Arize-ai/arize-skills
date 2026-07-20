@@ -28,7 +28,7 @@ context.with(setSession(context.active(), { sessionId }), () => {
 });
 ```
 
-**Go:** `ctx = instrumentation.WithSession(ctx, sessionID)` (from `openinference-instrumentation`) — the provider instrumentors apply it to every LLM span automatically. See go.md.
+**Go:** `ctx = instrumentation.WithSession(ctx, sessionID)` (from `openinference-instrumentation`) — the provider instrumentors apply it to every LLM span automatically. See [go.md](go.md).
 
 Generate `session_id` once per conversation and open the block from the caller:
 
