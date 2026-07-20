@@ -83,19 +83,18 @@ Confirm the API key and region are correct, then retry the original command.
 
 ## Space
 
-There is no profile flag for space. Save it as an environment variable — accepts a space **name** (e.g., `my-workspace`) or a base64 space **ID** (e.g., `U3BhY2U6...`). Find yours with `ax spaces list -o json`.
+**The `ax` CLI takes the space per command via the `-s` / `--space` flag** — it accepts a space **name** or **base64 ID** (e.g. `my-workspace` or `U3BhY2U6...`). There is no space profile field and **no space environment variable for the CLI**. Find your space with `ax spaces list`, then pass it:
 
-**macOS/Linux** — add to `~/.zshrc` or `~/.bashrc`:
 ```bash
-export ARIZE_SPACE="my-workspace"    # name or base64 ID
+ax spans export my-project --space my-workspace
 ```
-Then `source ~/.zshrc` (or restart terminal).
 
-**Windows (PowerShell):**
-```powershell
-[System.Environment]::SetEnvironmentVariable('ARIZE_SPACE', 'my-workspace', 'User')
+**For app instrumentation (the `arize-otel` SDK), not the CLI:** the SDK reads the **`ARIZE_SPACE_ID`** env var — the **base64 Space ID** (e.g. `U3BhY2U6...`), not a name. Set it in the app's `.env` or shell:
+
+```bash
+export ARIZE_SPACE_ID="U3BhY2U6..."    # base64 Space ID, for the arize-otel SDK
 ```
-Restart terminal for it to take effect.
+(Windows PowerShell: `[System.Environment]::SetEnvironmentVariable('ARIZE_SPACE_ID', 'U3BhY2U6...', 'User')`, then restart the terminal.)
 
 ## Save Credentials for Future Use
 
@@ -103,7 +102,7 @@ At the **end of the session**, if the user manually provided any credentials dur
 
 **Skip this entirely if:**
 - The API key was already loaded from an existing profile or `ARIZE_API_KEY` env var
-- The space was already set via `ARIZE_SPACE` env var
+- The space was already set via `ARIZE_SPACE_ID` env var
 - The user only used base64 project IDs (no space was needed)
 
 **How to offer:** Use **AskQuestion**: *"Would you like to save your Arize credentials so you don't have to enter them next time?"* with options `"Yes, save them"` / `"No thanks"`.
