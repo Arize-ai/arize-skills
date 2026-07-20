@@ -221,7 +221,7 @@ Include a mapping for **every** variable the template references. Omitting one c
 ```bash
 ax tasks create-evaluation \
   --name "Hallucination Backfill" \
-  --task-type template_evaluation \
+  --task-type TEMPLATE_EVALUATION \
   --project PROJECT \
   --evaluators '[{"evaluator_id": "EVAL_ID", "column_mappings": {"input": "attributes.input.value", "output": "attributes.output.value"}}]' \
   --no-continuous
@@ -231,7 +231,7 @@ ax tasks create-evaluation \
 ```bash
 ax tasks create-evaluation \
   --name "Hallucination Monitor" \
-  --task-type template_evaluation \
+  --task-type TEMPLATE_EVALUATION \
   --project PROJECT \
   --evaluators '[{"evaluator_id": "EVAL_ID", "column_mappings": {"input": "attributes.input.value", "output": "attributes.output.value"}}]' \
   --is-continuous \
@@ -324,7 +324,7 @@ ax datasets export DATASET_NAME --space SPACE --stdout | python3 -c "import sys,
 ```bash
 ax tasks create-evaluation \
   --name "Experiment Correctness" \
-  --task-type template_evaluation \
+  --task-type TEMPLATE_EVALUATION \
   --dataset DATASET_NAME --space SPACE \
   --experiment-ids "EXP_ID" \   # base64 ID from `ax experiments list --space SPACE -o json`
   --evaluators '[{"evaluator_id": "EVAL_ID", "column_mappings": {"output": "output"}}]' \
