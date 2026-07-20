@@ -64,7 +64,7 @@ If an `ax` command fails, troubleshoot based on the error:
 - Space unknown → run `ax spaces list` to pick by name, or ask the user
 - Project unclear → ask the user, or run `ax projects list -o json --limit 100` and present as selectable options
 - LLM provider call fails (missing provider credentials) → run `ax ai-integrations list --space SPACE` to check for platform-managed credentials. If none exist, use the **arize-ai-provider-integration** skill — never ask the user to paste a provider key into chat.
-- **Security:** Never read `.env` files or search the filesystem for credentials. Use `ax profiles` for Arize credentials and `ax ai-integrations` for LLM provider keys. Never ask the user to paste secrets into chat. For missing credentials, see references/ax-profiles.md.
+- **Security:** Never read `.env` files or search the filesystem for credentials. Use `ax profiles` for Arize credentials and `ax ai-integrations` for LLM provider keys. Never ask the user to paste secrets into chat. For missing credentials, see [references/ax-profiles.md](references/ax-profiles.md).
 
 ### When you must ask the user first
 
