@@ -1,0 +1,102 @@
+name: Quality Checks
+
+# Mirrors the external-plugin quality gates github/awesome-copilot runs on
+# submissions, so problems are caught here before we submit (or before the
+# weekly sync-to-awesome-copilot push) rather than via a flagged intake issue.
+
+on:
+  pull_request:
+    paths:
+      - "skills/**"
+      - "scripts/**"
+      - "eng/**"
+      - "plugin.json"
+      - ".claude-plugin/**"
+      - ".cursor-plugin/**"
+      - "version.txt"
+      - ".release-please-manifest.json"
+      - ".codespellrc"
+      - ".gitattributes"
+      - ".github/workflows/quality-checks.yml"
+  workflow_dispatch:
+
+jobs:
+  validate-skills:
+    name: Validate skill definitions
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.x"
+      - name: Install dependencies
+        run: pip install -r scripts/requirements.txt
+      - name: Validate skills
+        run: python scripts/validate_skills.py
+
+  validate-manifests:
+    name: Validate manifest consistency
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.x"
+      - name: Validate manifests
+        run: python scripts/validate_manifests.py
+
+  vally-lint:
+    name: Vally skill lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "20"
+      - name: Install Vally
+        run: npm install --no-save @microsoft/vally@0.10.0
+      - name: Run Vally lint
+        run: node eng/vally-lint.mjs
+
+  codespell:
+    name: Spell check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.x"
+      - name: Install codespell
+        run: pip install codespell
+      - name: Run codespell
+        run: codespell
+
+  line-endings:
+    name: Line endings
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - name: Check line endings
+        run: bash scripts/check_line_endings.sh
+
+  install-smoke-test:
+    name: Plugin install smoke test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "20"
+      - name: Install Claude Code CLI
+        run: npm install -g @anthropic-ai/claude-code
+      - name: Validate plugin & marketplace manifests
+        run: claude plugin validate .
+      - name: Install plugin from local marketplace
+        # Use an isolated HOME so the ephemeral marketplace/plugin state never
+        # leaks between steps or runners. No API key required for install-only.
+        run: |
+          export HOME="$(mktemp -d)"
+          claude plugin marketplace add "$GITHUB_WORKSPACE" --scope user
+          claude plugin install arize-skills@arize-skills --scope user
+          claude plugin list | tee /tmp/plugin-list.txt
+          grep -q "arize-skills@arize-skills" /tmp/plugin-list.txt
