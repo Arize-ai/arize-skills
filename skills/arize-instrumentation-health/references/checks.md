@@ -77,8 +77,10 @@ Key attributes by span kind:
 - **Fix direction:** tune `BatchSpanProcessor`/export settings and truncate oversized attributes before export.
 
 ### 9. Duplicate spans
-- **Trigger:** more than 20% of LLM spans appear duplicated by model, timestamp proximity, and distinct span IDs.
-- **Guardrail:** require high confidence that stacked instrumentors are active — legitimate repeated/retried calls are not duplicates.
+- **Trigger:** more than 20% of LLM spans, or more than 20% of traces with LLM activity, appear duplicated by model, timestamp proximity, distinct span IDs, and matching semantic payload.
+- **LLM candidate evidence:** for this check, treat a span as an LLM candidate when it has `openinference.span.kind = LLM`, common LLM attributes such as `llm.model_name`, `llm.input_messages`, `llm.output_messages`, `llm.token_count.*`, or a provider span name such as `openai.chat.completions`. Do not skip duplicate detection just because check 3 also found missing span kinds.
+- **High-confidence duplicate pattern:** sibling spans in the same trace with the same parent (or both attached to the same semantic root), same span name, same model, near-identical start/end times, and identical normalized request/response payloads. Normalize both OpenInference keys (`input.value`, `output.value`, `llm.input_messages`, `llm.output_messages`) and common ad-hoc keys (`prompt`, `completion`, `messages`, `response`) before comparing.
+- **Guardrail:** do not flag legitimate retries, streaming chunks, parallel tool calls, or repeated user-requested model calls when retry metadata, different payloads, different attempts, different outputs, materially different timing, or error-to-success progression explains the repetition. If the only evidence is repeated span names without matching payloads, report under check 4 instead.
 - **Fix direction:** remove redundant instrumentors (e.g. a framework and a provider instrumentor both wrapping the same call).
 
 ## Cause attribution
