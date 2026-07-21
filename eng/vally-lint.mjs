@@ -1,10 +1,9 @@
 #!/usr/bin/env node
 // Run Vally's static skill lint over every skill in skills/.
 //
-// Mirrors awesome-copilot's "Vally lint" quality gate
-// (eng/external-plugin-quality-gates.mjs -> runVallyLintGate). Vally has no CLI
-// bin, so we invoke its programmatic runLint() API directly. This is a static
-// lint (spec-compliance + valid file references) — no Copilot/LLM token needed.
+// Vally has no CLI bin, so we invoke its programmatic runLint() API directly.
+// This is a static lint (spec-compliance + valid file references) — no
+// Copilot/LLM token needed.
 //
 // Usage: node eng/vally-lint.mjs [skillsDir]
 // Exits non-zero if any skill fails the lint.

@@ -10,10 +10,10 @@ Skill files (SKILL.md, references/, etc.) are loaded as context for AI agents. F
 
 ## Quality checks
 
-CI ([.github/workflows/quality-checks.yml](.github/workflows/quality-checks.yml)) mirrors the external-plugin quality gates that [github/awesome-copilot](https://github.com/github/awesome-copilot) runs on submissions, so issues are caught here before we submit. Run them locally with `make check` before pushing:
+CI ([.github/workflows/quality-checks.yml](.github/workflows/quality-checks.yml)) runs these on every PR. Run the no-Node subset locally with `bash scripts/check.sh` before pushing:
 
 - **`scripts/validate_skills.py`** — per-skill structure: frontmatter, `name` (kebab-case, 3–64 chars, matches the folder, unique), `description` length, declared `assets` exist and are ≤5 MB, Markdown links with relative targets resolve, `SKILL.md` ≤500 lines, and a warning for bare doc paths that should be Markdown links (the rule above).
 - **`scripts/validate_manifests.py`** — `version.txt` matches every plugin manifest (release-please keeps them in sync; this proves they never drift) and metadata (`name`, `description`, `keywords`, `license`, `repository`) is consistent and within limits.
-- **Vally lint** ([eng/vally-lint.mjs](eng/vally-lint.mjs)) — runs `@microsoft/vally`'s static skill lint (spec-compliance + valid references), the same linter awesome-copilot uses. Needs Node; run `make vally-lint`.
 - **codespell** ([.codespellrc](.codespellrc)) and **line endings** ([scripts/check_line_endings.sh](scripts/check_line_endings.sh)) — spelling and LF hygiene.
+- **Vally lint** ([eng/vally-lint.mjs](eng/vally-lint.mjs)) — `@microsoft/vally`'s static skill lint (spec-compliance + valid references). Needs Node: `npm install --no-save @microsoft/vally@0.10.0 && node eng/vally-lint.mjs`.
 - **Plugin install smoke test** — `claude plugin validate .` plus a marketplace add/install of the plugin.

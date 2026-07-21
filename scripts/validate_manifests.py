@@ -1,11 +1,6 @@
 #!/usr/bin/env python3
 """Validate plugin manifest consistency and metadata constraints.
 
-Mirrors awesome-copilot's version-match gate (`external-plugin-quality-gates.mjs`)
-and plugin/manifest validation (`external-plugin-validation.mjs`). This catches
-the kind of finding that flags an external-plugin submission with
-`requires-submitter-fixes` before we ever open the intake issue.
-
 `version.txt` is the single source of truth (release-please bumps it first, then
 propagates it into the JSON manifests via `release-please-config.json`).
 

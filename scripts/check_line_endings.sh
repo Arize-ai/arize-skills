@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
-# Fail if any tracked text file contains a CRLF line ending.
-# Mirrors awesome-copilot's check-line-endings gate; pairs with .gitattributes.
+# Fail if any tracked text file contains a CRLF line ending. Pairs with .gitattributes.
 set -euo pipefail
 
 cd "$(git rev-parse --show-toplevel)"

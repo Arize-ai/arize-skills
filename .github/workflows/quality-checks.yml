@@ -1,8 +1,7 @@
 name: Quality Checks
 
-# Mirrors the external-plugin quality gates github/awesome-copilot runs on
-# submissions, so problems are caught here before we submit (or before the
-# weekly sync-to-awesome-copilot push) rather than via a flagged intake issue.
+# Structure, manifest, lint, and install checks for skills and the plugin.
+# Run the no-Node subset locally with `bash scripts/check.sh`.
 
 on:
   pull_request:

@@ -1,6 +1,5 @@
 [codespell]
-# Mirrors awesome-copilot's codespell hygiene gate.
-skip = .git,node_modules,*.lock,*.png,*.jpg,*.gif,*.svg,*.pdf,dist,.venv,venv
+skip =.git,node_modules,*.lock,*.png,*.jpg,*.gif,*.svg,*.pdf,dist,.venv,venv
 # Domain terms and deliberate examples that are not typos:
 #   vally    - the @microsoft/vally linter (product name)
 #   queston  - an intentional field-name-typo example in arize-dataset

@@ -1,10 +1,8 @@
 #!/usr/bin/env python3
 """Validate all skills in the skills/ directory.
 
-Mirrors the structural checks awesome-copilot runs in `eng/validate-skills.mjs`
-(the "Skill validation" quality gate) plus this repo's authoring rules in
-AGENTS.md. Content-quality linting is handled separately by Vally
-(see eng/vally-lint.mjs).
+Checks skill structure and this repo's authoring rules (see AGENTS.md).
+Content-quality linting is handled separately by Vally (see eng/vally-lint.mjs).
 
 Checks each skill directory for:
   - SKILL.md exists
@@ -91,10 +89,14 @@ def strip_code(content):
     return "\n".join(lines)
 
 
-def check_links(skill_dir, content):
-    """Return error strings for Markdown links whose relative target is missing."""
+def check_links(skill_dir, prose):
+    """Return error strings for Markdown links whose relative target is missing.
+
+    `prose` must already have code blocks/spans removed (see strip_code) so that
+    link syntax shown inside a fenced example is not validated against disk.
+    """
     errors = []
-    for target in LINK_PATTERN.findall(content):
+    for target in LINK_PATTERN.findall(prose):
         target = target.strip()
         # A link may be "path "title"" — drop any title component.
         target = target.split()[0] if target else target
@@ -141,10 +143,12 @@ def check_assets(skill_dir, data):
     return errors
 
 
-def check_bare_paths(content):
-    """Return warning strings for bare references/ paths that should be links."""
+def check_bare_paths(prose):
+    """Return warning strings for bare references/ paths that should be links.
+
+    `prose` must already have code blocks/spans removed (see strip_code).
+    """
     warnings = []
-    prose = strip_code(content)
     # Remove markdown-link targets so genuine links aren't flagged.
     prose = LINK_PATTERN.sub("", prose)
     seen = set()
@@ -230,9 +234,10 @@ def validate_skill(skill_dir):
             f"move detail into references/"
         )
 
+    prose = strip_code(content)
     errors.extend(check_assets(skill_dir, data))
-    errors.extend(check_links(skill_dir, content))
-    warnings.extend(check_bare_paths(content))
+    errors.extend(check_links(skill_dir, prose))
+    warnings.extend(check_bare_paths(prose))
 
     return name, errors, warnings
 
