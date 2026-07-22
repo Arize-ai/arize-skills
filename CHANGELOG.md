@@ -1,5 +1,23 @@
 # Changelog
 
+## [1.2.0](https://github.com/Arize-ai/arize-skills/compare/v1.1.0...v1.2.0) (2026-07-22)
+
+
+### Features
+
+* **arize-span-routing:** add skill for multi-space destination routing ([#105](https://github.com/Arize-ai/arize-skills/issues/105)) ([32685de](https://github.com/Arize-ai/arize-skills/commit/32685de168c6115d416f6ce7734a6b384a157090))
+
+
+### Bug Fixes
+
+* **arize-evaluator:** correct custom code evaluator import path and evaluate() signature ([#102](https://github.com/Arize-ai/arize-skills/issues/102)) ([e66a84a](https://github.com/Arize-ai/arize-skills/commit/e66a84aabd81bec5e06e3ea55370580daccb42f3))
+* **arize-instrumentation:** credential precedence, safe sourcing, onboarding ([#91](https://github.com/Arize-ai/arize-skills/issues/91)) ([92770d3](https://github.com/Arize-ai/arize-skills/commit/92770d32406478e4580b438c55e9399eab219c23))
+* **arize-instrumentation:** deterministic verification + post-verify quality checks ([#92](https://github.com/Arize-ai/arize-skills/issues/92)) ([c57a155](https://github.com/Arize-ai/arize-skills/commit/c57a15580ded76028b005b7655ba58b02bfca422))
+* **arize-instrumentation:** scope gate, consent, progress signaling, handoff ([#93](https://github.com/Arize-ai/arize-skills/issues/93)) ([b9247c4](https://github.com/Arize-ai/arize-skills/commit/b9247c4193e105cffa7d5b533475cb2167b21602))
+* pass awesome-copilot external-plugin quality gates ([#95](https://github.com/Arize-ai/arize-skills/issues/95)) ([232e70b](https://github.com/Arize-ai/arize-skills/commit/232e70ba7aab183733297d0a564111a8effb86a8))
+* **skills:** keep secrets out of coding agent chat ([#104](https://github.com/Arize-ai/arize-skills/issues/104)) ([2c9926d](https://github.com/Arize-ai/arize-skills/commit/2c9926dc102a11e05ac706979bf86641ae5e662c))
+* **skills:** use ARIZE_SPACE_ID for instrumentation ([#107](https://github.com/Arize-ai/arize-skills/issues/107)) ([fa38c43](https://github.com/Arize-ai/arize-skills/commit/fa38c437a830d7ddfbf69bf93165756938d04bb0))
+
 ## [1.1.0](https://github.com/Arize-ai/arize-skills/compare/v1.0.0...v1.1.0) (2026-07-01)
 
 
