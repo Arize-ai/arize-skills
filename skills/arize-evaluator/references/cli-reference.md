@@ -104,74 +104,208 @@ Code evaluators run without an AI integration — they use deterministic logic (
 
 **Managed code evaluators** use built-in patterns:
 
+`--variables` is a JSON array of the input column names the check reads (e.g.
+`'["output"]'`). Any configuration the managed check needs — a regex pattern, a keyword
+list — goes through `--static-params`, not `--variables`.
+
 ```bash
-# Managed: check output matches a regex
+# Managed: check output is valid JSON
 ax evaluators create-code-evaluator \
   --name "JSON Format Check" \
   --space SPACE \
-  --template-name "json_format" \
   --commit-message "Initial version" \
   --code-type managed \
   --code-name "json_check" \
-  --managed-evaluator JSONParseable \
-  --variables '[]'
+  --managed-evaluator JSON_PARSEABLE \
+  --variables '["output"]'
 
 # Managed: check output contains required keywords
 ax evaluators create-code-evaluator \
   --name "Safety Keywords" \
   --space SPACE \
-  --template-name "safety_check" \
   --commit-message "Initial version" \
   --code-type managed \
   --code-name "safety_keywords" \
-  --managed-evaluator ContainsAnyKeyword \
-  --variables '[{"name": "keywords", "value": ["unsafe", "harmful", "illegal"]}]'
+  --managed-evaluator CONTAINS_ANY_KEYWORD \
+  --variables '["output"]' \
+  --static-params '[{"name": "keywords", "type": "STRING_ARRAY", "default_value": ["unsafe", "harmful", "illegal"]}]'
 ```
 
-**Managed evaluator types:**
+**Managed evaluator types** (pass the value exactly — the flag is case-sensitive):
 
 | Value | What it checks |
 |-------|---------------|
-| `MatchesRegex` | Output matches a regular expression |
-| `JSONParseable` | Output is valid JSON |
-| `ContainsAnyKeyword` | Output contains at least one keyword from a list |
-| `ContainsAllKeywords` | Output contains all keywords from a list |
-| `ExactMatch` | Output exactly equals a target string |
+| `MATCHES_REGEX` | Output matches a regular expression |
+| `JSON_PARSEABLE` | Output is valid JSON |
+| `CONTAINS_ANY_KEYWORD` | Output contains at least one keyword from a list |
+| `CONTAINS_ALL_KEYWORDS` | Output contains all keywords from a list |
+| `EXACT_MATCH` | Output exactly equals a target string |
 
 **Custom Python code evaluators:**
 
+> **CRITICAL — the class contract, not a bare function.** Custom code evaluators run
+> server-side as a Python **class that subclasses `CodeEvaluator`** — not a standalone
+> `def evaluate(...):` function. Get any of the three things below wrong and the task
+> run **cancels in ~3 seconds with `num_successes=0`, `num_errors=0`, `num_skipped=0`** —
+> no error is surfaced, it just silently scores nothing.
+>
+> 1. **Import path.** The sandbox that executes the evaluator requires exactly this
+>    import — it is the only path the platform runtime exposes:
+>    ```python
+>    from arize.experimental.datasets.experiments.evaluators.base import (
+>        EvaluationResult,
+>        CodeEvaluator,
+>    )
+>    ```
+>    Use it verbatim. A locally-installed `arize` SDK may expose other module paths that
+>    import fine on your machine but are absent on the platform, so passing a local test
+>    is not proof the import will resolve at run time. Always put imports in `--imports`,
+>    never inline in `--code`.
+> 2. **Named parameters on `evaluate()`, not just `**kwargs`.** The platform builds the
+>    list of mappable variables by introspecting the named keyword parameters of
+>    `evaluate()`. `def evaluate(self, **kwargs)` exposes **zero** mappable variables, so
+>    the task matches 0 rows and cancels immediately. Name every variable you need
+>    explicitly, with a default:
+>    ```python
+>    def evaluate(self, *, prediction=None, actual=None, **kwargs) -> EvaluationResult:
+>        ...
+>        return EvaluationResult(label=..., score=..., explanation=...)
+>    ```
+>    Return `EvaluationResult`, not a bare `dict`. Each named parameter must exactly
+>    match an entry in `--variables` and, at the task level, a `column_mappings` key.
+> 3. **`--imports` and `--code` are separate.** `--code` must contain **only the class
+>    definition** (no `import` statements inside it); all imports go in `--imports`.
+>
+> If a run still cancels at `0/0/0` after fixing the contract, confirm `num_skipped`
+> increments on the next run — that means the platform is now reaching and invoking
+> your evaluator (it may still skip rows for unrelated reasons, e.g. missing column data).
+
+Static configuration (thresholds, keyword lists, regex patterns) that should NOT vary
+per row goes through `--static-params` and is read inside `evaluate()` as `self.<name>`
+— never declare these as named `evaluate()` parameters.
+
+Write the import block and the class to their own files and pass each with `@filepath`.
+Loading from files keeps the class readable and avoids shell-quoting mistakes in the
+import block — prefer this for anything beyond a trivial evaluator.
+
+`my_evaluator_imports.py`:
+
+```python
+import json
+
+from arize.experimental.datasets.experiments.evaluators.base import (
+    EvaluationResult,
+    CodeEvaluator,
+)
+```
+
+`my_evaluator.py` (class definition only — no imports):
+
+```python
+class JSONSchemaEval(CodeEvaluator):
+    def evaluate(self, *, prediction=None, **kwargs) -> EvaluationResult:
+        # required_keys is a STRING_ARRAY static param -> a Python list
+        required_keys = self.required_keys or []
+        try:
+            parsed = json.loads(prediction or "")
+        except (TypeError, ValueError) as exc:
+            return EvaluationResult(
+                label="fail",
+                score=0.0,
+                explanation=f"output is not valid JSON: {exc}",
+            )
+        if not isinstance(parsed, dict):
+            return EvaluationResult(
+                label="fail",
+                score=0.0,
+                explanation="output JSON is not an object",
+            )
+        missing = [key for key in required_keys if key not in parsed]
+        passed = not missing
+        return EvaluationResult(
+            label="pass" if passed else "fail",
+            score=float(passed),
+            explanation=(
+                "all required keys present"
+                if passed
+                else f"missing keys: {', '.join(missing)}"
+            ),
+        )
+```
+
 ```bash
-# Custom Python: inline code
+# Custom Python (recommended): load imports + class from files
 ax evaluators create-code-evaluator \
-  --name "Word Count Check" \
+  --name "JSON Schema Check" \
   --space SPACE \
-  --template-name "word_count" \
   --commit-message "Initial version" \
   --code-type custom \
-  --code-name "word_count_eval" \
-  --variables '[{"name": "max_words", "value": 100}]' \
-  --code 'def evaluate(output, max_words):
-    count = len(output.split())
-    return {"label": "pass" if count <= max_words else "fail", "score": count}'
-
-# Custom Python: from file
-ax evaluators create-code-evaluator \
-  --name "Custom Evaluator" \
-  --space SPACE \
-  --template-name "custom_eval" \
-  --commit-message "Initial version" \
-  --code-type custom \
-  --code-name "my_eval" \
-  --variables '[]' \
+  --code-name "json_schema_eval" \
+  --variables '["prediction"]' \
+  --static-params '[{"name": "required_keys", "type": "STRING_ARRAY", "default_value": ["answer", "confidence"]}]' \
+  --imports @./my_evaluator_imports.py \
   --code @./my_evaluator.py
+```
 
+You *can* inline both blocks instead, single-quoting each so the shell does not
+interpolate the Python — but for anything with its own imports or multiple branches
+like this, the file-based form above is easier to read and less error-prone:
+
+```bash
+# Custom Python (inline): workable, but harder to maintain than the file form
+ax evaluators create-code-evaluator \
+  --name "JSON Schema Check" \
+  --space SPACE \
+  --commit-message "Initial version" \
+  --code-type custom \
+  --code-name "json_schema_eval" \
+  --variables '["prediction"]' \
+  --static-params '[{"name": "required_keys", "type": "STRING_ARRAY", "default_value": ["answer", "confidence"]}]' \
+  --imports 'import json
+
+from arize.experimental.datasets.experiments.evaluators.base import (
+    EvaluationResult,
+    CodeEvaluator,
+)' \
+  --code 'class JSONSchemaEval(CodeEvaluator):
+    def evaluate(self, *, prediction=None, **kwargs) -> EvaluationResult:
+        required_keys = self.required_keys or []
+        try:
+            parsed = json.loads(prediction or "")
+        except (TypeError, ValueError) as exc:
+            return EvaluationResult(
+                label="fail",
+                score=0.0,
+                explanation=f"output is not valid JSON: {exc}",
+            )
+        if not isinstance(parsed, dict):
+            return EvaluationResult(
+                label="fail",
+                score=0.0,
+                explanation="output JSON is not an object",
+            )
+        missing = [key for key in required_keys if key not in parsed]
+        passed = not missing
+        return EvaluationResult(
+            label="pass" if passed else "fail",
+            score=float(passed),
+            explanation=(
+                "all required keys present"
+                if passed
+                else f"missing keys: {', '.join(missing)}"
+            ),
+        )'
+```
+
+```bash
 # Create a new version of a code evaluator
 ax evaluators create-code-evaluator-version NAME_OR_ID \
   --commit-message "Updated regex pattern" \
   --code-type managed \
   --code-name "regex_check" \
-  --managed-evaluator MatchesRegex \
-  --variables '[{"name": "pattern", "value": "^[A-Z]"}]'
+  --managed-evaluator MATCHES_REGEX \
+  --variables '["output"]' \
+  --static-params '[{"name": "pattern", "type": "REGEX", "default_value": "^[A-Z]"}]'
 ```
 
 **Key flags for `create-code-evaluator`:**
@@ -180,15 +314,14 @@ ax evaluators create-code-evaluator-version NAME_OR_ID \
 |------|----------|-------------|
 | `--name` | yes | Evaluator name (unique within space) |
 | `--space` | yes | Space name or ID to create in |
-| `--template-name` | yes | Eval column name — alphanumeric, spaces, hyphens, underscores |
 | `--commit-message` | yes | Description of this version |
-| `--code-type` | yes | `managed` (built-in pattern) or `custom` (Python function) |
-| `--code-name` | yes | Internal identifier for the code evaluator |
-| `--variables` | yes | JSON array of variable definitions `[{"name": "...", "value": ...}]` |
-| `--managed-evaluator` | managed only | One of: `MatchesRegex`, `JSONParseable`, `ContainsAnyKeyword`, `ContainsAllKeywords`, `ExactMatch` |
-| `--code` | custom only | Python code string (or `@filepath` to read from file) |
-| `--imports` | custom only | Python import block for the code |
-| `--static-params` | no | JSON of static parameters passed to the evaluator function |
+| `--code-type` | yes | `managed` (built-in pattern) or `custom` (Python class) |
+| `--code-name` | yes | Eval column name — alphanumeric, spaces, hyphens, underscores. (Code evaluators have **no** `--template-name` flag; that flag belongs to `create-template-evaluator`.) |
+| `--variables` | yes | JSON array of column/attribute names (strings), e.g. `'["prediction", "actual"]'`. For `custom`, each must match a named `evaluate()` parameter. For `managed`, these are the input columns the check reads — the check's own config (pattern, keyword list) goes in `--static-params`. |
+| `--managed-evaluator` | managed only | Case-sensitive; one of: `MATCHES_REGEX`, `JSON_PARSEABLE`, `CONTAINS_ANY_KEYWORD`, `CONTAINS_ALL_KEYWORDS`, `EXACT_MATCH` |
+| `--code` | custom only | Python source for the `CodeEvaluator` subclass only — no imports (or `@filepath` to read from file) |
+| `--imports` | custom only | Python import block for `--code`, e.g. the `arize.experimental.datasets.experiments.evaluators.base` import (or `@filepath`) |
+| `--static-params` | no | JSON array of static config parameters read via `self.<name>` inside `evaluate()`. Each item: `{"name": ..., "type": "STRING"\|"STRING_ARRAY"\|"REGEX", "default_value": ...}` — `default_value` is a string for `STRING`/`REGEX` and an array of strings for `STRING_ARRAY`; cast numerics explicitly (e.g. `int(self.<name>)`) |
 | `--query-filter` | no | SQL-style filter to restrict which spans are evaluated |
 | `--description` | no | Human-readable description |
 | `--data-granularity` | no | `span` (default), `trace`, or `session` |
@@ -203,13 +336,13 @@ ax evaluators create-code-evaluator-version NAME_OR_ID \
 ax tasks list --space SPACE
 ax tasks list --project PROJECT_NAME
 ax tasks list --dataset DATASET_NAME --space SPACE
-ax tasks list --task-type template_evaluation   # filter by type: template_evaluation, code_evaluation, run_experiment
+ax tasks list --task-type TEMPLATE_EVALUATION   # filter by type: TEMPLATE_EVALUATION, CODE_EVALUATION, RUN_EXPERIMENT
 ax tasks get TASK_ID
 
 # Create evaluation task (project — continuous)
 ax tasks create-evaluation \
   --name "Correctness Monitor" \
-  --task-type template_evaluation \
+  --task-type TEMPLATE_EVALUATION \
   --project PROJECT_NAME \
   --evaluators '[{"evaluator_id": "EVAL_ID", "column_mappings": {"input": "attributes.input.value", "output": "attributes.output.value"}}]' \
   --is-continuous \
@@ -218,7 +351,7 @@ ax tasks create-evaluation \
 # Create evaluation task (project — one-time / backfill)
 ax tasks create-evaluation \
   --name "Correctness Backfill" \
-  --task-type template_evaluation \
+  --task-type TEMPLATE_EVALUATION \
   --project PROJECT_NAME \
   --evaluators '[{"evaluator_id": "EVAL_ID", "column_mappings": {"input": "attributes.input.value", "output": "attributes.output.value"}}]' \
   --no-continuous
@@ -226,7 +359,7 @@ ax tasks create-evaluation \
 # Create evaluation task (experiment / dataset)
 ax tasks create-evaluation \
   --name "Experiment Scoring" \
-  --task-type template_evaluation \
+  --task-type TEMPLATE_EVALUATION \
   --dataset DATASET_NAME --space SPACE \
   --experiment-ids "EXP_ID_1,EXP_ID_2" \   # base64 IDs from `ax experiments list --space SPACE -o json`
   --evaluators '[{"evaluator_id": "EVAL_ID", "column_mappings": {"output": "output"}}]' \

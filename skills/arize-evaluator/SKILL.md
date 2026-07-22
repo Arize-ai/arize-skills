@@ -47,6 +47,8 @@ An **evaluator** is an LLM-as-judge definition. It contains:
 
 Evaluators are **versioned** — every prompt or model change creates a new immutable version. The most recent version is active.
 
+**Code evaluators** are the deterministic alternative — no AI integration or model, just Python. They run as a class subclassing `CodeEvaluator`, not a bare function, and have their own strict import-path and `evaluate()`-signature contract. Getting either wrong makes a run cancel silently at `0/0/0`. See "Custom Python code evaluators" in [references/cli-reference.md](references/cli-reference.md) before writing one.
+
 ### What is a Task?
 
 A **task** is how you run one or more evaluators against real data. Tasks are attached to a **project** (live traces/spans) or a **dataset** (experiment runs). A task contains:
@@ -219,7 +221,7 @@ Include a mapping for **every** variable the template references. Omitting one c
 ```bash
 ax tasks create-evaluation \
   --name "Hallucination Backfill" \
-  --task-type template_evaluation \
+  --task-type TEMPLATE_EVALUATION \
   --project PROJECT \
   --evaluators '[{"evaluator_id": "EVAL_ID", "column_mappings": {"input": "attributes.input.value", "output": "attributes.output.value"}}]' \
   --no-continuous
@@ -229,7 +231,7 @@ ax tasks create-evaluation \
 ```bash
 ax tasks create-evaluation \
   --name "Hallucination Monitor" \
-  --task-type template_evaluation \
+  --task-type TEMPLATE_EVALUATION \
   --project PROJECT \
   --evaluators '[{"evaluator_id": "EVAL_ID", "column_mappings": {"input": "attributes.input.value", "output": "attributes.output.value"}}]' \
   --is-continuous \
@@ -322,7 +324,7 @@ ax datasets export DATASET_NAME --space SPACE --stdout | python3 -c "import sys,
 ```bash
 ax tasks create-evaluation \
   --name "Experiment Correctness" \
-  --task-type template_evaluation \
+  --task-type TEMPLATE_EVALUATION \
   --dataset DATASET_NAME --space SPACE \
   --experiment-ids "EXP_ID" \   # base64 ID from `ax experiments list --space SPACE -o json`
   --evaluators '[{"evaluator_id": "EVAL_ID", "column_mappings": {"output": "output"}}]' \
@@ -422,6 +424,7 @@ The labels in `--classification-choices` must exactly match the labels reference
 | Run failed: "missing rails and classification choices" | Add `--classification-choices '{"label_a": 1, "label_b": 0}'` to `ax evaluators create-template-evaluator` — labels must match the template |
 | Run `completed`, all spans skipped | Query filter matched spans but column mappings are wrong or template variables don't resolve — export a sample span and verify paths |
 | `query_filter` set but 0 spans scored | The filter attribute may not be indexed in the eval index. `attributes.metadata.*` and custom attributes are often not indexed. Use `span_kind` or `attributes.llm.model_name` instead, or remove the filter to confirm spans exist in the window. |
+| Custom **code** evaluator run cancels ~3s with `0/0/0` (successes/errors/skipped) | Wrong import path or `evaluate()` signature — see the "CRITICAL" callout under **Custom Python code evaluators** in [references/cli-reference.md](references/cli-reference.md). Must import from `arize.experimental.datasets.experiments.evaluators.base` (not `arize.experiments`) and declare named `evaluate()` params, not just `**kwargs`. |
 
 ### Diagnosing cancelled runs
 
