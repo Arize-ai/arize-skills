@@ -1,6 +1,16 @@
 # Arize Span Routing Reference
 
-Load this reference when implementing an existing-provider integration, crossing concurrency boundaries, writing tests, or diagnosing skipped spans.
+Load this reference when implementing an Arize agent experiment endpoint or existing-provider integration, crossing concurrency boundaries, writing tests, or diagnosing skipped spans.
+
+## Agent experiment endpoints
+
+For an Arize agent experiment endpoint, use the official tracing-context guide for the request contract and distributed parent-context steps:
+
+https://arize.com/docs/ax/improve/agent-tracing-context
+
+That workflow requires both W3C `traceparent` propagation and per-request space/project routing. Follow the guide to extract and attach the incoming parent context, then apply the routing rules below before starting spans. This skill covers routing only; it does not replace parent-context propagation.
+
+The guide describes environment defaults as one possible fallback. For a multi-tenant service, keep this skill's stricter default: missing or invalid routing must not send spans to another destination. Use a fallback only when the user explicitly requests one and confirms that cross-tenant data placement is acceptable.
 
 ## Runtime contract
 

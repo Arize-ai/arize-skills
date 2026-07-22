@@ -1,6 +1,6 @@
 ---
 name: arize-span-routing
-description: Routes Python OpenTelemetry spans from custom agent builders or multi-tenant applications to different Arize spaces and projects using application metadata. Use when one service must dynamically select an Arize destination per agent, tenant, team, or request, or when the user mentions register_with_routing, set_routing_context, multi-space tracing, or custom span routing.
+description: Use when one Python service must send each agent's, tenant's, team's, or request's spans to its correct Arize space and project using application metadata. Covers dynamic OpenTelemetry routing for custom agent builders and multi-tenant applications, including register_with_routing, set_routing_context, multi-space tracing, and custom span routing.
 metadata:
   author: arize
   version: "1.0"
@@ -9,7 +9,7 @@ compatibility: Requires Python, arize-otel 0.11.0 or newer, and one Arize API ke
 
 # Arize Span Routing Skill
 
-Use this skill to add dynamic, pre-export routing to a Python application. Each traced operation must resolve to exactly one Arize `space_id` and `project_name` before its first span starts.
+Use this skill to send each traced operation from one Python service to its correct Arize space and project. Each operation must resolve to exactly one `space_id` and `project_name` before its first span starts.
 
 Do not use this skill for ordinary single-project tracing; use `arize-instrumentation`. This skill does not reroute spans after export, backfill historical spans, create Arize spaces/projects, or invent a customer-specific metadata mapping.
 
@@ -135,7 +135,7 @@ All auto-instrumented and manual child spans created inside the routing context 
 
 For background work, propagate the OpenTelemetry context explicitly or resolve and enter a new routing context in the worker. Never rely on request-local context after a queue or thread boundary.
 
-See `references/REFERENCE.md` for existing-provider details, concurrency rules, testing, verification, and troubleshooting.
+See `references/REFERENCE.md` for agent experiment endpoints, existing-provider details, concurrency rules, testing, verification, and troubleshooting.
 
 ## Verification
 
