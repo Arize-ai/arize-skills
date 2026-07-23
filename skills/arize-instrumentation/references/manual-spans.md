@@ -93,7 +93,9 @@ def run_agent(user_message: str) -> str:
     return final_reply
 ```
 
-**Context-manager alternative** — only for the fallbacks above: a tool with no decoratable Python function, or a kind with no decorator. (For `session.id`, use `using_session` — see [session-tracking.md](session-tracking.md) — not a wrapper span.) Set the kind, input/output, full TOOL metadata, **and a terminal status** on every span:
+**Context-manager alternative** — only for the fallbacks above: a tool with no decoratable Python function, or a kind with no decorator. If a tool must carry a framework decorator you can't stack `@tracer.tool` on (e.g. Anthropic's `@beta_tool`), move its body into a `@tracer.tool`-decorated helper the tool calls — the helper still gets automatic status and metadata, so you avoid a hand-rolled span entirely. (For `session.id`, use `using_session` — see [session-tracking.md](session-tracking.md) — not a wrapper span.)
+
+**The single most-forgotten line: `span.set_status(Status(StatusCode.OK))`.** `start_as_current_span` records a raised exception as `ERROR` for you, but it **never sets `OK`** — so a span that just sets its attributes and returns exports `UNSET`, which fails trace-quality scoring even when every attribute is present. On every manual span, set the status on the success path, alongside the kind, `input.value`/`output.value`, and — for a TOOL span — `tool.name` **and** `tool.description` **and** `tool.parameters` (all three, not just the name):
 
 ```python
 from opentelemetry.trace import Status, StatusCode
@@ -124,26 +126,21 @@ with tracer.start_as_current_span("run_agent") as chain_span:   # if you own run
             tool_span.set_attribute("output.value", json.dumps(result))   # string attr — JSON-encode dicts/lists
         # ... append tool result to messages, call LLM again ...
     chain_span.set_attribute("output.value", final_reply)
-    chain_span.set_status(Status(StatusCode.OK))
+    chain_span.set_status(Status(StatusCode.OK))   # REQUIRED — the CHAIN needs OK too, not just the tools
 ```
 
 The `with` block auto-sets `ERROR` only on an *uncaught* exception — a tool error you catch and feed back to the model (as above) needs the explicit `record_exception` + `set_status`, or the span exports `UNSET`. Keep the enclosing CHAIN `OK` when the turn still completes; the failure is already on the TOOL span.
 
-A kind with no decorator (RETRIEVER, EMBEDDING, …) is always hand-rolled — same rule, so let the exception propagate and still set a terminal status on both paths:
+A kind with no decorator (RETRIEVER, EMBEDDING, …) is always hand-rolled. Don't wrap it in `try/except` just to set status — a raised exception already becomes `ERROR`; you only need the `OK` line on success:
 
 ```python
 with tracer.start_as_current_span("retrieve") as span:
-    try:
-        span.set_attribute("openinference.span.kind", "RETRIEVER")
-        span.set_attribute("input.value", query)
-        docs = retrieve_documents(query)
-        span.set_attribute("output.value", json.dumps(docs))
-        span.set_status(Status(StatusCode.OK))
-        return docs
-    except Exception as e:
-        span.record_exception(e)
-        span.set_status(Status(StatusCode.ERROR, str(e)))
-        raise
+    span.set_attribute("openinference.span.kind", "RETRIEVER")
+    span.set_attribute("input.value", query)
+    docs = retrieve_documents(query)                     # a raise here → auto ERROR
+    span.set_attribute("output.value", json.dumps(docs))
+    span.set_status(Status(StatusCode.OK))               # REQUIRED — without it the span exports UNSET
+    return docs
 ```
 
 ## TypeScript / JavaScript pattern
