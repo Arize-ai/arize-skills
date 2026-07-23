@@ -81,9 +81,12 @@ func runAgent(ctx context.Context, userMessage string) string {
     for _, toolUse := range toolUses {
         _, toolSpan := tracer.Start(ctx, toolUse.Name)
         argsJSON, _ := json.Marshal(toolUse.Input)
+        spec := toolSpecsByName[toolUse.Name]   // your own tool registry
         toolSpan.SetAttributes(
             attribute.String(semconv.OpenInferenceSpanKind, semconv.SpanKindTool),
-            attribute.String(semconv.ToolName, toolUse.Name),   // + semconv.ToolDescription/ToolParameters if available
+            attribute.String(semconv.ToolName, toolUse.Name),
+            attribute.String(semconv.ToolDescription, spec.Description),
+            attribute.String(semconv.ToolParameters, spec.Parameters),
             attribute.String(semconv.InputValue, string(argsJSON)),
         )
         result, err := runTool(toolUse.Name, toolUse.Input)

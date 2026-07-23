@@ -12,9 +12,9 @@ Provider instrumentors wrap only the LLM *client* — they capture each API call
 
 Manual spans capture the parts of a request an auto-instrumentor can't see. The classic case is an agent/tool loop, but the same applies to a **RAG pipeline** (retrieval + embedding), **rerankers**, **guardrails**, and **eval calls** — each is its own span kind (see the span-kind table below).
 
-**Python: prefer decorators.** Decorate the function with the matching kind — `@tracer.chain`, `@tracer.agent`, `@tracer.tool`, `@tracer.llm` — and it auto-captures arguments as `input.value`, the return as `output.value`, and sets the span kind (see the Python pattern below). Only those four decorators exist; for **RETRIEVER, EMBEDDING, RERANKER, GUARDRAIL, EVALUATOR** spans, use the context-manager form (also below) and set `openinference.span.kind` yourself. TS / Java / Go: use the patterns below.
+**Python: strongly prefer decorators — a decorated span can't export the incomplete or `UNSET` spans a hand-rolled one does.** Decorate the function with the matching kind — `@tracer.chain` (orchestration / root), `@tracer.agent` (autonomous boundary), `@tracer.tool` (a local tool function), `@tracer.llm` — and it auto-captures arguments as `input.value`, the return as `output.value`, sets the kind, fills `tool.name`/`tool.description`/`tool.parameters` from the function name/docstring/signature, **and sets the terminal status (`OK`, or `ERROR` on exception) for you**. The decorator lives on the function *definition*, so it works however the function is called — **dispatching tools dynamically by name does not force a manual span: decorate the underlying tool functions plus the root/turn function and you usually need no manual spans at all.**
 
-Every manual span sets `openinference.span.kind`, `input.value`, and `output.value`; pick the kind from the table below. Common shapes:
+Hand-roll a manual span **only** when there is genuinely no function to decorate (a remote or provider-managed tool, a dynamically constructed callable) or the kind has no decorator (**RETRIEVER, EMBEDDING, RERANKER, GUARDRAIL, EVALUATOR**). A hand-rolled span is exactly where `UNSET` status and missing `tool.description`/`tool.parameters` creep in, so when you must write one, set — before it exits — `openinference.span.kind`, `input.value`, `output.value`, **a terminal status** (`OK` on success; `record_exception` + `ERROR` on failure), and for a TOOL span also `tool.name`, `tool.description`, and `tool.parameters`. Pick the kind from the table below. TS / Java / Go: use the patterns below. Common shapes:
 
 - **Agent / tool loop:** a CHAIN (or AGENT) span for the turn; a TOOL span per tool execution (args → `input.value`, result → `output.value`).
 - **RAG:** a CHAIN for the query; a RETRIEVER span for the vector lookup (query → `input.value`, retrieved chunks → `retrieval.documents.*`, and `output.value` for a readable summary); an EMBEDDING span if you embed the query yourself; then the LLM generation span (auto-instrumented if the client has an instrumentor). Add a RERANKER span if you rerank retrieved docs.
@@ -25,7 +25,7 @@ Every manual span sets `openinference.span.kind`, `input.value`, and `output.val
 
 | Attribute | Use |
 |-----------|-----|
-| `openinference.span.kind` | Pick the right value: `"LLM"` for raw provider API calls (OpenAI, Anthropic, etc.); `"CHAIN"` for orchestration / agent-loop boundaries; `"TOOL"` for tool/function execution; `"RETRIEVER"` for vector-store / search lookups; `"EMBEDDING"` for embedding API calls; `"AGENT"` for an autonomous sub-agent run nested inside a larger chain; `"RERANKER"` for rerank API calls; `"GUARDRAIL"` for guardrail/policy checks; `"EVALUATOR"` for online eval calls. |
+| `openinference.span.kind` | Pick the right value: `"LLM"` for raw provider API calls (OpenAI, Anthropic, etc.); `"CHAIN"` for orchestration / agent-loop boundaries; `"TOOL"` for tool/function execution; `"RETRIEVER"` for vector-store / search lookups; `"EMBEDDING"` for embedding API calls; `"AGENT"` for an autonomous agent boundary that decides its own steps/tools (top-level or nested) — use `"CHAIN"` instead for fixed orchestration; `"RERANKER"` for rerank API calls; `"GUARDRAIL"` for guardrail/policy checks; `"EVALUATOR"` for online eval calls. |
 | `input.value` | string (e.g. user message or JSON of tool args) |
 | `output.value` | string (e.g. final reply or JSON of tool result) |
 | span **status** | The OTel span status (not an OI attribute): set `OK` on success, and `ERROR` + record the exception on failure so failed spans surface in Arize. Python `span.record_exception(e)` + `span.set_status(Status(StatusCode.ERROR, str(e)))`; TS `span.recordException(e)` + `span.setStatus({ code: SpanStatusCode.ERROR })`; Go `span.RecordError(err)` + `span.SetStatus(codes.Error, err.Error())`. The `@tracer.*` decorators set this automatically; on a manual span you set it yourself. |
@@ -93,7 +93,7 @@ def run_agent(user_message: str) -> str:
     return final_reply
 ```
 
-**Context-manager alternative** — use this when you can't decorate a function: a tool dispatched dynamically by name in a loop, or a span kind with no decorator (RETRIEVER, EMBEDDING, etc.). (For `session.id`, use `using_session` — see [session-tracking.md](session-tracking.md) — not a wrapper span.) Tool spans nest as children of the CHAIN span:
+**Context-manager alternative** — only for the fallbacks above: a tool with no decoratable Python function, or a kind with no decorator. (For `session.id`, use `using_session` — see [session-tracking.md](session-tracking.md) — not a wrapper span.) Set the kind, input/output, full TOOL metadata, **and a terminal status** on every span:
 
 ```python
 from opentelemetry.trace import Status, StatusCode
@@ -101,14 +101,17 @@ from opentelemetry.trace import Status, StatusCode
 # Reuse the `tracer` from your setup — the OITracer from register() (decorator
 # example above). A get_tracer() on a fresh provider silently emits no-op spans.
 
-with tracer.start_as_current_span("run_agent") as chain_span:
+with tracer.start_as_current_span("run_agent") as chain_span:   # if you own run_agent, prefer @tracer.chain
     chain_span.set_attribute("openinference.span.kind", "CHAIN")
     chain_span.set_attribute("input.value", user_message)
     # ... LLM call ...
     for tool_use in tool_uses:
+        spec = tool_specs_by_name[tool_use["name"]]   # your own tool registry
         with tracer.start_as_current_span(tool_use["name"]) as tool_span:
             tool_span.set_attribute("openinference.span.kind", "TOOL")
-            tool_span.set_attribute("tool.name", tool_use["name"])   # + tool.description/parameters if you have them
+            tool_span.set_attribute("tool.name", tool_use["name"])
+            tool_span.set_attribute("tool.description", spec["description"])
+            tool_span.set_attribute("tool.parameters", json.dumps(spec["parameters"]))
             tool_span.set_attribute("input.value", json.dumps(tool_use["input"]))
             try:
                 result = run_tool(tool_use["name"], tool_use["input"])
@@ -124,7 +127,24 @@ with tracer.start_as_current_span("run_agent") as chain_span:
     chain_span.set_status(Status(StatusCode.OK))
 ```
 
-The `with` block auto-sets `ERROR` only on an *uncaught* exception — a tool error you catch and feed back to the model (as above) needs the explicit `record_exception` + `set_status`. Keep the enclosing CHAIN `OK` when the turn still completes; the failure is already recorded on the TOOL span. For dynamically dispatched tools, look up `tool.description`/`tool.parameters` from your tool-spec registry by name.
+The `with` block auto-sets `ERROR` only on an *uncaught* exception — a tool error you catch and feed back to the model (as above) needs the explicit `record_exception` + `set_status`, or the span exports `UNSET`. Keep the enclosing CHAIN `OK` when the turn still completes; the failure is already on the TOOL span.
+
+A kind with no decorator (RETRIEVER, EMBEDDING, …) is always hand-rolled — same rule, so let the exception propagate and still set a terminal status on both paths:
+
+```python
+with tracer.start_as_current_span("retrieve") as span:
+    try:
+        span.set_attribute("openinference.span.kind", "RETRIEVER")
+        span.set_attribute("input.value", query)
+        docs = retrieve_documents(query)
+        span.set_attribute("output.value", json.dumps(docs))
+        span.set_status(Status(StatusCode.OK))
+        return docs
+    except Exception as e:
+        span.record_exception(e)
+        span.set_status(Status(StatusCode.ERROR, str(e)))
+        raise
+```
 
 ## TypeScript / JavaScript pattern
 
@@ -146,9 +166,12 @@ await tracer.startActiveSpan("run_agent", async (chainSpan) => {
   chainSpan.setAttribute(INPUT_VALUE, userMessage);
   // ... LLM call ...
   for (const toolUse of toolUses) {
+    const spec = toolSpecsByName[toolUse.name];   // your own tool registry
     await tracer.startActiveSpan(toolUse.name, async (toolSpan) => {
       toolSpan.setAttribute(SemanticConventions.OPENINFERENCE_SPAN_KIND, OpenInferenceSpanKind.TOOL);
-      toolSpan.setAttribute(SemanticConventions.TOOL_NAME, toolUse.name);   // + TOOL_DESCRIPTION/TOOL_PARAMETERS if you have them
+      toolSpan.setAttribute(SemanticConventions.TOOL_NAME, toolUse.name);
+      toolSpan.setAttribute(SemanticConventions.TOOL_DESCRIPTION, spec.description);
+      toolSpan.setAttribute(SemanticConventions.TOOL_PARAMETERS, JSON.stringify(spec.parameters));
       toolSpan.setAttribute(INPUT_VALUE, JSON.stringify(toolUse.input));
       let result: unknown;
       try {
