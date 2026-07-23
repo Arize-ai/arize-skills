@@ -28,7 +28,7 @@ Every manual span sets `openinference.span.kind`, `input.value`, and `output.val
 | `openinference.span.kind` | Pick the right value: `"LLM"` for raw provider API calls (OpenAI, Anthropic, etc.); `"CHAIN"` for orchestration / agent-loop boundaries; `"TOOL"` for tool/function execution; `"RETRIEVER"` for vector-store / search lookups; `"EMBEDDING"` for embedding API calls; `"AGENT"` for an autonomous sub-agent run nested inside a larger chain; `"RERANKER"` for rerank API calls; `"GUARDRAIL"` for guardrail/policy checks; `"EVALUATOR"` for online eval calls. |
 | `input.value` | string (e.g. user message or JSON of tool args) |
 | `output.value` | string (e.g. final reply or JSON of tool result) |
-| span **status** | The OTel span status (not an OI attribute): set `OK` on success, and `ERROR` + record the exception on failure so failed spans surface in Arize. Python `span.set_status(StatusCode.ERROR)` + `span.record_exception(e)`; TS `span.setStatus({ code: SpanStatusCode.ERROR })`; Go `span.SetStatus(codes.Error, err.Error())` + `span.RecordError(err)`. The `@tracer.*` decorators set this automatically. |
+| span **status** | The OTel span status (not an OI attribute): set `OK` on success, and `ERROR` + record the exception on failure so failed spans surface in Arize. Python `span.record_exception(e)` + `span.set_status(Status(StatusCode.ERROR, str(e)))`; TS `span.recordException(e)` + `span.setStatus({ code: SpanStatusCode.ERROR })`; Go `span.RecordError(err)` + `span.SetStatus(codes.Error, err.Error())`. The `@tracer.*` decorators set this automatically; on a manual span you set it yourself. |
 
 **LLM-span attributes (set in addition to the three above for actual LLM calls):**
 
@@ -73,7 +73,7 @@ Python, TypeScript, and Go expose these names as constants via their respective 
 
 ## Python pattern
 
-**Prefer decorators where possible.** Wrap the Arize tracer provider in an `OITracer`, then decorate your agent/chain and tool functions with `@tracer.agent` / `@tracer.chain` / `@tracer.tool` / `@tracer.llm`. Each decorator auto-captures the function arguments as `input.value`, the return value as `output.value`, and sets the span kind; `@tracer.tool` also reads the name, docstring, and signature for the tool's name/description/parameters. Nesting follows the call graph automatically — a tool called inside an `@tracer.agent` function becomes a child TOOL span. See [manual instrumentation → decorators](https://arize.com/docs/ax/instrument/manual-instrumentation#use-decorators) for the current API.
+**Prefer decorators where possible.** Wrap the Arize tracer provider in an `OITracer`, then decorate your agent/chain and tool functions with `@tracer.agent` / `@tracer.chain` / `@tracer.tool` / `@tracer.llm`. Each decorator auto-captures the function arguments as `input.value`, the return value as `output.value`, and sets the span kind; `@tracer.tool` also reads the name, docstring, and signature for the tool's name/description/parameters. Nesting follows the call graph automatically — a tool called inside an `@tracer.agent` function becomes a child TOOL span. Decorators and `start_as_current_span` share one OTel context, so the two forms nest freely under each other (a manual span opened inside a decorated function becomes its child). See [manual instrumentation → decorators](https://arize.com/docs/ax/instrument/manual-instrumentation#use-decorators) for the current API.
 
 ```python
 from arize.otel import register
@@ -96,9 +96,10 @@ def run_agent(user_message: str) -> str:
 **Context-manager alternative** — use this when you can't decorate a function: a tool dispatched dynamically by name in a loop, or a span kind with no decorator (RETRIEVER, EMBEDDING, etc.). (For `session.id`, use `using_session` — see [session-tracking.md](session-tracking.md) — not a wrapper span.) Tool spans nest as children of the CHAIN span:
 
 ```python
-from opentelemetry.trace import get_tracer
+from opentelemetry.trace import Status, StatusCode
 
-tracer = get_tracer("my-app")
+# Reuse the `tracer` from your setup — the OITracer from register() (decorator
+# example above). A get_tracer() on a fresh provider silently emits no-op spans.
 
 with tracer.start_as_current_span("run_agent") as chain_span:
     chain_span.set_attribute("openinference.span.kind", "CHAIN")
@@ -107,12 +108,23 @@ with tracer.start_as_current_span("run_agent") as chain_span:
     for tool_use in tool_uses:
         with tracer.start_as_current_span(tool_use["name"]) as tool_span:
             tool_span.set_attribute("openinference.span.kind", "TOOL")
+            tool_span.set_attribute("tool.name", tool_use["name"])   # + tool.description/parameters if you have them
             tool_span.set_attribute("input.value", json.dumps(tool_use["input"]))
-            result = run_tool(tool_use["name"], tool_use["input"])
-            tool_span.set_attribute("output.value", result)
+            try:
+                result = run_tool(tool_use["name"], tool_use["input"])
+                tool_span.set_status(Status(StatusCode.OK))
+            except Exception as e:
+                # Caught error → nothing escapes the `with`, so set ERROR yourself.
+                result = f"error: {e}"
+                tool_span.record_exception(e)
+                tool_span.set_status(Status(StatusCode.ERROR, str(e)))
+            tool_span.set_attribute("output.value", json.dumps(result))   # string attr — JSON-encode dicts/lists
         # ... append tool result to messages, call LLM again ...
     chain_span.set_attribute("output.value", final_reply)
+    chain_span.set_status(Status(StatusCode.OK))
 ```
+
+The `with` block auto-sets `ERROR` only on an *uncaught* exception — a tool error you catch and feed back to the model (as above) needs the explicit `record_exception` + `set_status`. Keep the enclosing CHAIN `OK` when the turn still completes; the failure is already recorded on the TOOL span. For dynamically dispatched tools, look up `tool.description`/`tool.parameters` from your tool-spec registry by name.
 
 ## TypeScript / JavaScript pattern
 
@@ -136,11 +148,21 @@ await tracer.startActiveSpan("run_agent", async (chainSpan) => {
   for (const toolUse of toolUses) {
     await tracer.startActiveSpan(toolUse.name, async (toolSpan) => {
       toolSpan.setAttribute(SemanticConventions.OPENINFERENCE_SPAN_KIND, OpenInferenceSpanKind.TOOL);
+      toolSpan.setAttribute(SemanticConventions.TOOL_NAME, toolUse.name);   // + TOOL_DESCRIPTION/TOOL_PARAMETERS if you have them
       toolSpan.setAttribute(INPUT_VALUE, JSON.stringify(toolUse.input));
-      const result = await runTool(toolUse.name, toolUse.input);
-      toolSpan.setAttribute(OUTPUT_VALUE, JSON.stringify(result));
-      toolSpan.setStatus({ code: SpanStatusCode.OK });
-      toolSpan.end();
+      let result: unknown;
+      try {
+        result = await runTool(toolUse.name, toolUse.input);
+        toolSpan.setStatus({ code: SpanStatusCode.OK });
+      } catch (e) {
+        // Caught error → set ERROR yourself (as in the Python note above).
+        result = `error: ${e}`;
+        toolSpan.recordException(e as Error);
+        toolSpan.setStatus({ code: SpanStatusCode.ERROR, message: String(e) });
+      } finally {
+        toolSpan.setAttribute(OUTPUT_VALUE, JSON.stringify(result));
+        toolSpan.end();
+      }
     });
     // ... append tool result to messages, call the LLM again ...
   }
