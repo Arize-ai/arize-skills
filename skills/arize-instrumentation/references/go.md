@@ -80,22 +80,31 @@ func runAgent(ctx context.Context, userMessage string) string {
     // ... LLM call (auto-instrumented by openaiotel/anthropicotel if used) ...
     for _, toolUse := range toolUses {
         _, toolSpan := tracer.Start(ctx, toolUse.Name)
-        argsJSON, err := json.Marshal(toolUse.Input)
-        if err != nil {
-            toolSpan.RecordError(err)
-            toolSpan.SetStatus(codes.Error, err.Error())
-        }
+        argsJSON, _ := json.Marshal(toolUse.Input)
+        spec := toolSpecsByName[toolUse.Name]   // your own tool registry
         toolSpan.SetAttributes(
             attribute.String(semconv.OpenInferenceSpanKind, semconv.SpanKindTool),
+            attribute.String(semconv.ToolName, toolUse.Name),
+            attribute.String(semconv.ToolDescription, spec.Description),
+            attribute.String(semconv.ToolParameters, spec.Parameters),
             attribute.String(semconv.InputValue, string(argsJSON)),
         )
-        result := runTool(toolUse.Name, toolUse.Input)
+        result, err := runTool(toolUse.Name, toolUse.Input)
+        if err != nil {
+            // Caught error → set ERROR yourself so the failure surfaces.
+            result = "error: " + err.Error()
+            toolSpan.RecordError(err)
+            toolSpan.SetStatus(codes.Error, err.Error())
+        } else {
+            toolSpan.SetStatus(codes.Ok, "")
+        }
         toolSpan.SetAttributes(attribute.String(semconv.OutputValue, result))
         toolSpan.End()
         // ... append tool result to messages, call LLM again ...
     }
 
     chainSpan.SetAttributes(attribute.String(semconv.OutputValue, finalReply))
+    chainSpan.SetStatus(codes.Ok, "")
     return finalReply
 }
 ```

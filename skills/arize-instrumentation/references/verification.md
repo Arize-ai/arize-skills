@@ -43,6 +43,7 @@ A trace can arrive and still be too sparse to be useful. After confirming arriva
 2. **Expected structure:** the flow contains the expected high-level span kinds, such as `AGENT`/`CHAIN`, `LLM`, and `TOOL` for an agent/tool flow.
 3. **Local tool visibility:** tool spans carry tool input and output when the app runs local tools.
 4. **Parent-child shape:** the trace tree is readable and the main agent/chain -> LLM/tool relationships are intact.
+5. **Manual-span completeness (reject if it fails):** every hand-rolled span carries a terminal status — `OK` on success, `ERROR` + recorded exception on failure — never `UNSET`; and every manual TOOL span carries `tool.name`, `tool.description`, and `tool.parameters`. An `UNSET` status or missing TOOL metadata lowers trace-quality scores even when topology and LLM metadata are correct — treat it as a defect to fix (prefer converting the span to a `@tracer.*` decorator), not a warning to note.
 
 Report both arrival and smoke-check status. If any smoke check fails, end with **confirmed with warnings**: list each warning and attribute its likely cause - **skill wiring** (fix here), **app code**, **framework/instrumentor limitation**, or **product/UI behavior** - then give the next fix step. Do not bury warnings under a generic success message.
 
