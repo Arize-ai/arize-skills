@@ -96,22 +96,40 @@ def run_agent(user_message: str) -> str:
 **Context-manager alternative** — use this when you can't decorate a function: a tool dispatched dynamically by name in a loop, or a span kind with no decorator (RETRIEVER, EMBEDDING, etc.). (For `session.id`, use `using_session` — see [session-tracking.md](session-tracking.md) — not a wrapper span.) Tool spans nest as children of the CHAIN span:
 
 ```python
-from opentelemetry.trace import get_tracer
+from opentelemetry.trace import get_tracer, Status, StatusCode
 
-tracer = get_tracer("my-app")
+tracer = get_tracer("my-app")   # or reuse the OITracer from register()
 
 with tracer.start_as_current_span("run_agent") as chain_span:
     chain_span.set_attribute("openinference.span.kind", "CHAIN")
     chain_span.set_attribute("input.value", user_message)
     # ... LLM call ...
     for tool_use in tool_uses:
+        spec = tool_specs_by_name[tool_use["name"]]   # your own tool registry
         with tracer.start_as_current_span(tool_use["name"]) as tool_span:
             tool_span.set_attribute("openinference.span.kind", "TOOL")
+            tool_span.set_attribute("tool.name", tool_use["name"])
+            tool_span.set_attribute("tool.description", spec["description"])
+            tool_span.set_attribute("tool.parameters", json.dumps(spec["parameters"]))
             tool_span.set_attribute("input.value", json.dumps(tool_use["input"]))
             result = run_tool(tool_use["name"], tool_use["input"])
-            tool_span.set_attribute("output.value", result)
+            tool_span.set_attribute("output.value", json.dumps(result))
+            tool_span.set_status(Status(StatusCode.OK))   # REQUIRED: start_as_current_span never sets OK; without this the span exports UNSET
         # ... append tool result to messages, call LLM again ...
     chain_span.set_attribute("output.value", final_reply)
+    chain_span.set_status(Status(StatusCode.OK))   # REQUIRED on every manual span
+```
+
+A span kind with no decorator (RETRIEVER, EMBEDDING, …) is always hand-rolled. Set its status the same way — a raised exception is auto-marked `ERROR`, so you only add the `OK` line on success:
+
+```python
+with tracer.start_as_current_span("retrieve") as span:
+    span.set_attribute("openinference.span.kind", "RETRIEVER")
+    span.set_attribute("input.value", query)
+    docs = retrieve_documents(query)
+    span.set_attribute("output.value", json.dumps(docs))
+    span.set_status(Status(StatusCode.OK))   # REQUIRED — without this the span exports UNSET
+    return docs
 ```
 
 ## TypeScript / JavaScript pattern
