@@ -177,9 +177,11 @@ ax spans export PROJECT --filter "status_code = 'ERROR'" -l 1 --stdout | jq 'len
 - `--limit` is ignored when `--all` is set
 
 **Networking notes for `--all`:**
-Arrow Flight connects to `flight.arize.com:443` via gRPC+TLS -- this is a different host from the REST API (`api.arize.com`). On internal or private networks, the Flight endpoint may use a different host/port. Configure via:
+Arrow Flight connects via gRPC+TLS -- this is a different host from the REST API (`api.arize.com`). SaaS Flight endpoints are US `flight.arize.com:443`, US regional alias `flight.us-central-1a.arize.com:443`, EU `flight.eu-west-1a.arize.com:443`, and Canada `flight.ca-central-1a.arize.com:443`. On internal or private networks, the Flight endpoint may use a different host/port. Configure via:
 - ax profile: `flight_host`, `flight_port`, `flight_scheme`
 - Environment variables: `ARIZE_FLIGHT_HOST`, `ARIZE_FLIGHT_PORT`, `ARIZE_FLIGHT_SCHEME`
+
+When configuring `flight_host` and `flight_port` separately, do not include `:443` in `flight_host`; use `flight_port=443` only if overriding explicitly.
 
 **Internal/private deployment note:** On internal Arize deployments, Arrow Flight may fail with auth errors even with a valid API key (the Flight endpoint may have additional network or auth restrictions). If `--all` fails, fall back to REST with batched time windows: loop over `--start-time`/`--end-time` ranges (e.g., day by day) using `-l 500` per batch.
 

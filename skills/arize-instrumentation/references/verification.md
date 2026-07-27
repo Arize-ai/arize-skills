@@ -8,7 +8,7 @@ Do not probe `ax` by trial and error. Follow this fixed sequence, and lean on th
 
 1. Run the app and trigger at least one LLM call or real request. Capture the project name and, if the app logs it, the trace ID from runtime logs or exported span context.
 2. Prefer resolving the project to its base64 project ID once. `ax spans export` can use a project name, but the ID is faster and avoids ambiguity when names or spaces overlap.
-3. Prefer a targeted lookup by trace ID, verifying against the same credential context the app exported to: same space, endpoint, and project.
+3. Prefer a targeted lookup by trace ID, verifying against the same credential context the app exported to: same space, endpoint/region, and project.
 4. Trace-ID lookups are immediately consistent once the trace is ingested. If the trace is not found after a few seconds, treat it as an emission/flush problem first, not index lag.
 
 Treat known CLI quirks as expected, not bugs to debug: non-JSON banner/notice lines mixed into stdout, and the default `-l` 500-span cap.
@@ -21,7 +21,7 @@ The common causes are:
 
 - Missing project-name resource attribute: Arize rejects spans with HTTP 500 when the project name is missing. `service.name` alone is not enough.
 - CLI/script process exits before the exporter flushes: call `provider.force_flush()` then `provider.shutdown()` for Python/TypeScript, or `tp.Shutdown(ctx)` for Go before exit.
-- CLI-visible space/project disagrees with the collector-targeted space ID: report the mismatch instead of silently rewriting credentials.
+- CLI-visible space/project/region disagrees with the app's collector endpoint or targeted space ID: report the mismatch instead of silently rewriting credentials.
 
 ## Classified blockers
 
@@ -30,7 +30,7 @@ If verification still fails, classify the cause and stop. Do not continue with u
 - **no local span emission** - exporter logs show nothing sent.
 - **credential / project resolution** - wrong space, wrong endpoint, missing project, or ambiguous project name/ID context.
 - **indexing delay** - emitted and accepted, but not queryable yet.
-- **network** - cannot reach `otlp.arize.com:443`.
+- **network** - cannot reach the configured collector endpoint. Do not assume only `otlp.arize.com`; check the US/EU/Canada endpoint in [regions-and-endpoints.md](regions-and-endpoints.md).
 - **collector rejection** - remote reject, commonly missing project-name resource attribute.
 
 Report: app instrumentation status, latest local trace/run ID when available, whether exporter logs show local emission, and which blocker class applies.
