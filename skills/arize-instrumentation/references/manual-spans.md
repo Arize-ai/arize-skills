@@ -123,7 +123,7 @@ with tracer.start_as_current_span("run_agent") as chain_span:   # if you own run
                 result = f"error: {e}"
                 tool_span.record_exception(e)
                 tool_span.set_status(Status(StatusCode.ERROR, str(e)))
-            tool_span.set_attribute("output.value", json.dumps(result))   # string attr — JSON-encode dicts/lists
+            tool_span.set_attribute("output.value", result if isinstance(result, str) else json.dumps(result))   # str as-is; dicts/lists → JSON
         # ... append tool result to messages, call LLM again ...
     chain_span.set_attribute("output.value", final_reply)
     chain_span.set_status(Status(StatusCode.OK))   # REQUIRED — the CHAIN needs OK too, not just the tools
@@ -180,7 +180,7 @@ await tracer.startActiveSpan("run_agent", async (chainSpan) => {
         toolSpan.recordException(e as Error);
         toolSpan.setStatus({ code: SpanStatusCode.ERROR, message: String(e) });
       } finally {
-        toolSpan.setAttribute(OUTPUT_VALUE, JSON.stringify(result));
+        toolSpan.setAttribute(OUTPUT_VALUE, typeof result === "string" ? result : JSON.stringify(result));   // string as-is; objects → JSON
         toolSpan.end();
       }
     });
