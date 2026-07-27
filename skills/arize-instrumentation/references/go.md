@@ -82,20 +82,32 @@ func runAgent(ctx context.Context, userMessage string) string {
         _, toolSpan := tracer.Start(ctx, toolUse.Name)
         argsJSON, err := json.Marshal(toolUse.Input)
         if err != nil {
-            toolSpan.RecordError(err)
-            toolSpan.SetStatus(codes.Error, err.Error())
+            toolSpan.RecordError(err)   // capture marshalling failures
         }
+        spec := toolSpecsByName[toolUse.Name]   // your own tool registry
         toolSpan.SetAttributes(
             attribute.String(semconv.OpenInferenceSpanKind, semconv.SpanKindTool),
+            attribute.String(semconv.ToolName, toolUse.Name),
+            attribute.String(semconv.ToolDescription, spec.Description),
+            attribute.String(semconv.ToolParameters, spec.Parameters),   // pre-serialized JSON string (Python/TS serialize inline)
             attribute.String(semconv.InputValue, string(argsJSON)),
         )
-        result := runTool(toolUse.Name, toolUse.Input)
+        result, err := runTool(toolUse.Name, toolUse.Input)
+        if err != nil {
+            // Caught error → set ERROR yourself so the failure surfaces.
+            result = "error: " + err.Error()
+            toolSpan.RecordError(err)
+            toolSpan.SetStatus(codes.Error, err.Error())
+        } else {
+            toolSpan.SetStatus(codes.Ok, "")
+        }
         toolSpan.SetAttributes(attribute.String(semconv.OutputValue, result))
         toolSpan.End()
         // ... append tool result to messages, call LLM again ...
     }
 
     chainSpan.SetAttributes(attribute.String(semconv.OutputValue, finalReply))
+    chainSpan.SetStatus(codes.Ok, "")
     return finalReply
 }
 ```
