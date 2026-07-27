@@ -16,7 +16,7 @@ Key attributes by span kind:
 
 | Span kind | Expected attributes |
 |-----------|---------------------|
-| All AI/workflow spans | `openinference.span.kind`; meaningful `input.value` / `output.value` when the span represents an inspectable operation; parent-child linkage; status on completed operations. |
+| All AI/workflow spans | `openinference.span.kind`; meaningful `input.value` / `output.value` when the span represents an inspectable operation; parent-child linkage; explicit status on completed operations. Completed `LLM`, `TOOL`, `CHAIN`, `AGENT`, `RETRIEVER`, `RERANKER`, `GUARDRAIL`, and `EVALUATOR` spans should finish as `OK` or `ERROR`, not remain `UNSET` by default. |
 | `LLM` | `llm.model_name`; `llm.provider` or `llm.system`; input/output message attributes; `llm.token_count.prompt`, `llm.token_count.completion`, and `llm.token_count.total` when available. |
 | `CHAIN` / `AGENT` | `input.value` for the user request or run input; `output.value` for the final response or run result; child `LLM`, `TOOL`, `RETRIEVER`, or nested `AGENT` spans for the internal steps. |
 | `TOOL` | Tool name as the span name or an equivalent tool-name attribute; `input.value` containing arguments; `output.value` containing the tool result; error status when the tool fails. |
@@ -65,6 +65,8 @@ Key attributes by span kind:
 - **Trigger:** more than 80% of root spans are null/`UNSET` **and** there is impact evidence (child `ERROR` spans, or status-based eval/filter usage).
 - **Guardrail:** if no impact signal exists, report as **advisory**.
 - **Fix direction:** set root status to the final request outcome (`OK` or `ERROR`).
+- **Child status hygiene:** also inspect completed semantic child spans (`LLM`, `TOOL`, `CHAIN`, `RETRIEVER`, `RERANKER`, `GUARDRAIL`, `EVALUATOR`). When more than 80% of completed child spans remain null/`UNSET`, report an **advisory** if the roots are correct, or a **warning** if child errors, eval/filter usage, or failed tool/LLM operations make the missing child status materially misleading.
+- **Child status fix direction:** set `OK` for successful completed operations and `ERROR` with error details for failed operations. For manually-authored spans, set status before ending the span; for provider/framework instrumentors, preserve emitted status instead of overwriting or dropping it.
 
 ### 7. Missing token counts
 - **Trigger:** more than 70% of confidently-classified LLM spans have null or zero `llm.token_count.total`.
