@@ -137,6 +137,9 @@ ax organizations add-user "Platform Team" --user-id USER_ID --role member
 
 # Remove user (also removes from all child spaces) — ⚠ confirm first
 ax organizations remove-user "Platform Team" --user-id USER_ID --force
+
+# Delete organization: ⚠ irreversible; deletes org and all resources inside (spaces, projects, experiments, datasets)
+ax organizations delete "Platform Team" --force
 ```
 
 ---
@@ -224,6 +227,9 @@ Idempotent — if a binding already exists for the user on that resource, exits 
 Restricts a **project** so only users with an explicit role binding on that project can access it. Space/org-level roles are excluded.
 
 ```bash
+ax resource-restrictions list                                          # all restrictions, paginated
+ax resource-restrictions list --limit 50 --cursor PAGINATION_CURSOR    # fetch next page
+
 ax resource-restrictions restrict --resource-id PROJECT_GLOBAL_ID     # idempotent
 ax resource-restrictions unrestrict --resource-id PROJECT_GLOBAL_ID --force   # ⚠ confirm first
 
@@ -286,6 +292,8 @@ ax projects list --space SPACE -l 100 -o json        # get base64 IDs
 ax projects get NAME_OR_ID --space SPACE
 
 ax projects create --name "my-project" --space SPACE
+
+ax projects update NAME_OR_ID --name "new-project-name" --space SPACE
 
 ax projects delete NAME_OR_ID --space SPACE --force   # ⚠ confirm first — deletes all traces and datasets
 ```

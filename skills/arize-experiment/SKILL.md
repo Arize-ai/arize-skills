@@ -179,6 +179,68 @@ Additional columns are passed through as `additionalProperties` on the run.
 
 > **⚠️ Inline evaluations in the create file do NOT attach as scores.** `create` only reads `example_id` and `output`; every other column — including an `evaluations` object — is stored as a passthrough additional field, **not** as an experiment evaluation, and will **not** appear as a score in the UI. This fails silently (no error). To attach scores/labels, create the experiment first, then run `ax experiments annotate-runs`. The `evaluations` object in the schemas below is the **export (read)** shape returned once annotations exist — it is not an input to `create`.
 
+## Run a Task Locally: `ax experiments run`
+
+Execute a Python task function against every row in a dataset, collect outputs, and upload results as an experiment. Unlike `create`, which requires a pre-computed outputs file, `run` loads your task code and manages execution internally.
+
+```bash
+ax experiments run --name "my-experiment" --dataset DATASET_NAME --space SPACE --task task.py
+ax experiments run -n "my-experiment" --dataset DATASET_NAME --space SPACE --task task.py --concurrency 5
+ax experiments run -n "my-experiment" --dataset DATASET_NAME --space SPACE --task task.py --dry-run
+```
+
+The task file must define a top-level `task` function that accepts a dataset example and returns a JSON-serializable value:
+
+```python
+# task.py
+from anthropic import Anthropic
+
+def task(dataset_row):
+    client = Anthropic()
+    response = client.messages.create(
+        model="claude-3-5-sonnet-20241022",
+        max_tokens=256,
+        messages=[
+            {"role": "user", "content": dataset_row["question"]}
+        ]
+    )
+    return response.content[0].text
+```
+
+The function receives each dataset example as a dict and should return the model output. Use `--dry-run` to test locally against the first 10 examples without uploading. This validates your task function before a full run.
+
+### Flags
+
+| Flag | Type | Required | Description |
+|------|------|----------|-------------|
+| `--name, -n` | string | yes | Experiment name |
+| `--dataset` | string | yes | Dataset name or ID to run the experiment against |
+| `--task` | path | yes | Path to Python file defining a top-level `task(dataset_row)` function |
+| `--space, -s` | string | no | Space name or ID (required if using dataset name instead of ID) |
+| `--concurrency, -c` | int | no | Number of concurrent task executions (default: 3) |
+| `--dry-run` | bool | no | Run locally against first 10 examples without uploading |
+| `-o, --output` | string | no | Output format |
+
+## List Runs: `ax experiments list-runs`
+
+View runs for an experiment in a paginated table. Unlike `ax experiments export`, which downloads all runs to a file, `list-runs` displays results in the terminal.
+
+```bash
+ax experiments list-runs EXPERIMENT_NAME --dataset DATASET_NAME --space SPACE
+ax experiments list-runs EXPERIMENT_NAME --dataset DATASET_NAME --space SPACE --limit 30
+ax experiments list-runs EXPERIMENT_ID
+```
+
+### Flags
+
+| Flag | Type | Required | Description |
+|------|------|----------|-------------|
+| `NAME_OR_ID` | string | yes | Experiment name or ID (positional) |
+| `--dataset` | string | no | Dataset name or ID (required if using experiment name instead of ID) |
+| `--space, -s` | string | no | Space name or ID (required when dataset is a name) |
+| `--limit, -l` | int | no | Maximum number of runs to return (default: 15) |
+| `-o, --output` | string | no | Output format |
+
 ## Delete Experiment: `ax experiments delete`
 
 ```bash

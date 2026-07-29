@@ -55,8 +55,13 @@ The installer detects installed agents and optionally installs the `ax` CLI. Use
 If you already have `ax` installed (v0.9.0+):
 
 ```bash
-ax skills install
+ax skills install                                    # interactive
+ax skills install --agent claude-code --yes         # non-interactive, Claude only
+ax skills install --global --agent cursor --yes     # globally for Cursor
+ax skills clear --yes                               # remove Arize skills
 ```
+
+Use `--agent` (repeatable) to target specific agents: claude-code, cursor, codex, windsurf. Pass `--global` to install globally in `~/.claude/skills/` instead of your project, or `--yes` to skip confirmations.
 
 ### Option 4: Claude Code plugin
 
