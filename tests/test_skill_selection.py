@@ -55,6 +55,22 @@ SPECIFIC_PROMPTS = [
         ["arize-instrumentation"],
         ["specific", "instrumentation"],
     ),
+    # arize-span-routing
+    (
+        "Route each agent's Python spans to its assigned Arize space and project",
+        ["arize-span-routing"],
+        ["specific", "span-routing"],
+    ),
+    (
+        "Use register_with_routing and set_routing_context in my custom agent builder",
+        ["arize-span-routing"],
+        ["specific", "span-routing"],
+    ),
+    (
+        "Send each tenant's traces to a different Arize space based on request metadata",
+        ["arize-span-routing"],
+        ["specific", "span-routing"],
+    ),
     # arize-dataset
     (
         "Create a new evaluation dataset with 10 examples",
@@ -275,6 +291,17 @@ VAGUE_PROMPTS = [
         "Help me instrument traces",
         ["arize-instrumentation"],
         ["vague", "instrumentation", "scope"],
+    ),
+    # Should route to span routing
+    (
+        "My agent platform needs traces to land in different customer workspaces",
+        ["arize-span-routing"],
+        ["vague", "span-routing"],
+    ),
+    (
+        "We run many agents in one Python service and each has its own Arize project",
+        ["arize-span-routing"],
+        ["vague", "span-routing"],
     ),
     # Should route to dataset
     (
