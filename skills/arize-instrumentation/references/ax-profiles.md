@@ -20,6 +20,10 @@ Look at the output to understand what's configured:
 
 If a profile exists but one or more settings are wrong, patch only what's broken.
 
+Profile region controls API and Flight routing for `ax` commands. Prefer `--region` over hard-coding SaaS hosts; examples include `us-central-1a`, `us-east-1b`, `eu-west-1a`, and `ca-central-1a`. It does not configure where a separately running app exports traces; app instrumentation uses its own exporter endpoint. For app endpoint selection, see [regions and endpoints](regions-and-endpoints.md).
+
+For EU and Canada, `--region eu-west-1a` and `--region ca-central-1a` automatically set `flight_host` to `flight.eu-west-1a.arize.com` or `flight.ca-central-1a.arize.com` and `flight_port` to `443`. Do not set those fields separately for standard SaaS profiles. Set them directly only for custom/private routing, using interactive profile setup or a complete `--from-file` profile; keep `flight_host` hostname-only (no `:443`) and set `flight_port` separately.
+
 **Never pass a raw API key value as a flag.** Always reference it via the `ARIZE_API_KEY` environment variable. If the variable is not already set in the shell, instruct the user to set it first, then run the command:
 
 ```bash

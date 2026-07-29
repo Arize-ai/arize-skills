@@ -15,7 +15,7 @@ go get github.com/Arize-ai/openinference/go/openinference-instrumentation-anthro
 
 ## Setup & wiring
 
-`Register` once, before creating clients. It reads `ARIZE_SPACE_ID` / `ARIZE_API_KEY` / `ARIZE_PROJECT_NAME` / `ARIZE_COLLECTOR_ENDPOINT` from env when the matching `Options` fields are unset, and sets the required `openinference.project.name` resource attribute (avoids the HTTP 500). EU: `Endpoint: arizeotel.EndpointArizeEurope`.
+`Register` once, before creating clients. It reads `ARIZE_SPACE_ID` / `ARIZE_API_KEY` / `ARIZE_PROJECT_NAME` / `ARIZE_COLLECTOR_ENDPOINT` from env when the matching `Options` fields are unset, and sets the required `openinference.project.name` resource attribute (avoids the HTTP 500). Preserve existing endpoint config; otherwise ask for US/EU/Canada before assuming US. EU: `Endpoint: arizeotel.EndpointArizeEurope`. For Canada or explicit regional aliases, use `ARIZE_COLLECTOR_ENDPOINT`. See [regions-and-endpoints.md](regions-and-endpoints.md).
 
 ```go
 tp, err := arizeotel.Register(ctx, arizeotel.Options{ProjectName: "my-app"})

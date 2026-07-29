@@ -113,7 +113,7 @@ ax experiments export EXPERIMENT_NAME --dataset DATASET_NAME --space SPACE --std
 ### REST vs Flight (`--all`)
 
 - **REST** (default): Lower friction -- no Arrow/Flight dependency, standard HTTPS ports, works through any corporate proxy or firewall. Limited to 500 runs per page.
-- **Flight** (`--all`): Required for experiments with more than 500 runs. Uses gRPC+TLS on a separate host/port (`flight.arize.com:443`) which some corporate networks may block.
+- **Flight** (`--all`): Required for experiments with more than 500 runs. Uses gRPC+TLS on a separate host/port which some corporate networks may block. The active `ax` profile supplies the regional endpoint; see [profile setup](references/ax-profiles.md).
 
 **Agent auto-escalation rule:** If a REST export returns exactly 500 runs, the result is likely truncated. Re-run with `--all` to get the full dataset.
 
