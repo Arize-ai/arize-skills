@@ -41,7 +41,7 @@ An **annotation config** defines the schema for a single type of human feedback 
 | **Type** | `categorical` (pick from a list), `continuous` (numeric range), or `freeform` (free text). |
 | **Values** | For categorical: array of `{"label": str, "score": number}` pairs. |
 | **Min/Max Score** | For continuous: numeric bounds. |
-| **Optimization Direction** | Whether higher scores are better (`maximize`) or worse (`minimize`). Used to render trends in the UI. |
+| **Optimization Direction** | Whether higher scores are better (`MINIMIZE`) or worse (`MAXIMIZE`). Used to render trends in the UI. |
 
 ### Where labels get applied (surfaces)
 
@@ -134,16 +134,18 @@ ax annotation-configs update freeform NAME_OR_ID --space SPACE --new-name "Updat
 **Continuous:**
 
 ```bash
-ax annotation-configs update continuous NAME_OR_ID --space SPACE --min-score 1 --max-score 5 --optimization-direction minimize
+ax annotation-configs update continuous NAME_OR_ID --space SPACE --min-score 1 --max-score 5 --optimization-direction MINIMIZE
 ```
 
 **Categorical:**
 
 ```bash
-ax annotation-configs update categorical NAME_OR_ID --space SPACE --value correct --value incorrect --optimization-direction maximize
+ax annotation-configs update categorical NAME_OR_ID --space SPACE --value correct --value incorrect --optimization-direction MAXIMIZE
 ```
 
-`--space` is required when using a name instead of ID. Repeat `--value` for each categorical label.
+`--space` is required when using a name instead of ID. Each `--value` supplies the
+complete categorical label list: it replaces existing labels rather than appending to
+them. Repeat `--value` for every label that should remain, or omitted labels are removed.
 
 ### Delete
 

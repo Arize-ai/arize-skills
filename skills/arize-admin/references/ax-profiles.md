@@ -98,9 +98,6 @@ ax profiles use work
 Delete a profile. You cannot delete the currently active profile; switch to another first if needed.
 
 ```bash
-ax profiles delete staging
-
-# Use --force to skip the confirmation prompt
 ax profiles delete staging --force
 ```
 

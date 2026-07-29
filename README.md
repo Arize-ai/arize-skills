@@ -61,7 +61,7 @@ ax skills install --global --agent cursor --yes     # globally for Cursor
 ax skills clear --yes                               # remove Arize skills
 ```
 
-Use `--agent` (repeatable) to target specific agents: claude-code, cursor, codex, windsurf. Pass `--global` to install globally in `~/.claude/skills/` instead of your project, or `--yes` to skip confirmations.
+Use `--agent` (repeatable) to target specific agents: claude-code, cursor, codex, windsurf. Pass `--global` to install globally in `~/.<agents>/skills/` instead of your project, or `--yes` to skip confirmations.
 
 ### Option 4: Claude Code plugin
 
