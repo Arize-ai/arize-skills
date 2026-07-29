@@ -4,7 +4,7 @@ description: "Manages Arize users, organizations, spaces, projects, roles, role 
 metadata:
   author: arize
   version: "1.0"
-compatibility: Requires the ax CLI (≥ 0.19.0) and a configured Arize profile with org-admin privileges.
+compatibility: Requires the ax CLI (≥ 0.27.0) and a configured Arize profile with org-admin privileges.
 ---
 
 # Arize Admin Skill

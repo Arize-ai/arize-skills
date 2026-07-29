@@ -4,7 +4,7 @@ description: Downloads, exports, and inspects existing Arize traces and spans to
 metadata:
   author: arize
   version: "1.0"
-compatibility: Requires the ax CLI and a configured Arize profile.
+compatibility: Requires the ax CLI (≥ 0.23.0) and a configured Arize profile.
 ---
 
 # Arize Trace Skill

@@ -4,7 +4,7 @@ description: Creates, manages, and queries Arize datasets and examples. Covers d
 metadata:
   author: arize
   version: "1.0"
-compatibility: Requires the ax CLI and a configured Arize profile.
+compatibility: Requires the ax CLI (≥ 0.27.0) and a configured Arize profile.
 ---
 
 # Arize Dataset Skill
