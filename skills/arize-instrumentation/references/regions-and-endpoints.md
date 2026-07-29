@@ -4,13 +4,13 @@ Use this when configuring or verifying where an app sends Arize traces. App trac
 
 ## Do not assume US
 
-On cold start, inspect the target app's own config for `ARIZE_COLLECTOR_ENDPOINT`, `OTEL_EXPORTER_OTLP_ENDPOINT`, or an in-code Arize endpoint option. If one is present, preserve it and report mismatches instead of replacing it.
+On cold start, inspect the target app's own config for `ARIZE_COLLECTOR_ENDPOINT`, `OTEL_EXPORTER_OTLP_ENDPOINT`, or an in-code Arize endpoint option. Preserve an Arize-specific endpoint and report mismatches instead of replacing it. Treat the generic `OTEL_EXPORTER_OTLP_ENDPOINT` as Arize configuration only after confirming that its owning exporter targets Arize; it may instead belong to an existing Datadog, Honeycomb, or collector exporter that must remain separate.
 
 If the app has no endpoint configured and the user's Arize region is unknown, ask which SaaS region they use: US, EU, or Canada. Use US only as an explicit default when no region is known and you say that is what you are doing.
 
 ## App trace export endpoints
 
-For `arize-otel-python` and OTLP HTTP trace export:
+For `arize-otel-python`'s default OTLP gRPC transport:
 
 | Cluster | Endpoint |
 | --- | --- |
@@ -21,14 +21,16 @@ For `arize-otel-python` and OTLP HTTP trace export:
 
 `arize-otel-python` currently has endpoint constants for US and EU. For Canada, pass the endpoint as a string.
 
-For OTLP gRPC/base endpoint configuration, omit the `/v1` suffix:
+For an explicit OTLP HTTP trace exporter, use the signal-specific `/v1/traces` path:
 
 | Cluster | Endpoint |
 | --- | --- |
-| US | `https://otlp.arize.com` |
-| US regional alias | `https://otlp.us-central-1a.arize.com` |
-| EU | `https://otlp.eu-west-1a.arize.com` |
-| Canada | `https://otlp.ca-central-1a.arize.com` |
+| US | `https://otlp.arize.com/v1/traces` |
+| US regional alias | `https://otlp.us-central-1a.arize.com/v1/traces` |
+| EU | `https://otlp.eu-west-1a.arize.com/v1/traces` |
+| Canada | `https://otlp.ca-central-1a.arize.com/v1/traces` |
+
+A generic `OTEL_EXPORTER_OTLP_ENDPOINT` is a base endpoint whose final signal path depends on the configured OTel exporter and transport. Preserve it for its existing exporter, but do not convert it into Arize configuration until the exporter and target are identified.
 
 ## Go
 

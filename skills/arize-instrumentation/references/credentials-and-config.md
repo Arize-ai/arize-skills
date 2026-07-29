@@ -41,6 +41,6 @@ The user sets these in their own terminal or app config — never in chat:
 - **API key** — from https://app.arize.com → Settings → API Keys; a **scoped service key** is recommended for app/CI use.
 - **Space** — the workspace. Its **name** and base64 **Space ID** are distinct: the `ARIZE_SPACE_ID` exporter env var needs the **base64 ID** (the name is only accepted for `ax` CLI resolution). Find the ID with `ax spaces list`.
 - **Project name** — the logical grouping traces land in; the user chooses it, and it's created on first export.
-- **Region / collector endpoint** — preserve `ARIZE_COLLECTOR_ENDPOINT` or `OTEL_EXPORTER_OTLP_ENDPOINT` when present. If missing, ask for US/EU/Canada and use [regions-and-endpoints.md](regions-and-endpoints.md).
+- **Region / collector endpoint** — preserve `ARIZE_COLLECTOR_ENDPOINT` or an endpoint confirmed to target Arize. If `OTEL_EXPORTER_OTLP_ENDPOINT` is present, first identify its owning exporter; keep a non-Arize exporter separate. If no Arize endpoint is known, ask for US/EU/Canada and use [regions-and-endpoints.md](regions-and-endpoints.md).
 
 Keep the three distinct — **space name** ≠ **space ID** ≠ **project name** — since conflating them is a common cause of "wrong account" verification failures. For the export commands and `ax profiles create` setup, see [ax-profiles.md](ax-profiles.md).

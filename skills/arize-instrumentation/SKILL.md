@@ -16,7 +16,7 @@ Add **Arize AX tracing** to an app for the first time: **detect the stack → fe
 
 ## Phase 1: Analysis (read-only — no code/files)
 
-Detect from manifests + imports: language, package manager, LLM providers, frameworks, existing tracing (`TracerProvider`, `register()`, `ARIZE_*`/`OTEL_*`, Datadog/Honeycomb), existing Arize endpoint/region config (`ARIZE_COLLECTOR_ENDPOINT`, `OTEL_EXPORTER_OTLP_ENDPOINT`, in-code endpoint options), and whether the app runs tools / an agent loop (manual CHAIN/TOOL spans only if the matched framework instrumentor doesn't already cover them — decided in Phase 2). **Confirm scope first** — a monorepo, multiple services, or multiple frameworks needs a "which one?" question before touching anything; don't pick for the user.
+Detect from manifests + imports: language, package manager, LLM providers, frameworks, existing tracing (`TracerProvider`, `register()`, `ARIZE_*`/`OTEL_*`, Datadog/Honeycomb), existing Arize endpoint/region config (`ARIZE_COLLECTOR_ENDPOINT`, an in-code Arize endpoint option, or an `OTEL_EXPORTER_OTLP_ENDPOINT` confirmed to target Arize), and whether the app runs tools / an agent loop (manual CHAIN/TOOL spans only if the matched framework instrumentor doesn't already cover them — decided in Phase 2). **Confirm scope first** — a monorepo, multiple services, or multiple frameworks needs a "which one?" question before touching anything; don't pick for the user.
 
 Output a short summary (stack, proposed integration, existing tracing, scope). If the target is clear and the user asked to instrument now, continue; if ambiguous or analysis-only was requested, stop and confirm.
 
@@ -33,7 +33,7 @@ Output a short summary (stack, proposed integration, existing tracing, scope). I
 - **Project name is required** — missing it → HTTP 500 (`service.name` alone fails). Set as a resource attribute: Python `register(project_name=…)`; TS `SEMRESATTRS_PROJECT_NAME`/`model_id`; Go `Options{ProjectName}` or `openinference.project.name`.
 - **Don't hand-roll a `TracerProvider`/exporter** — use `register()`/`arize-otel-go`; raw OTel only when integrating an existing provider.
 - **Order:** register tracer → instrumentors → clients.
-- **Region:** do not assume US. Preserve `ARIZE_COLLECTOR_ENDPOINT`/`OTEL_EXPORTER_OTLP_ENDPOINT` when present; otherwise ask whether the Arize SaaS region is US, EU, or Canada. See [references/regions-and-endpoints.md](references/regions-and-endpoints.md).
+- **Region:** do not assume US. Preserve `ARIZE_COLLECTOR_ENDPOINT` or an endpoint already confirmed to target Arize. A generic `OTEL_EXPORTER_OTLP_ENDPOINT` may belong to an existing non-Arize exporter; preserve that exporter separately and ask for the Arize SaaS region instead of reusing it blindly. See [references/regions-and-endpoints.md](references/regions-and-endpoints.md).
 - **Flush before exit** (CLI/scripts/notebooks) or async exports drop: Python `force_flush()`+`shutdown()`, TS `shutdown()`, Go `defer tp.Shutdown(ctx)` (never `log.Fatalf`/`os.Exit` mid-span). See [references/session-tracking.md](references/session-tracking.md).
 - **Sessions:** for obvious multi-turn interactions (e.g. a multi-turn chatbot) or when the user asks, add `session.id` so turns group into one conversation — see [references/session-tracking.md](references/session-tracking.md).
 - **Never silently override** the app's project/space/IDs/endpoint — surface mismatches.

@@ -20,7 +20,7 @@ Look at the output to understand what's configured:
 
 If a profile exists but one or more settings are wrong, patch only what's broken.
 
-Profile region controls CLI/API routing for `ax` commands. It does not configure where the running app exports traces; app instrumentation uses its own exporter endpoint. For app endpoint selection, see [regions-and-endpoints.md](regions-and-endpoints.md).
+Profile region controls API and Flight routing for `ax` commands. Prefer `--region` over hard-coding SaaS hosts; examples include `us-central-1a`, `us-east-1b`, `eu-west-1a`, and `ca-central-1a`. It does not configure where a separately running app exports traces; app instrumentation uses its own exporter endpoint. For app endpoint selection, see [regions and endpoints](regions-and-endpoints.md).
 
 **Never pass a raw API key value as a flag.** Always reference it via the `ARIZE_API_KEY` environment variable. If the variable is not already set in the shell, instruct the user to set it first, then run the command:
 
