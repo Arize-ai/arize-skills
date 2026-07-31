@@ -249,71 +249,7 @@ Fields are free-form: extra fields in new examples are added, and missing fields
 
 ## Update Examples: `ax datasets update-examples`
 
-Update existing examples in a dataset by ID. Provide examples via `--json` (inline) or `--file` (CSV/JSON/JSONL/Parquet). Exactly one input source is required. Each example must include an `id` field identifying the row to update. The update is a patch: fields you provide are changed, fields you omit stay the same. By default the update applies to the latest version in place. Pass `--new-version` to capture the update as a new version instead.
-
-### Inline JSON
-
-```bash
-ax datasets update-examples DATASET_NAME --space SPACE --json '[{"id": "ex_001", "answer": "4"}]'
-
-ax datasets update-examples DATASET_NAME --space SPACE --json '[
-  {"id": "ex_001", "answer": "4"},
-  {"id": "ex_002", "answer": "Electromagnetic radiation..."}
-]'
-```
-
-### From a file
-
-```bash
-ax datasets update-examples DATASET_NAME --space SPACE --file updates.csv
-ax datasets update-examples DATASET_NAME --space SPACE --file updates.json
-```
-
-### To a specific version
-
-```bash
-ax datasets update-examples DATASET_NAME --space SPACE --json '[{"id": "ex_001", "answer": "updated"}]' --version-id VERSION_ID
-```
-
-### Capture as a new version
-
-```bash
-ax datasets update-examples DATASET_NAME --space SPACE --json '[{"id": "ex_001", "answer": "updated"}]' --new-version "v2-corrections"
-```
-
-### Flags
-
-| Flag | Type | Required | Description |
-|------|------|----------|-------------|
-| `NAME_OR_ID` | string | yes | Dataset name or ID (positional); add `--space` when using name |
-| `--space` | string | no | Space name or ID (required if using dataset name instead of ID) |
-| `--json` | string | mutex | JSON array of example objects with `id` and fields to update |
-| `--file, -f` | path | mutex | Data file (CSV, JSON, JSONL, Parquet) with rows containing `id` and fields to update |
-| `--version-id` | string | no | Update a specific version (default: latest) |
-| `--new-version` | string | no | Create a new dataset version with this name (default: update in place) |
-| `-o, --output` | string | no | Output format for the returned dataset metadata |
-
-Exactly one of `--json` or `--file` is required.
-
-## Delete Examples: `ax datasets delete-examples`
-
-Delete a batch of examples from a dataset version by ID. Deletion is idempotent and partial-tolerant: examples that no longer exist are silently skipped rather than causing a failure. Up to 1000 examples may be deleted per request. A specific `--version-id` is required since deletions apply to a single dataset version.
-
-```bash
-ax datasets delete-examples DATASET_NAME --space SPACE --version-id VERSION_ID --example-ids '["550e8400-e29b-41d4-a716-446655440000", "f47ac10b-58cc-4372-a567-0e02b2c3d479"]'
-
-ax datasets delete-examples DATASET_NAME --space SPACE --version-id VERSION_ID --example-ids '[...]' --force
-```
-
-### Flags
-
-| Flag | Type | Required | Description |
-|------|------|----------|-------------|
-| `NAME_OR_ID` | string | yes | Dataset name or ID (positional) |
-| `--version-id` | string | yes | Dataset version ID to delete examples from |
-| `--example-ids` | string | yes | JSON array of example IDs (UUIDs) to delete |
-| `--space` | string | no | Space name or ID (required if using dataset name instead of ID) |
-| `--force, -f` | bool | no | Skip confirmation prompt |
+`ax datasets update-examples` patches rows by example `id`; `ax datasets delete-examples` removes rows from a version. Uncommon — run `ax datasets update-examples --help` or `ax datasets delete-examples --help` for flags and input formats.
 
 ## Delete Dataset: `ax datasets delete`
 

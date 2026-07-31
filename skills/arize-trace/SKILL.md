@@ -261,39 +261,12 @@ ax spans annotate PROJECT --file annotations.json --days 7
 The annotation file must contain the span ID and the annotation fields to write. Export a sample span first to confirm span IDs and available fields before bulk-annotating.
 
 ## Delete Spans: `ax spans delete`
-
-Permanently delete spans by ID. This operation is **irreversible**. Once deleted, spans cannot be recovered. Spans not found within the supported lookback window are silently ignored.
-
-**⚠ Confirm before deleting:** By default, the command prompts for confirmation. Pass `--force` to skip the prompt.
-
-### Examples
-
+Irreversible deletion by span ID; missing IDs in the lookback window are silently ignored. Confirms by default (`--force` to skip); pass `--space` with a project name.
 ```bash
-# Delete a single span
 ax spans delete PROJECT --span-id SPAN_ID
-
-# Delete multiple spans with comma-separated IDs
-ax spans delete PROJECT --span-id id1,id2,id3
-
-# Delete multiple spans with repeated flags
-ax spans delete PROJECT --span-id id1 --span-id id2 --span-id id3
-
-# Skip confirmation prompt
-ax spans delete PROJECT --span-id SPAN_ID --force
-
-# When using a project name, provide the space
-ax spans delete my-project --space my-space --span-id SPAN_ID
+ax spans delete PROJECT --span-id id1,id2 --force
 ```
-
-### Flags
-
-| Flag | Type | Required | Description |
-|------|------|----------|-------------|
-| `PROJECT` (positional) | string | yes | Project name or base64 ID |
-| `--span-id` | string | yes | Span ID to delete. Can be comma-separated (id1,id2,id3) or repeated (--span-id id1 --span-id id2) |
-| `--space` | string | no | Space name or ID (required when PROJECT is a name) |
-| `--force, -f` | bool | no | Skip confirmation prompt |
-| `--verbose, -v` | bool | no | Verbose output |
+`--span-id` accepts comma-separated or repeated values. Run `ax spans delete --help` for all flags.
 
 ## Filter Syntax Reference
 
