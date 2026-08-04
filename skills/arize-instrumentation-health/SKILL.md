@@ -24,7 +24,7 @@ Use this skill for an **on-demand instrumentation health audit** over a project'
 4. **Run the deterministic checks** in references/checks.md against the sample.
 5. **Report findings** ranked by severity then confidence, using the **Output format** in references/checks.md.
 
-This skill is **read-only by default**. Inspect exported spans and source files only when they help attribute the cause. Do not edit application code, tests, configuration, dependencies, or generated artifacts during a health audit unless the user explicitly asks this skill to make fixes in the same turn. When fixes are needed, report the next action as a handoff to `arize-instrumentation` or the relevant framework-specific instrumentation path.
+This skill is **read-only by default**. Inspect exported spans and source files only when they help attribute the cause. Do not edit application code, tests, configuration, dependencies, or generated artifacts during a health audit unless the user explicitly asks this skill to make fixes in the same turn. When fixes are needed and the user has not asked for them in this turn, report the next action as a handoff to `arize-instrumentation` or the relevant framework-specific instrumentation path.
 
 ## Reading exported spans
 

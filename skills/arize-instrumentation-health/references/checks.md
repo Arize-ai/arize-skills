@@ -40,8 +40,8 @@ Key attributes by span kind:
 - **Min data:** ≥5 traces.
 
 ### 2. Flat trace structure
-- **Trigger:** more than 80% of multi-span traces have depth 1 in a known multi-step framework or agent workflow.
-- **Guardrail:** require framework or multi-step evidence — raw OTel flat traces can be intentional.
+- **Trigger:** more than 80% of multi-span traces have depth 1 — all non-root spans are direct children of the root, with no span-to-span nesting below the root level — in a known multi-step framework or agent workflow.
+- **Guardrail:** require framework or multi-step evidence. Downgrade when the trace appears to be an intentional parallel fan-out or star topology; raw OTel flat traces can also be intentional.
 - **Fix direction:** initialize tracing and instrumentors **before** app imports and client initialization.
 
 ### 3. Uncategorized spans
@@ -66,6 +66,7 @@ Key attributes by span kind:
 - **Guardrail:** if no impact signal exists, report as **advisory**.
 - **Fix direction:** set root status to the final request outcome (`OK` or `ERROR`).
 - **Child status hygiene:** also inspect completed semantic child spans (`LLM`, `TOOL`, `CHAIN`, `RETRIEVER`, `RERANKER`, `GUARDRAIL`, `EVALUATOR`). When more than 80% of completed child spans remain null/`UNSET`, report an **advisory** if the roots are correct, or a **warning** if child errors, eval/filter usage, or failed tool/LLM operations make the missing child status materially misleading.
+- **Child-status-only output:** when only the child-status hygiene sub-trigger fires and the root trigger does not, emit a separate finding labelled **Check 6b — child span status unset** rather than omitting it.
 - **Child status fix direction:** set `OK` for successful completed operations and `ERROR` with error details for failed operations. For manually-authored spans, set status before ending the span; for provider/framework instrumentors, preserve emitted status instead of overwriting or dropping it.
 
 ### 7. Missing token counts

@@ -63,6 +63,8 @@ def _is_llm_candidate(span: dict[str, Any]) -> bool:
         [
             attrs.get("openinference.span.kind") == "LLM",
             attrs.get("llm.model_name"),
+            attrs.get("llm.input_messages"),
+            attrs.get("llm.output_messages"),
             any(key.startswith("llm.token_count.") for key in attrs),
             span.get("name") in {"openai.chat.completions", "chat.completions"},
         ]
