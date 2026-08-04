@@ -1,30 +1,25 @@
-# Manual Spans for Tool Use and Agent Loops
+# Manual Spans
 
-Consult this when the app uses LLM tool/function calling and you need to add CHAIN + TOOL spans so tool calls and results appear in the trace.
+Consult this when you need spans an auto-instrumentor won't create — tool executions and the agent/chain boundary in a tool loop, or RAG / reranker / guardrail / eval steps — so they appear in the trace with input/output.
 
-## Why auto-instrumentors don't capture tool execution
+> **The OpenAI and Anthropic SDK auto-instrumentors capture the LLM API call — including the model's tool-call *request* (the tool name + arguments it wants) and the tool *definitions* you passed — but NOT the tool's *execution*, its *return value*, or the agent-loop/chain boundary.** So if a raw OpenAI- or Anthropic-SDK app runs tools (parses the `tool_use` / tool-call, executes it, feeds the result back on the next call), you **must** add a TOOL span per execution (to capture the actual result) and a CHAIN span to group the turn — otherwise you get only a flat series of LLM spans with no tool results and no grouping. *Framework* instrumentors (LangChain, LangGraph, CrewAI, OpenAI Agents SDK, …) *typically* capture tools and chains — verify in the matched integration doc before skipping manual spans.
 
-**Provider instrumentors (Anthropic, OpenAI, etc.) only wrap the LLM *client* — the code that sends HTTP requests and receives responses.** They see:
+## Why auto-instrumentors miss it
 
-- One span per API call: request (messages, system prompt, tools) and response (text, tool_use blocks, etc.).
-
-They **cannot** see what happens *inside your application* after the response:
-
-- **Tool execution** — Your code parses the response, calls `run_tool("check_loan_eligibility", {...})`, and gets a result. That runs in your process; the instrumentor has no hook into your `run_tool()` or the actual tool output. The *next* API call (sending the tool result back) is just another `messages.create` span — the instrumentor doesn't know that the message content is a tool result or what the tool returned.
-- **Agent/chain boundary** — The idea of "one user turn → multiple LLM calls + tool calls" is an *application-level* concept. The instrumentor only sees separate API calls; it doesn't know they belong to the same logical "run_agent" run.
-
-So TOOL and CHAIN spans have to be added **manually** (or by a *framework* instrumentor like LangChain/LangGraph that knows about tools and chains). Once you add them, they appear in the same trace as the LLM spans because they use the same TracerProvider.
+Provider instrumentors wrap only the LLM *client* — they capture each API call's request (messages, tools) and response (text, `tool_use` blocks), but not what your code does next: running `run_tool(...)`, the tool's return value, or the fact that several API calls form one logical turn. Those are application-level, so the TOOL and CHAIN spans are yours to add (a *framework* instrumentor like LangChain/LangGraph adds them for you). Manual spans use the same TracerProvider, so they land in the same trace.
 
 **When you can skip manual spans:** if a *framework* instrumentor (LangChain, LangGraph, LlamaIndex, the Vercel AI SDK, etc.) already emits CHAIN/AGENT and TOOL spans, verify its spans first and add manual spans only for gaps. Manual spans are for **raw provider SDK / hand-rolled tool loops** (OpenAI, Anthropic, Bedrock, LiteLLM) where nothing above the LLM client is instrumented.
 
 ## Adding manual spans
 
-To avoid sparse traces where tool inputs/outputs are missing:
+Manual spans capture the parts of a request an auto-instrumentor can't see. The classic case is an agent/tool loop, but the same applies to a **RAG pipeline** (retrieval + embedding), **rerankers**, **guardrails**, and **eval calls** — each is its own span kind (see the span-kind table below).
 
-1. **Detect** agent/tool patterns: a loop that calls the LLM, then runs one or more tools (by name + arguments), then calls the LLM again with tool results.
-2. **Add manual spans** using the same TracerProvider (e.g. `opentelemetry.trace.get_tracer(...)` after `register()`):
-   - **CHAIN span** — Wrap the full agent run (e.g. `run_agent`): set `openinference.span.kind` = `"CHAIN"`, `input.value` = user message, `output.value` = final reply.
-   - **TOOL span** — Wrap each tool invocation: set `openinference.span.kind` = `"TOOL"`, `input.value` = JSON of arguments, `output.value` = JSON of result. Use the tool name as the span name (e.g. `check_loan_eligibility`).
+**Python: strongly prefer decorators — a decorated span can't export the incomplete or `UNSET` spans a hand-rolled one does.** Decorate the function with the matching kind — `@tracer.chain` (orchestration / root), `@tracer.agent` (autonomous boundary), `@tracer.tool` (a local tool function), `@tracer.llm` — and it auto-captures arguments as `input.value`, the return as `output.value`, sets the kind, fills `tool.name`/`tool.description`/`tool.parameters` from the function name/docstring/signature, **and sets the terminal status (`OK`, or `ERROR` on exception) for you**. The decorator lives on the function *definition*, so it works however the function is called — **dispatching tools dynamically by name does not force a manual span: decorate the underlying tool functions plus the root/turn function and you usually need no manual spans at all.**
+
+Hand-roll a manual span **only** when there is genuinely no function to decorate (a remote or provider-managed tool, a dynamically constructed callable) or the kind has no decorator (**RETRIEVER, EMBEDDING, RERANKER, GUARDRAIL, EVALUATOR**). A hand-rolled span is exactly where `UNSET` status and missing `tool.description`/`tool.parameters` creep in, so when you must write one, set — before it exits — `openinference.span.kind`, `input.value`, `output.value`, **a terminal status** (`OK` on success; `record_exception` + `ERROR` on failure), and for a TOOL span also `tool.name`, `tool.description`, and `tool.parameters`. Pick the kind from the table below. TS / Java / Go: use the patterns below. Common shapes:
+
+- **Agent / tool loop:** a CHAIN (or AGENT) span for the turn; a TOOL span per tool execution (args → `input.value`, result → `output.value`).
+- **RAG:** a CHAIN for the query; a RETRIEVER span for the vector lookup (query → `input.value`, retrieved chunks → `retrieval.documents.*`, and `output.value` for a readable summary); an EMBEDDING span if you embed the query yourself; then the LLM generation span (auto-instrumented if the client has an instrumentor). Add a RERANKER span if you rerank retrieved docs.
 
 ## OpenInference attributes
 
@@ -32,9 +27,10 @@ To avoid sparse traces where tool inputs/outputs are missing:
 
 | Attribute | Use |
 |-----------|-----|
-| `openinference.span.kind` | Pick the right value: `"LLM"` for raw provider API calls (OpenAI, Anthropic, etc.); `"CHAIN"` for orchestration / agent-loop boundaries; `"TOOL"` for tool/function execution; `"RETRIEVER"` for vector-store / search lookups; `"EMBEDDING"` for embedding API calls; `"AGENT"` for an autonomous sub-agent run nested inside a larger chain; `"RERANKER"` for rerank API calls; `"GUARDRAIL"` for guardrail/policy checks; `"EVALUATOR"` for online eval calls. |
+| `openinference.span.kind` | Pick the right value: `"LLM"` for raw provider API calls (OpenAI, Anthropic, etc.); `"CHAIN"` for orchestration / agent-loop boundaries; `"TOOL"` for tool/function execution; `"RETRIEVER"` for vector-store / search lookups; `"EMBEDDING"` for embedding API calls; `"AGENT"` for an autonomous agent boundary that decides its own steps/tools (top-level or nested) — use `"CHAIN"` instead for fixed orchestration; `"RERANKER"` for rerank API calls; `"GUARDRAIL"` for guardrail/policy checks; `"EVALUATOR"` for online eval calls. |
 | `input.value` | string (e.g. user message or JSON of tool args) |
 | `output.value` | string (e.g. final reply or JSON of tool result) |
+| span **status** | The OTel span status (not an OI attribute): set `OK` on success, and `ERROR` + record the exception on failure so failed spans surface in Arize. Python `span.record_exception(e)` + `span.set_status(Status(StatusCode.ERROR, str(e)))`; TS `span.recordException(e)` + `span.setStatus({ code: SpanStatusCode.ERROR })`; Go `span.RecordError(err)` + `span.SetStatus(codes.Error, err.Error())`. The `@tracer.*` decorators set this automatically; on a manual span you set it yourself. |
 
 **LLM-span attributes (set in addition to the three above for actual LLM calls):**
 
@@ -50,144 +46,177 @@ To avoid sparse traces where tool inputs/outputs are missing:
 | `llm.token_count.completion` | int — completion/output tokens |
 | `llm.token_count.total` | int — total tokens |
 
-All three languages expose these names as constants via their respective `openinference-semantic-conventions` packages — `from openinference.semconv.trace import SpanAttributes` in Python, `@arizeai/openinference-semantic-conventions` in TypeScript, and `semconv "github.com/Arize-ai/openinference/go/openinference-semantic-conventions"` in Go (e.g. `semconv.LLMModelName`, `semconv.LLMProvider`, `semconv.LLMTokenCountPrompt`).
+**TOOL-span attributes (set with the kind + the three core attributes; `input.value` = call args, `output.value` = tool result):**
+
+| Attribute | Use |
+|-----------|-----|
+| `tool.name` | tool name, e.g. `"check_loan_eligibility"` (also use as the span name) |
+| `tool.description` | what the tool does |
+| `tool.parameters` | JSON schema of the tool's parameters |
+| `tool.id` | id linking this execution to the model's `tool_call.id`, when available |
+
+The model's *request* to call a tool is captured by the provider instrumentor on the LLM span's output message as `message.tool_calls.{i}.tool_call.function.name` and `.tool_call.function.arguments`; your manual TOOL span records the *execution and result*.
+
+**RAG / retrieval-span attributes (RETRIEVER, EMBEDDING, RERANKER — set with the kind + the three core attributes):**
+
+| Attribute | Use |
+|-----------|-----|
+| `retrieval.documents.{i}.document.content` | content of the i-th retrieved document (RETRIEVER) |
+| `retrieval.documents.{i}.document.id` | id of the i-th document |
+| `retrieval.documents.{i}.document.score` | relevance score of the i-th document |
+| `retrieval.documents.{i}.document.metadata` | JSON metadata for the i-th document |
+| `embedding.model_name` | embedding model, e.g. `"text-embedding-3-small"` (EMBEDDING) |
+| `embedding.embeddings.{i}.embedding.text` | text embedded |
+| `embedding.embeddings.{i}.embedding.vector` | the embedding vector |
+| `reranker.query` / `reranker.model_name` / `reranker.top_k` | rerank query, model, and K (RERANKER) |
+| `reranker.input_documents` / `reranker.output_documents` | documents in/out of the reranker |
+
+Python, TypeScript, and Go expose these names as constants via their respective `openinference-semantic-conventions` packages — `from openinference.semconv.trace import SpanAttributes` in Python, `@arizeai/openinference-semantic-conventions` in TypeScript, and `semconv "github.com/Arize-ai/openinference/go/openinference-semantic-conventions"` in Go (e.g. `semconv.LLMModelName`, `semconv.LLMProvider`, `semconv.LLMTokenCountPrompt`). Java sets them via annotations (see below), not these constants.
 
 ## Python pattern
 
-Get the global tracer (same provider as Arize), then use context managers so tool spans are children of the CHAIN span:
+**Prefer decorators where possible.** Wrap the Arize tracer provider in an `OITracer`, then decorate your agent/chain and tool functions with `@tracer.agent` / `@tracer.chain` / `@tracer.tool` / `@tracer.llm`. Each decorator auto-captures the function arguments as `input.value`, the return value as `output.value`, and sets the span kind; `@tracer.tool` also reads the name, docstring, and signature for the tool's name/description/parameters. Nesting follows the call graph automatically — a tool called inside an `@tracer.agent` function becomes a child TOOL span. Decorators and `start_as_current_span` share one OTel context, so the two forms nest freely under each other (a manual span opened inside a decorated function becomes its child). See [manual instrumentation → decorators](https://arize.com/docs/ax/instrument/manual-instrumentation#use-decorators) for the current API.
 
 ```python
-from opentelemetry.trace import get_tracer
+from arize.otel import register
+from openinference.instrumentation import OITracer, TraceConfig
 
-tracer = get_tracer("my-app", "1.0.0")
+tracer_provider = register(project_name="my-app")   # space_id / api_key read from env
+tracer = OITracer(tracer_provider.get_tracer(__name__), config=TraceConfig())
 
-# In your agent entrypoint:
-with tracer.start_as_current_span("run_agent") as chain_span:
+@tracer.tool
+def get_stock_price(symbol: str, currency: str = "USD") -> str:
+    """Look up the current price for a ticker symbol."""    # -> tool description on the span
+    return fetch_price(symbol, currency)
+
+@tracer.agent                # use @tracer.chain for a non-agentic pipeline step
+def run_agent(user_message: str) -> str:
+    # ... LLM call; call get_stock_price(...) etc. — the TOOL span nests automatically ...
+    return final_reply
+```
+
+**Context-manager alternative** — only for the fallbacks above: a tool with no decoratable Python function, or a kind with no decorator. If a tool must carry a framework decorator you can't stack `@tracer.tool` on (e.g. Anthropic's `@beta_tool`), move its body into a `@tracer.tool`-decorated helper the tool calls — the helper still gets automatic status and metadata, so you avoid a hand-rolled span entirely. (For `session.id`, use `using_session` — see [session-tracking.md](session-tracking.md) — not a wrapper span.)
+
+**The single most-forgotten line: `span.set_status(Status(StatusCode.OK))`.** `start_as_current_span` records a raised exception as `ERROR` for you, but it **never sets `OK`** — so a span that just sets its attributes and returns exports `UNSET`, which fails trace-quality scoring even when every attribute is present. On every manual span, set the status on the success path, alongside the kind, `input.value`/`output.value`, and — for a TOOL span — `tool.name` **and** `tool.description` **and** `tool.parameters` (all three, not just the name):
+
+```python
+from opentelemetry.trace import Status, StatusCode
+
+# Reuse the `tracer` from your setup — the OITracer from register() (decorator
+# example above). A get_tracer() on a fresh provider silently emits no-op spans.
+
+with tracer.start_as_current_span("run_agent") as chain_span:   # if you own run_agent, prefer @tracer.chain
     chain_span.set_attribute("openinference.span.kind", "CHAIN")
     chain_span.set_attribute("input.value", user_message)
     # ... LLM call ...
     for tool_use in tool_uses:
+        spec = tool_specs_by_name[tool_use["name"]]   # your own tool registry
         with tracer.start_as_current_span(tool_use["name"]) as tool_span:
             tool_span.set_attribute("openinference.span.kind", "TOOL")
+            tool_span.set_attribute("tool.name", tool_use["name"])
+            tool_span.set_attribute("tool.description", spec["description"])
+            tool_span.set_attribute("tool.parameters", json.dumps(spec["parameters"]))
             tool_span.set_attribute("input.value", json.dumps(tool_use["input"]))
-            result = run_tool(tool_use["name"], tool_use["input"])
-            tool_span.set_attribute("output.value", result)
+            try:
+                result = run_tool(tool_use["name"], tool_use["input"])
+                tool_span.set_status(Status(StatusCode.OK))
+            except Exception as e:
+                # Caught error → nothing escapes the `with`, so set ERROR yourself.
+                result = f"error: {e}"
+                tool_span.record_exception(e)
+                tool_span.set_status(Status(StatusCode.ERROR, str(e)))
+            tool_span.set_attribute("output.value", result if isinstance(result, str) else json.dumps(result))   # str as-is; dicts/lists → JSON
         # ... append tool result to messages, call LLM again ...
     chain_span.set_attribute("output.value", final_reply)
+    chain_span.set_status(Status(StatusCode.OK))   # REQUIRED — the CHAIN needs OK too, not just the tools
 ```
 
 Because `start_as_current_span` makes the CHAIN/TOOL span the **active** span, provider LLM calls made inside the block auto-nest under it — no manual parenting needed. In notebooks or short-lived scripts, call `tracer_provider.force_flush()` (then `shutdown()`) before the process exits so these spans are exported.
 
-## TypeScript pattern
+The `with` block auto-sets `ERROR` only on an *uncaught* exception — a tool error you catch and feed back to the model (as above) needs the explicit `record_exception` + `set_status`, or the span exports `UNSET`. Keep the enclosing CHAIN `OK` when the turn still completes; the failure is already on the TOOL span.
 
-Use `startActiveSpan` so tool spans — and the provider instrumentor's LLM spans — nest under the CHAIN span:
+A kind with no decorator (RETRIEVER, EMBEDDING, …) is always hand-rolled. Don't wrap it in `try/except` just to set status — a raised exception already becomes `ERROR`; you only need the `OK` line on success:
+
+```python
+with tracer.start_as_current_span("retrieve") as span:
+    span.set_attribute("openinference.span.kind", "RETRIEVER")
+    span.set_attribute("input.value", query)
+    docs = retrieve_documents(query)                     # a raise here → auto ERROR
+    span.set_attribute("output.value", json.dumps(docs))
+    span.set_status(Status(StatusCode.OK))               # REQUIRED — without it the span exports UNSET
+    return docs
+```
+
+## TypeScript / JavaScript pattern
+
+Get a tracer, then use `startActiveSpan` so tool spans nest as children of the CHAIN span. Span kind uses `SemanticConventions.OPENINFERENCE_SPAN_KIND` + the `OpenInferenceSpanKind` enum; `INPUT_VALUE`/`OUTPUT_VALUE` are direct exports of `@arizeai/openinference-semantic-conventions`.
 
 ```typescript
 import { trace, SpanStatusCode } from "@opentelemetry/api";
+import {
+  INPUT_VALUE,
+  OUTPUT_VALUE,
+  SemanticConventions,
+  OpenInferenceSpanKind,
+} from "@arizeai/openinference-semantic-conventions";
 
-const tracer = trace.getTracer("my-app", "1.0.0");
+const tracer = trace.getTracer("my-app");
 
-export async function runAgent(userMessage: string): Promise<string> {
-  return tracer.startActiveSpan("run_agent", async (chainSpan) => {
-    chainSpan.setAttribute("openinference.span.kind", "CHAIN");
-    chainSpan.setAttribute("input.value", userMessage);
-    try {
-      // ... LLM call (auto-instrumented client spans nest here) ...
-      for (const toolUse of toolUses) {
-        await tracer.startActiveSpan(toolUse.name, async (toolSpan) => {
-          toolSpan.setAttribute("openinference.span.kind", "TOOL");
-          toolSpan.setAttribute("input.value", JSON.stringify(toolUse.input));
-          const result = await runTool(toolUse.name, toolUse.input);
-          toolSpan.setAttribute("output.value", JSON.stringify(result));
-          toolSpan.end();
-        });
-        // ... append tool result to messages, call LLM again ...
+await tracer.startActiveSpan("run_agent", async (chainSpan) => {
+  chainSpan.setAttribute(SemanticConventions.OPENINFERENCE_SPAN_KIND, OpenInferenceSpanKind.CHAIN);
+  chainSpan.setAttribute(INPUT_VALUE, userMessage);
+  // ... LLM call ...
+  for (const toolUse of toolUses) {
+    const spec = toolSpecsByName[toolUse.name];   // your own tool registry
+    await tracer.startActiveSpan(toolUse.name, async (toolSpan) => {
+      toolSpan.setAttribute(SemanticConventions.OPENINFERENCE_SPAN_KIND, OpenInferenceSpanKind.TOOL);
+      toolSpan.setAttribute(SemanticConventions.TOOL_NAME, toolUse.name);
+      toolSpan.setAttribute(SemanticConventions.TOOL_DESCRIPTION, spec.description);
+      toolSpan.setAttribute(SemanticConventions.TOOL_PARAMETERS, JSON.stringify(spec.parameters));
+      toolSpan.setAttribute(INPUT_VALUE, JSON.stringify(toolUse.input));
+      let result: unknown;
+      try {
+        result = await runTool(toolUse.name, toolUse.input);
+        toolSpan.setStatus({ code: SpanStatusCode.OK });
+      } catch (e) {
+        // Caught error → set ERROR yourself (as in the Python note above).
+        result = `error: ${e}`;
+        toolSpan.recordException(e as Error);
+        toolSpan.setStatus({ code: SpanStatusCode.ERROR, message: String(e) });
+      } finally {
+        toolSpan.setAttribute(OUTPUT_VALUE, typeof result === "string" ? result : JSON.stringify(result));   // string as-is; objects → JSON
+        toolSpan.end();
       }
-      chainSpan.setAttribute("output.value", finalReply);
-      return finalReply;
-    } catch (err) {
-      chainSpan.setStatus({ code: SpanStatusCode.ERROR, message: String(err) });
-      throw err;
-    } finally {
-      chainSpan.end();
-    }
-  });
-}
+    });
+    // ... append tool result to messages, call the LLM again ...
+  }
+  chainSpan.setAttribute(OUTPUT_VALUE, finalReply);
+  chainSpan.setStatus({ code: SpanStatusCode.OK });
+  chainSpan.end();
+});
 ```
 
-In short-lived scripts, `await provider.forceFlush()` then `await provider.shutdown()` before exit so spans are not dropped.
+## Java pattern (annotation-based)
+
+Java manual tracing is **annotation-driven**, not imperative span-building like the others: annotate methods and a ByteBuddy agent creates the spans at class load, auto-capturing parameters as `input.value` and the return value as `output.value`. Deps: `com.arize:openinference-instrumentation-annotation` + `com.arize:openinference-semantic-conventions`. Annotate the agent-loop method `@Chain` (or `@Agent`) and each tool method `@Tool`:
+
+```java
+import com.arize.instrumentation.annotation.Agent;
+import com.arize.instrumentation.annotation.Chain;
+import com.arize.instrumentation.annotation.Tool;
+import com.arize.instrumentation.annotation.ExcludeFromSpan;
+
+@Chain(name = "run_agent")                       // CHAIN span; or @Agent for the top-level boundary
+public String runAgent(String userMessage) { ... }
+
+@Tool(name = "check_loan_eligibility", description = "Checks eligibility")   // TOOL span
+public Map<String, Object> checkLoanEligibility(String applicantId) { ... }
+```
+
+`@LLM` marks a model call, `@Agent` a top-level orchestration method; `@ExcludeFromSpan` drops a parameter from `input.value`. Setup requires installing the ByteBuddy agent **before any annotated class loads**, then an `OITracer` registered via `OpenInferenceAgent.register(tracer)` — see [java/annotation/annotation-tracing](https://arize.com/docs/ax/integrations/java/annotation/annotation-tracing) for the exact startup sequence. Annotations only trace on the calling thread; across `CompletableFuture`/executors/reactive frameworks, propagate context explicitly or use the programmatic span API from that doc.
 
 ## Go pattern
 
-Get a tracer from the global TracerProvider (registered via `otel.SetTracerProvider`), then nest spans with `tracer.Start` so tool spans become children of the CHAIN span.
-
-> **Critical for short-lived processes:** never call `log.Fatalf` / `os.Exit` after a span has started — they skip the deferred `tp.Shutdown(ctx)` and the in-flight CHAIN/LLM spans never flush. Use `log.Printf` + `return` from `main` instead, and keep `tp.Shutdown(ctx)` deferred at the top of `main`.
-
-```go
-import (
-    "context"
-    "encoding/json"
-    "go.opentelemetry.io/otel"
-    "go.opentelemetry.io/otel/attribute"
-    "go.opentelemetry.io/otel/codes"
-
-    semconv "github.com/Arize-ai/openinference/go/openinference-semantic-conventions"
-)
-
-var tracer = otel.Tracer("my-app")
-
-func runAgent(ctx context.Context, userMessage string) string {
-    ctx, chainSpan := tracer.Start(ctx, "run_agent")
-    defer chainSpan.End()
-    chainSpan.SetAttributes(
-        attribute.String(semconv.OpenInferenceSpanKind, semconv.SpanKindChain),
-        attribute.String(semconv.InputValue, userMessage),
-    )
-
-    // ... LLM call (auto-instrumented by openaiotel/anthropicotel if used) ...
-    for _, toolUse := range toolUses {
-        _, toolSpan := tracer.Start(ctx, toolUse.Name)
-        argsJSON, err := json.Marshal(toolUse.Input)
-        if err != nil {
-            toolSpan.RecordError(err)
-            toolSpan.SetStatus(codes.Error, err.Error())
-        }
-        toolSpan.SetAttributes(
-            attribute.String(semconv.OpenInferenceSpanKind, semconv.SpanKindTool),
-            attribute.String(semconv.InputValue, string(argsJSON)),
-        )
-        result := runTool(toolUse.Name, toolUse.Input)
-        toolSpan.SetAttributes(attribute.String(semconv.OutputValue, result))
-        toolSpan.End()
-        // ... append tool result to messages, call LLM again ...
-    }
-
-    chainSpan.SetAttributes(attribute.String(semconv.OutputValue, finalReply))
-    return finalReply
-}
-```
-
-### Session, user, metadata, tags, suppression (Go)
-
-When the customer asks for session-aware tracing or wants evaluator calls excluded, use the `openinference-instrumentation` package's context helpers — the per-provider instrumentors (openai, anthropic) apply them automatically to every LLM span:
-
-```go
-import instrumentation "github.com/Arize-ai/openinference/go/openinference-instrumentation"
-
-ctx = instrumentation.WithSession(ctx, sessionID)
-ctx = instrumentation.WithUser(ctx, userID)
-ctx = instrumentation.WithMetadata(ctx, metadataJSON)   // caller JSON-encodes the map
-ctx = instrumentation.WithTags(ctx, "prod", "canary")
-// openai/openai-go:
-resp, _ := client.Chat.Completions.New(ctx, params)     // span carries all four
-// anthropics/anthropic-sdk-go:
-// resp, _ := client.Messages.New(ctx, params)
-
-// Off-trace evaluator calls:
-suppressedCtx := instrumentation.WithSuppression(ctx)
-_, _ = evalClient.Chat.Completions.New(suppressedCtx, params)   // no span emitted
-```
-
-For manual spans you author yourself, call `instrumentation.ApplyContextAttributes(ctx, span)` right after `tracer.Start` to copy the same context attributes onto the span. (These values ride `context.Context` via unexported keys — not OTel baggage — so they do not leak out as `baggage` HTTP headers on downstream calls.)
+Go manual-span patterns — the CHAIN/TOOL nesting example, the `WithSession`/`WithUser`/`WithMetadata`/`WithTags`/`WithSuppression` context helpers, and `semconv` constants — live in [go.md](go.md), alongside Go setup and wiring.
 
 See [Manual instrumentation](https://arize.com/docs/ax/instrument/manual-instrumentation) for more span kinds and attributes.

@@ -47,7 +47,7 @@ If an `ax` command fails, troubleshoot based on the error:
 - `command not found` or version error → see [references/ax-setup.md](references/ax-setup.md)
 - `401 Unauthorized` / missing API key → run `ax profiles show` to inspect the current profile. If the profile is missing or the API key is wrong, follow [references/ax-profiles.md](references/ax-profiles.md) to create/update it. If the user doesn't have their key, direct them to https://app.arize.com/admin > API Keys
 - Space unknown → run `ax spaces list` to pick by name, or ask the user
-- **Security:** Never read `.env` files or search the filesystem for credentials. Use `ax profiles` for Arize credentials and `ax ai-integrations` for LLM provider keys. If credentials are not available through these channels, ask the user.
+- **Security:** Never read `.env` files or search the filesystem for credentials. Use `ax profiles` for Arize credentials and `ax ai-integrations` for LLM provider keys. Never ask the user to paste secrets into chat. For missing credentials, see [references/ax-profiles.md](references/ax-profiles.md).
 - Project unclear → run `ax projects list -l 100 -o json` (add `--space SPACE` if known), present the names, and ask the user to pick one
 
 **IMPORTANT:** For `ax traces export`, `--space` is required when using a project name. For `ax spans export`, `--space` is only required when using `--all` (Arrow Flight). If you hit `401 Unauthorized` or limit errors, resolve the project name to a base64 ID first (see "Resolving project for export" in Concepts).
@@ -177,9 +177,11 @@ ax spans export PROJECT --filter "status_code = 'ERROR'" -l 1 --stdout | jq 'len
 - `--limit` is ignored when `--all` is set
 
 **Networking notes for `--all`:**
-Arrow Flight connects to `flight.arize.com:443` via gRPC+TLS -- this is a different host from the REST API (`api.arize.com`). On internal or private networks, the Flight endpoint may use a different host/port. Configure via:
+Arrow Flight connects via gRPC+TLS -- this is a different host from the REST API (`api.arize.com`). SaaS Flight endpoints are US `flight.arize.com:443`, US regional alias `flight.us-central-1a.arize.com:443`, EU `flight.eu-west-1a.arize.com:443`, and Canada `flight.ca-central-1a.arize.com:443`. On internal or private networks, the Flight endpoint may use a different host/port. Configure via:
 - ax profile: `flight_host`, `flight_port`, `flight_scheme`
 - Environment variables: `ARIZE_FLIGHT_HOST`, `ARIZE_FLIGHT_PORT`, `ARIZE_FLIGHT_SCHEME`
+
+When configuring `flight_host` and `flight_port` separately, do not include `:443` in `flight_host`; use `flight_port=443` only if overriding explicitly.
 
 **Internal/private deployment note:** On internal Arize deployments, Arrow Flight may fail with auth errors even with a valid API key (the Flight endpoint may have additional network or auth restrictions). If `--all` fails, fall back to REST with batched time windows: loop over `--start-time`/`--end-time` ranges (e.g., day by day) using `-l 500` per batch.
 

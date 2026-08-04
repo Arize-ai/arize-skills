@@ -23,8 +23,8 @@ If an `ax` command fails, troubleshoot based on the error:
 - `command not found` or version error → see [references/ax-setup.md](references/ax-setup.md)
 - `401 Unauthorized` / missing API key → run `ax profiles show` to inspect the current profile. If the profile is missing or the API key is wrong, follow [references/ax-profiles.md](references/ax-profiles.md) to create/update it. If the user doesn't have their key, direct them to https://app.arize.com/admin > API Keys
 - Space unknown → run `ax spaces list` to pick by name, or ask the user
-- LLM provider call fails (missing OPENAI_API_KEY / ANTHROPIC_API_KEY) → run `ax ai-integrations list --space SPACE` to check for platform-managed credentials. If none exist, ask the user to provide the key or create an integration via the **arize-ai-provider-integration** skill
-- **Security:** Never read `.env` files or search the filesystem for credentials. Use `ax profiles` for Arize credentials and `ax ai-integrations` for LLM provider keys. If credentials are not available through these channels, ask the user.
+- LLM provider call fails (missing provider credentials) → run `ax ai-integrations list --space SPACE` to check for platform-managed credentials. If none exist, use the **arize-ai-provider-integration** skill — never ask the user to paste a provider key into chat.
+- **Security:** Never read `.env` files or search the filesystem for credentials. Use `ax profiles` for Arize credentials and `ax ai-integrations` for LLM provider keys. Never ask the user to paste secrets into chat. For missing credentials, see [references/ax-profiles.md](references/ax-profiles.md).
 - **CRITICAL — Never fabricate evaluation results:** If an evaluation task fails, is cancelled, or produces no scores, report the failure clearly and explain what went wrong. Do NOT perform a "manual evaluation," invent quality scores, estimate percentages, or present any agent-generated analysis as if it came from the Arize evaluation system. Instead suggest: (1) fix the identified issue and retry, (2) try running from the Arize UI, (3) verify integration credentials with `ax ai-integrations list`, (4) contact support at https://arize.com/support
 
 ---
@@ -46,6 +46,8 @@ An **evaluator** is an LLM-as-judge definition. It contains:
 | **Data granularity** | Whether the evaluator runs at the **span**, **trace**, or **session** level. Most evaluators run at the span level. |
 
 Evaluators are **versioned** — every prompt or model change creates a new immutable version. The most recent version is active.
+
+**Code evaluators** are the deterministic alternative — no AI integration or model, just Python. They run as a class subclassing `CodeEvaluator`, not a bare function, and have their own strict import-path and `evaluate()`-signature contract. Getting either wrong makes a run cancel silently at `0/0/0`. See "Custom Python code evaluators" in [references/cli-reference.md](references/cli-reference.md) before writing one.
 
 ### What is a Task?
 
@@ -219,7 +221,7 @@ Include a mapping for **every** variable the template references. Omitting one c
 ```bash
 ax tasks create-evaluation \
   --name "Hallucination Backfill" \
-  --task-type template_evaluation \
+  --task-type TEMPLATE_EVALUATION \
   --project PROJECT \
   --evaluators '[{"evaluator_id": "EVAL_ID", "column_mappings": {"input": "attributes.input.value", "output": "attributes.output.value"}}]' \
   --no-continuous
@@ -229,7 +231,7 @@ ax tasks create-evaluation \
 ```bash
 ax tasks create-evaluation \
   --name "Hallucination Monitor" \
-  --task-type template_evaluation \
+  --task-type TEMPLATE_EVALUATION \
   --project PROJECT \
   --evaluators '[{"evaluator_id": "EVAL_ID", "column_mappings": {"input": "attributes.input.value", "output": "attributes.output.value"}}]' \
   --is-continuous \
@@ -322,7 +324,7 @@ ax datasets export DATASET_NAME --space SPACE --stdout | python3 -c "import sys,
 ```bash
 ax tasks create-evaluation \
   --name "Experiment Correctness" \
-  --task-type template_evaluation \
+  --task-type TEMPLATE_EVALUATION \
   --dataset DATASET_NAME --space SPACE \
   --experiment-ids "EXP_ID" \   # base64 ID from `ax experiments list --space SPACE -o json`
   --evaluators '[{"evaluator_id": "EVAL_ID", "column_mappings": {"output": "output"}}]' \
@@ -422,6 +424,7 @@ The labels in `--classification-choices` must exactly match the labels reference
 | Run failed: "missing rails and classification choices" | Add `--classification-choices '{"label_a": 1, "label_b": 0}'` to `ax evaluators create-template-evaluator` — labels must match the template |
 | Run `completed`, all spans skipped | Query filter matched spans but column mappings are wrong or template variables don't resolve — export a sample span and verify paths |
 | `query_filter` set but 0 spans scored | The filter attribute may not be indexed in the eval index. `attributes.metadata.*` and custom attributes are often not indexed. Use `span_kind` or `attributes.llm.model_name` instead, or remove the filter to confirm spans exist in the window. |
+| Custom **code** evaluator run cancels ~3s with `0/0/0` (successes/errors/skipped) | Wrong import path or `evaluate()` signature — see the "CRITICAL" callout under **Custom Python code evaluators** in [references/cli-reference.md](references/cli-reference.md). Must import from `arize.experimental.datasets.experiments.evaluators.base` (not `arize.experiments`) and declare named `evaluate()` params, not just `**kwargs`. |
 
 ### Diagnosing cancelled runs
 
