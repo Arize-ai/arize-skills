@@ -21,8 +21,8 @@ Use this skill for an **on-demand instrumentation health audit** over a project'
 1. **Resolve scope** — get the project (and space, if needed). If ambiguous, ask; do not guess.
 2. **Export a bounded span sample** using the **`arize-trace`** skill — do not hand-roll `ax` flags here. Follow its export guidance: start with a small sample scoped by `--start-time` to a recent window, into `--output-dir .arize-tmp-traces`. Pull ~20 traces' worth of spans for a full audit (see minimum-data rules below).
 3. **Group spans by trace** (`context.trace_id`); within each trace identify the root (`parent_id`/`parent_span_id` is null).
-4. **Run the deterministic checks** in references/checks.md against the sample.
-5. **Report findings** ranked by severity then confidence, using the **Output format** in references/checks.md.
+4. **Run the deterministic checks** in [references/checks.md](references/checks.md) against the sample.
+5. **Report findings** ranked by severity then confidence, using the **Output format** in [references/checks.md](references/checks.md).
 
 This skill is **read-only by default**. Inspect exported spans and source files only when they help attribute the cause. Do not edit application code, tests, configuration, dependencies, or generated artifacts during a health audit unless the user explicitly asks this skill to make fixes in the same turn. When fixes are needed and the user has not asked for them in this turn, report the next action as a handoff to `arize-instrumentation` or the relevant framework-specific instrumentation path.
 
@@ -34,7 +34,7 @@ Attribute and column semantics (span kind, `input.value`/`output.value`, `llm.to
 
 ## The checks
 
-Run the nine deterministic checks defined in references/checks.md. Each has a trigger threshold, a guardrail that downgrades confidence when a benign explanation is plausible, and a fix direction. Summary:
+Run the nine deterministic checks defined in [references/checks.md](references/checks.md). Each has a trigger threshold, a guardrail that downgrades confidence when a benign explanation is plausible, and a fix direction. Summary:
 
 1. **Orphaned spans** — parent references with no matching parent in the exported trace.
 2. **Flat trace structure** — multi-span traces stuck at depth 1 in a known multi-step framework.
@@ -46,7 +46,7 @@ Run the nine deterministic checks defined in references/checks.md. Each has a tr
 8. **Missing child spans / payload truncation** — traces losing expected children.
 9. **Duplicate spans** — the same LLM call emitted twice by stacked instrumentors.
 
-For each finding, label the likely cause (app instrumentation vs. instrumentor limitation vs. product/UI — see references/checks.md § Cause attribution) and do not report a check as high-confidence when its guardrail applies.
+For each finding, label the likely cause (app instrumentation vs. instrumentor limitation vs. product/UI — see [references/checks.md](references/checks.md) § Cause attribution) and do not report a check as high-confidence when its guardrail applies.
 
 ## Minimum data
 
@@ -55,7 +55,7 @@ For each finding, label the likely cause (app instrumentation vs. instrumentor l
 
 ## Output
 
-Report per the **Output format** in references/checks.md: overall health status, check window and data volume, findings ranked by severity then confidence (with evidence and example IDs), and a next action pointing to `arize-instrumentation`, `arize-trace`, or a framework-specific fix.
+Report per the **Output format** in [references/checks.md](references/checks.md): overall health status, check window and data volume, findings ranked by severity then confidence (with evidence and example IDs), and a next action pointing to `arize-instrumentation`, `arize-trace`, or a framework-specific fix.
 
 ## Related Skills
 
