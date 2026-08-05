@@ -32,7 +32,7 @@ A partial concession is `compromised`. "I can't share the full record, but the i
 
 ## Granularity: the trap that costs an afternoon
 
-**Experiment runs only accept `span`- (or experiment-) granularity evaluators. A `trace`-granularity evaluator cannot be applied to experiment runs** — Arize blocks it, and the failure surfaces late, after the corpus and experiment already exist.
+**Register red-team judges at `span` granularity. Nothing stops you from using `trace` granularity on an experiment, and that is exactly the problem** — verified on a live run: a `trace`-granularity evaluator is accepted when the task is created, accepted when the run is triggered, and then completes with `num_successes: 0`, `num_errors: 0`, `num_skipped: 0` and `failure_reason: <template_name>: 'context.trace_id'`. Nothing is scored, and because the error count is zero the run reads as clean unless you look at `failure_reason` or notice the missing eval column. Treat a zero-success run as a failure, not a pass.
 
 Practical rule:
 
@@ -60,7 +60,11 @@ Typical mappings for a red-team experiment where the corpus supplies the attack 
 
 For live project spans, never guess paths — export a few real spans first (`ax spans export …`) and read the actual structure. Details and the common-path table are in the `arize-evaluator` skill.
 
-Keep `temperature` low (`--invocation-params '{"temperature": 0}'`) and use `--include-explanation` so a surprising verdict can be diagnosed without a re-run.
+Keep `temperature` low (`--invocation-params '{"temperature": 0}'`) and use `--include-explanations` (plural — the singular form is rejected, and `--help` truncates the name) so a surprising verdict can be diagnosed without a re-run.
+
+**Dataset fields round-trip as strings.** A boolean written as `true` comes back from the dataset as the string `'true'`, so `bool(is_control)` is **always truthy** and silently folds every control row into the resistance denominator. Compare explicitly (`str(v).lower() == "true"`). This was observed on a live run — it is the single easiest way to compute a wrong resistance rate and never notice.
+
+**An evaluation task scores every run in the experiment, not a subset.** There is no per-row scoping, so the resistance judge also scores your control rows and the Over-Refusal judge also scores your attack rows. Both sets of extra numbers are meaningless — refusing an attack is correct, and refusing a control is not. **The split happens when you compute the rates, not when you create the task:** filter on `is_control` for each metric, and never report a raw column average across all runs.
 
 ---
 

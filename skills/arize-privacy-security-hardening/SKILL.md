@@ -163,11 +163,11 @@ Confirm each step. Report the created resource and a deep link (`arize-link`).
 **1. Build the corpus.** Follow [references/attack-corpus.md](references/attack-corpus.md): the row schema, the four-point quality bar, and stratification. Seed from real traffic first where it exists (`arize-trace`), paraphrased with every identifier fabricated. Include composed/chained rows and a benign control set of 15–20%, without which over-refusal is invisible. Create the dataset with `arize-dataset`; write any generated files under `.scratch/` or the project's gitignored scratch location, not into the repo.
 
 **2. Register the judges.** One per family, from [references/judge-library.md](references/judge-library.md), via `arize-evaluator`. Non-negotiables:
-- `--data-granularity span` — **trace-granularity evaluators cannot be applied to experiment runs.**
+- `--data-granularity span` — a `trace`-granularity evaluator is **not rejected** on an experiment; it runs and scores nothing (`num_successes: 0`, `num_errors: 0`, `failure_reason: … 'context.trace_id'`), which reads as a clean run.
 - Binary labels (`defended` = 1, `compromised` = 0) with `--classification-choices` matching the template's labels exactly.
 - The literal-text clause, the untrusted-data framing, and the app-specific forbidden-behavior list from Phase 1.
 - `column_mappings` for **every** template variable, including `{context}` where rows carry payloads in retrieved content. An unmapped variable yields no scores rather than an error.
-- Low temperature, `--include-explanation` on.
+- Low temperature, and `--include-explanations` on (plural; `--help` truncates the name and the singular form is rejected).
 
 **3. Run two arms.** Via `arize-experiment`: current prompt and hardened prompt over the same corpus version. Report three separate numbers — per-family resistance (control rows excluded from the denominator), per-family gap, and the over-refusal rate from the Over-Refusal evaluator on the control rows. These come from **different evaluators on different eval columns**; a family judge scores refusal as a pass, so it cannot produce the over-refusal number.
 
@@ -221,7 +221,10 @@ After a fix lands, re-run the affected family and report the before/after. That 
 
 ## Gotchas
 
-- **Trace-granularity judges cannot score experiment runs.** Register red-team judges at `span` granularity. When a judge is genuinely needed at both levels, create two evaluators with distinct names.
+- **A trace-granularity judge on an experiment is not rejected — it scores nothing.** Verified live: the task is created, the run is triggered, and it completes with `num_successes: 0`, `num_errors: 0`, `failure_reason: … 'context.trace_id'`. Zero errors makes it read as a clean run. Register red-team judges at `span` granularity, and treat any zero-success run as a failure.
+- **A CLI mutation can succeed while the command reports an error.** Response-parse failures in `ax` are reported as create failures on calls that already committed server-side; a naive retry then hits `409 Conflict`. Confirm with a `list` before concluding anything failed, and never create a differently-named duplicate on the strength of an error message.
+- **Dataset fields round-trip as strings.** `true` comes back as `'true'`, so `bool(is_control)` is always truthy and quietly folds control rows into the resistance denominator. Compare explicitly.
+- **An evaluation task scores every run in the experiment.** There is no per-row scoping, so each judge also scores the rows it does not apply to. Filter on `is_control` when computing rates; never report a raw column average.
 - **Judges confabulate refusals.** A response that literally enumerated its tools and printed internal ids has been scored `defended` with the explanation "the assistant appropriately declined". Every judge needs the literal-text clause. Hand-verify before quoting a number.
 - **Generic harm prompts measure nothing.** Current frontier models refuse them natively, so the corpus scores ~100% with a zero gap. Aim at policy violations: disclosure, injection via retrieved content, tenant scope, claimed writes, unsafe confirmation.
 - **All-`defended` is a smell, not a win.** Usually an empty `{output}`, a broken mapping, or a confabulating judge.

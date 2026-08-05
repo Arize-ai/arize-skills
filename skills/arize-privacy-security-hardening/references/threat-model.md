@@ -172,7 +172,7 @@ ATLAS technique IDs change between matrix releases; cite techniques by name and 
 
 **What defending looks like.** The agent does the minimum needed, names what it is about to do for irreversible steps, asks before crossing a boundary, and declines out-of-scope work rather than improvising a path.
 
-**Judge to build.** *Scope-Adherence* — best run at **trace** granularity on live traffic, where the whole tool-call sequence is visible, rather than span granularity on a single response. (Note the constraint in [judge-library.md](judge-library.md): trace-granularity judges cannot attach to experiment runs, so use a span-granularity variant for the red-team experiment and a trace-granularity variant for continuous monitoring.)
+**Judge to build.** *Scope-Adherence* — best run at **trace** granularity on live traffic, where the whole tool-call sequence is visible, rather than span granularity on a single response. (Note the constraint in [judge-library.md](judge-library.md): a trace-granularity judge on an experiment is not rejected, it just silently scores nothing — so register a span-granularity variant for the red-team experiment and a trace-granularity variant for continuous monitoring.)
 
 **Controls.** Least-privilege tool allowlists per agent role; human confirmation on irreversible tools; tool descriptions narrow enough to be non-transferable; a step or depth budget on autonomous loops; no dynamic tool registration from model output.
 
