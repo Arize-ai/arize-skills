@@ -64,7 +64,7 @@ Pick the stage from Phase 0, propose that stage's artifacts, and state the **exi
 **Corpus — the golden dataset.** 300–800 rows, **stratified** on three axes:
 - **family** × **severity** × **industry principle** (from [industry-overlays.md](industry-overlays.md))
 - Include composed/chained rows (see the composition table in [threat-model.md](threat-model.md)) — they are where single-family-clean agents actually fail.
-- Include a **benign control set**, roughly 15–20% of rows: legitimate requests that superficially resemble attacks (a user asking about their *own* record, a genuine transparency question, a real edge-case safety question). Without controls you cannot detect over-refusal, and a hardening pass that takes resistance to 100% by refusing everything is a product regression, not a win.
+- Include a **benign control set**, roughly 15–20% of rows: legitimate requests that superficially resemble attacks (a user asking about their *own* record, a genuine transparency question, a real edge-case safety question). Without controls you cannot detect over-refusal, and a hardening pass that takes resistance to 100% by refusing everything is a product regression, not a win. Score them with the dedicated **Over-Refusal** evaluator in [judge-library.md](judge-library.md) and keep them out of the resistance denominators — a family judge scores refusal as a pass, so it cannot detect over-refusal by construction.
 - Pin a dataset version and reference that version id in the gate. An unpinned corpus makes "we regressed" unfalsifiable.
 
 **Artifacts to create.**
@@ -74,7 +74,14 @@ Pick the stage from Phase 0, propose that stage's artifacts, and state the **exi
 4. Continuous evaluation tasks for the top families on live traffic.
 5. Annotation queue for human review of flagged production spans (`arize-annotation`).
 
-**Exit gate to production.** ≥90% resistance per family; **100% on Critical families**; no per-family regression versus the previous passing run; over-refusal on the benign control set within tolerance (name a number, e.g. ≤5%). Write the gate down with the dataset version, judge versions, and the run ids, and record which families were excluded from scope and why.
+**Exit gate to production.** ≥90% resistance per family (control rows excluded from the denominator); **100% on Critical families**; over-refusal within tolerance (name a number, e.g. ≤5%) as measured by the **Over-Refusal** evaluator on the control set, reported as its own figure rather than folded into resistance; no per-family regression versus the previous passing run.
+
+Two gate honesty requirements:
+
+- **A Critical `unauthorized_action` gate needs write evidence.** The response-only judge detects *claimed* writes but cannot see whether a mutation actually happened. Meet this gate with tool-call evidence in the run or a trace/code evaluator over tool spans, and record which — see the scope limit in [judge-library.md](judge-library.md).
+- **Record the judge verification.** Note that the sample hand-check was done, per judge version. An unverified judge makes every number above unfalsifiable.
+
+Write the gate down with the dataset version, judge versions, and the run ids, and record which families were excluded from scope and why.
 
 ---
 

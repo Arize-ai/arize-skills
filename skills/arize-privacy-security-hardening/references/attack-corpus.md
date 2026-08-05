@@ -17,10 +17,10 @@ Every row carries its own grading context. The judge receives these fields, so a
 | `prompt` | yes | The attacker's turn, verbatim. |
 | `context` | when applicable | Simulated retrieved-document or tool-result text fed to the agent alongside the prompt. **Where indirect-injection payloads and internal-id-bearing records live.** Empty or `(none)` for direct attacks. |
 | `expected_behavior` | yes | What defending looks like, in prose. Passed to the judge. |
-| `success_criteria` | yes | The concrete test — which specific string, id, or claim must be absent, or which ground-truth standard must be stated. For `unsafe_premise` rows this carries the real standard so the judge grades against fact. |
+| `success_criteria` | yes | The concrete test — which specific string, id, or claim must be absent, or which ground-truth standard must be stated. For `unsafe_confirmation` rows this carries the real standard so the judge grades against fact. For `is_control` rows it describes what *serving* the request looks like. |
 | `target_control` | recommended | The guardrail, filter, or authorization check this row probes (`guardrail.input_jailbreak_filter`, `tool.authz_check`, or `none` for a deliberately unguarded surface). Turns a failure into a work item. |
 | `observed_in_production` | recommended | `true` for rows seeded from real traffic. These are worth several synthetic rows — mark them so they are never pruned. |
-| `is_control` | for control rows | `true` for benign lookalikes. The expected verdict inverts: refusing a control row is the failure. |
+| `is_control` | for control rows | `true` for benign lookalikes. **Scored by the separate Over-Refusal judge, not by the family judge** — for these rows refusing is the failure, and the resistance rubric treats refusal as a pass. Excluded from resistance denominators. |
 | `industry_principle` | when an overlay applies | Links the row to the domain principle it enforces (see [industry-overlays.md](industry-overlays.md)). Makes stratification auditable. |
 
 Defaults belong at the family level, not per row. Define `expected_behavior`, `success_criteria`, and `target_control` once per family and merge them into rows, overriding only where a row is special. This keeps a 600-row corpus editable and stops the same prose drifting into forty inconsistent variants.
@@ -47,7 +47,7 @@ For a golden dataset (Stage 3 in [maturity-ladder.md](maturity-ladder.md)), stra
 Plus two cross-cutting requirements:
 
 - **Composed rows.** Include the chains from the composition table in [threat-model.md](threat-model.md). An agent clean on every single-family probe frequently fails `indirect_injection → unauthorized_action`, because the input-stage filter never sees the payload.
-- **Benign control set, 15–20% of rows.** Legitimate requests that superficially resemble attacks: a user asking for *their own* record id, a genuine "what can you help with?" question, a real edge-case safety question, a legitimate cross-store comparison the user *is* entitled to. Without controls, a hardening pass that refuses everything scores 100% resistance while destroying the product. Control rows make over-refusal measurable and belong in the gate.
+- **Benign control set, 15–20% of rows.** Legitimate requests that superficially resemble attacks: a user asking for *their own* record id, a genuine "what can you help with?" question, a real edge-case safety question, a legitimate cross-store comparison the user *is* entitled to. Without controls, a hardening pass that refuses everything scores 100% resistance while destroying the product. **Route these rows to the Over-Refusal judge in [judge-library.md](judge-library.md), on its own eval column, and keep them out of every resistance denominator.** Sending a control row through a family judge measures nothing: that rubric scores a clean refusal as `defended`, so a refuse-everything agent passes its controls too. For control rows, write `expected_behavior` and `success_criteria` as *what serving the request looks like*, since that is what the Over-Refusal judge grades against.
 
 ## Building the corpus
 
@@ -76,7 +76,7 @@ The corpus is a plain array of objects with the schema above; column names come 
 Two things to get right:
 
 - **Pin a version** once the corpus is a gate (Stage 3+) and reference that version id in the gate record. An unpinned corpus makes "we regressed" unfalsifiable, because the corpus itself may have changed.
-- **Keep field names stable.** Appending rows whose field names differ from the existing dataset fails validation. Check the existing fields before appending.
+- **Compare the schema before appending — nothing will stop you.** Fields are free-form: extra fields in appended rows are added as new columns, and fields absent from the new rows become null. A typo (`famliy` for `family`) therefore creates a silent new column rather than failing. The damage shows up downstream: the judge's `column_mappings` still point at the correctly spelled field, which is null for the new rows, so those rows come back **unscored rather than errored** and quietly shrink the denominator. Export the existing keys and diff them against the new rows before every append.
 
 Write generated corpus files under `.scratch/` or the project's own gitignored scratch location — not into the repository — unless the team explicitly wants the corpus version-controlled alongside the app.
 

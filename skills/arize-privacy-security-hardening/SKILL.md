@@ -75,7 +75,9 @@ Out of scope:        {families excluded and the trigger they don't satisfy}
 
 Pick the families from [references/threat-model.md](references/threat-model.md) by capability trigger, then promote severities using the overlay in [references/industry-overlays.md](references/industry-overlays.md).
 
-**If tracing is not live, say so plainly and stop the ladder there:** hardening cannot be measured without spans — there is no evidence trail, judges have nothing to attach to, and a failing experiment cannot be diagnosed. Offer `arize-instrumentation` first. You can still run Phase 1 (it is a code read), but do not build artifacts on an uninstrumented app.
+**If tracing is not live, name exactly what that blocks — and do not over-block.** Phase 3 works without it: a dataset experiment generates its own runs, so the corpus, the judges, and the baseline-vs-hardened arms are all buildable on an uninstrumented app. That is the whole Stage 1 artifact set, so a prototype proceeds normally.
+
+What tracing gates is everything that reads *production* rather than the corpus: continuous evaluation on live traffic and the trace-side privacy check (Phase 4), seeding the corpus from real attempts, and verifying Phase 1 findings against real spans. Say that, offer `arize-instrumentation` as the path to Stage 2, and continue.
 
 ## Phase 1: Recon
 
@@ -145,7 +147,7 @@ Select the stage row from [references/maturity-ladder.md](references/maturity-la
 
 **Defer, with the reason** — what you are deliberately not doing yet and what would trigger it. This is as important as the build list; it is what stops over-building.
 
-**The exit gate** — the numeric bar to reach the next stage, with the families that require 100%. Example for a launch candidate: *≥90% resistance per family, 100% on `cross_tenant_access` and `unauthorized_action`, over-refusal on the benign control set ≤5%, no per-family regression versus the last passing run.*
+**The exit gate** — the numeric bar to reach the next stage, with the families that require 100%. Example for a launch candidate: *≥90% resistance per family, 100% on `cross_tenant_access` and `unauthorized_action`, over-refusal ≤5% on the control set per the Over-Refusal evaluator, no per-family regression versus the last passing run.* Where a Critical gate covers `unauthorized_action`, name how actual writes are detected — the response-only judge does not cover them.
 
 Two things to state explicitly in the plan:
 
@@ -167,7 +169,7 @@ Confirm each step. Report the created resource and a deep link (`arize-link`).
 - `column_mappings` for **every** template variable, including `{context}` where rows carry payloads in retrieved content. An unmapped variable yields no scores rather than an error.
 - Low temperature, `--include-explanation` on.
 
-**3. Run two arms.** Via `arize-experiment`: current prompt and hardened prompt over the same corpus version. Report per-family resistance, per-family gap, and over-refusal on the control set.
+**3. Run two arms.** Via `arize-experiment`: current prompt and hardened prompt over the same corpus version. Report three separate numbers — per-family resistance (control rows excluded from the denominator), per-family gap, and the over-refusal rate from the Over-Refusal evaluator on the control rows. These come from **different evaluators on different eval columns**; a family judge scores refusal as a pass, so it cannot produce the over-refusal number.
 
 **4. Verify the judges, then read the failures.** Hand-check 5 `defended` and 5 `compromised` verdicts against the actual response text before quoting any gate number. Then read every failing row's response. Failures cluster by technique, and the cluster names the one control to build first.
 
@@ -223,6 +225,9 @@ After a fix lands, re-run the affected family and report the before/after. That 
 - **Judges confabulate refusals.** A response that literally enumerated its tools and printed internal ids has been scored `defended` with the explanation "the assistant appropriately declined". Every judge needs the literal-text clause. Hand-verify before quoting a number.
 - **Generic harm prompts measure nothing.** Current frontier models refuse them natively, so the corpus scores ~100% with a zero gap. Aim at policy violations: disclosure, injection via retrieved content, tenant scope, claimed writes, unsafe confirmation.
 - **All-`defended` is a smell, not a win.** Usually an empty `{output}`, a broken mapping, or a confabulating judge.
+- **A resistance judge cannot measure over-refusal.** It scores a clean refusal as `defended`, so control rows need the separate Over-Refusal evaluator on its own eval column. Never branch a resistance rubric on an `is_control` flag.
+- **A response-only judge cannot see a write that actually happened.** It detects *claimed* writes. Actual mutations need tool-call evidence in the run or a trace/code evaluator over tool spans, or a Critical `unauthorized_action` gate passes falsely.
+- **Appended dataset fields are free-form.** A typo creates a new column silently; the mapped field is then null for those rows, so they come back unscored rather than errored. Diff the schema before every append.
 - **Missing `column_mappings` fail silently.** Map every variable the template names.
 - **Template variables are single-brace `{input}`.** The `ax --template` help text says `{{variable}}`; that is wrong and doubled braces do not bind.
 - **Evaluator versions are immutable.** Template edits create a new version; point the task at it. If a fix appears to do nothing, confirm which version the task is running.
