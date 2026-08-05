@@ -159,10 +159,17 @@ For interactive setup, `ax profiles create` also offers **Advanced → Single en
 | [arize-prompts](skills/arize-prompts/SKILL.md) | Manage Prompt Hub templates and versions with `ax prompts` (create, versions, labels). |
 | [arize-link](skills/arize-link/SKILL.md) | Generate deep links to traces, spans, and sessions in the Arize UI. |
 | [arize-compliance-audit](skills/arize-compliance-audit/SKILL.md) | Audit an AI agent for regulatory compliance (EU AI Act, NIST AI RMF, GDPR, HIPAA). Produces a tailored remediation checklist. |
+| [arize-privacy-security-hardening](skills/arize-privacy-security-hardening/SKILL.md) | Harden an LLM app for production against prompt injection, data leakage, and authorization failures. Builds the attack corpus, judges, and red-team experiments that measure it. |
 | [arize-admin](skills/arize-admin/SKILL.md) | Manage organizations, spaces, roles, role bindings, resource restrictions, and API keys. Enterprise admin workflows: team onboarding, SAML/SSO role mapping, service key management, and access control. |
 
 > [!WARNING]
 > **arize-compliance-audit is for guidance only and does not constitute legal advice or a complete compliance assessment.** It identifies common technical patterns based on publicly available regulatory frameworks and cannot account for your organisation's specific legal obligations, contractual commitments, or operational context. Always consult a qualified attorney or compliance specialist for binding assessments.
+
+> [!NOTE]
+> **Which of the two safety skills do you want?** `arize-privacy-security-hardening` is the engineering path: adversarial testing, data-leakage controls, and the datasets, judges, and experiments that measure whether hardening works. `arize-compliance-audit` is the regulatory path: mapping what you have onto a named framework and producing an evidence checklist. Teams heading to production usually want the first, then the second.
+
+> [!WARNING]
+> **arize-privacy-security-hardening builds adversarial test suites for systems you own or are authorised to test.** Confirm that authorisation before probing a deployed application. It is engineering guidance, not a penetration test or a certification, and attack corpora must never contain real customer data, real PHI, or live secrets.
 
 ## Installer Flags
 

@@ -251,6 +251,27 @@ SPECIFIC_PROMPTS = [
         ["arize-admin"],
         ["specific", "admin"],
     ),
+    # arize-privacy-security-hardening
+    (
+        "Red-team my agent for prompt injection before we launch",
+        ["arize-privacy-security-hardening"],
+        ["specific", "privacy-security-hardening"],
+    ),
+    (
+        "Make sure my LLM app isn't leaking customer PII into its traces",
+        ["arize-privacy-security-hardening"],
+        ["specific", "privacy-security-hardening"],
+    ),
+    (
+        "Build a golden attack dataset and judges to test my agent's jailbreak resistance",
+        ["arize-privacy-security-hardening"],
+        ["specific", "privacy-security-hardening"],
+    ),
+    (
+        "Check whether my agent's tools can be tricked into reading another tenant's data",
+        ["arize-privacy-security-hardening"],
+        ["specific", "privacy-security-hardening"],
+    ),
 ]
 
 # Single-skill: vague/ambiguous prompts (harder to route correctly)
@@ -428,6 +449,43 @@ VAGUE_PROMPTS = [
         ["arize-admin"],
         ["vague", "admin"],
     ),
+    # Should route to privacy-security-hardening
+    (
+        "How do I get my AI agent ready for production safely?",
+        ["arize-privacy-security-hardening"],
+        ["vague", "privacy-security-hardening"],
+    ),
+    (
+        "I'm worried my chatbot can be tricked into doing something it shouldn't",
+        ["arize-privacy-security-hardening"],
+        ["vague", "privacy-security-hardening"],
+    ),
+    (
+        "What security testing should we do on our LLM app?",
+        ["arize-privacy-security-hardening"],
+        ["vague", "privacy-security-hardening"],
+    ),
+]
+
+# Disambiguation: pairs of skills with adjacent scopes that must not be confused.
+# The regulatory-framework ask belongs to compliance-audit; the engineering
+# hardening ask belongs to privacy-security-hardening.
+ADJACENT_SKILL_PAIR = {
+    "arize-compliance-audit",
+    "arize-privacy-security-hardening",
+}
+
+DISAMBIGUATION_PROMPTS = [
+    (
+        "Audit my agent against the EU AI Act and give me an evidence checklist",
+        ["arize-compliance-audit"],
+        ["disambiguation", "compliance-audit"],
+    ),
+    (
+        "Harden my agent against prompt injection and prove it with a red-team experiment",
+        ["arize-privacy-security-hardening"],
+        ["disambiguation", "privacy-security-hardening"],
+    ),
 ]
 
 # Negative/irrelevant prompts (should not match any skill strongly)
@@ -566,6 +624,38 @@ class TestVaguePrompts:
             f"for prompt: {prompt}"
         )
 
+
+class TestDisambiguationPrompts:
+    """Test that adjacent-scope skills are not confused with each other."""
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "prompt,expected_skills,tags", DISAMBIGUATION_PROMPTS
+    )
+    async def test_disambiguation_prompt(
+        self,
+        selection_runner,
+        selection_results,
+        prompt,
+        expected_skills,
+        tags,
+    ):
+        result = await selection_runner.test_prompt(
+            prompt, expected_skills, tags
+        )
+        selection_results.append(result)
+        expected_set = set(expected_skills)
+        selected_set = set(result.selected_skills)
+        assert expected_set.issubset(selected_set), (
+            f"Expected at least {expected_skills}, got {result.selected_skills} "
+            f"for prompt: {prompt}"
+        )
+        # The other skill in the pair must not be picked instead.
+        wrong = (ADJACENT_SKILL_PAIR - expected_set) & selected_set
+        assert not wrong, (
+            f"Routed to adjacent skill {sorted(wrong)} instead of "
+            f"{expected_skills} for prompt: {prompt}"
+        )
 
 
 class TestNegativePrompts:
