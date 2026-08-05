@@ -1,0 +1,217 @@
+[
+  {
+    "name": "agent.request",
+    "context": {
+      "trace_id": "trace-duplicate",
+      "span_id": "root-duplicate"
+    },
+    "start_time": "2026-07-21T18:19:14.750000Z",
+    "end_time": "2026-07-21T18:19:15.050000Z",
+    "status_code": "UNSET",
+    "attributes": {
+      "custom.span_type": "agent"
+    }
+  },
+  {
+    "name": "openai.chat.completions",
+    "context": {
+      "trace_id": "trace-duplicate",
+      "span_id": "llm-duplicate-a"
+    },
+    "parent_id": "root-duplicate",
+    "start_time": "2026-07-21T18:19:14.751000Z",
+    "end_time": "2026-07-21T18:19:14.752000Z",
+    "status_code": "UNSET",
+    "attributes": {
+      "llm.model_name": "gpt-4o-mini",
+      "prompt": "What is the policy status for customer 19?",
+      "completion": "Customer 19 is eligible."
+    }
+  },
+  {
+    "name": "openai.chat.completions",
+    "context": {
+      "trace_id": "trace-duplicate",
+      "span_id": "llm-duplicate-b"
+    },
+    "parent_id": "root-duplicate",
+    "start_time": "2026-07-21T18:19:14.753000Z",
+    "end_time": "2026-07-21T18:19:14.754000Z",
+    "status_code": "UNSET",
+    "attributes": {
+      "llm.model_name": "gpt-4o-mini",
+      "prompt": "What is the policy status for customer 19?",
+      "completion": "Customer 19 is eligible."
+    }
+  },
+  {
+    "name": "agent.request",
+    "context": {
+      "trace_id": "trace-retry",
+      "span_id": "root-retry"
+    },
+    "start_time": "2026-07-21T18:20:14.750000Z",
+    "end_time": "2026-07-21T18:20:16.050000Z",
+    "status_code": "OK",
+    "attributes": {
+      "openinference.span.kind": "AGENT",
+      "input.value": "What is the policy status for customer 20?",
+      "output.value": "Customer 20 is eligible."
+    }
+  },
+  {
+    "name": "openai.chat.completions",
+    "context": {
+      "trace_id": "trace-retry",
+      "span_id": "llm-retry-1"
+    },
+    "parent_id": "root-retry",
+    "start_time": "2026-07-21T18:20:14.751000Z",
+    "end_time": "2026-07-21T18:20:14.752000Z",
+    "status_code": "ERROR",
+    "attributes": {
+      "openinference.span.kind": "LLM",
+      "llm.model_name": "gpt-4o-mini",
+      "input.value": "What is the policy status for customer 20?",
+      "output.value": "rate limit",
+      "llm.retry.attempt": 1,
+      "error.message": "rate limit"
+    }
+  },
+  {
+    "name": "openai.chat.completions",
+    "context": {
+      "trace_id": "trace-retry",
+      "span_id": "llm-retry-2"
+    },
+    "parent_id": "root-retry",
+    "start_time": "2026-07-21T18:20:15.751000Z",
+    "end_time": "2026-07-21T18:20:15.952000Z",
+    "status_code": "OK",
+    "attributes": {
+      "openinference.span.kind": "LLM",
+      "llm.model_name": "gpt-4o-mini",
+      "input.value": "What is the policy status for customer 20?",
+      "output.value": "Customer 20 is eligible.",
+      "llm.retry.attempt": 2
+    }
+  },
+  {
+    "name": "agent.request",
+    "context": {
+      "trace_id": "trace-clean-distinct-payload",
+      "span_id": "root-distinct-payload"
+    },
+    "start_time": "2026-07-21T18:21:14.750000Z",
+    "end_time": "2026-07-21T18:21:15.400000Z",
+    "status_code": "OK",
+    "attributes": {
+      "openinference.span.kind": "AGENT",
+      "input.value": "Compare the policy status for customers 21 and 22.",
+      "output.value": "Customer 21 is eligible; customer 22 is not."
+    }
+  },
+  {
+    "name": "openai.chat.completions",
+    "context": {
+      "trace_id": "trace-clean-distinct-payload",
+      "span_id": "llm-distinct-payload-a"
+    },
+    "parent_id": "root-distinct-payload",
+    "start_time": "2026-07-21T18:21:14.751000Z",
+    "end_time": "2026-07-21T18:21:14.900000Z",
+    "status_code": "OK",
+    "attributes": {
+      "openinference.span.kind": "LLM",
+      "llm.model_name": "gpt-4o-mini",
+      "llm.input_messages": [
+        {
+          "message.role": "user",
+          "message.content": "What is the policy status for customer 21?"
+        }
+      ],
+      "llm.output_messages": [
+        {
+          "message.role": "assistant",
+          "message.content": "Customer 21 is eligible."
+        }
+      ]
+    }
+  },
+  {
+    "name": "openai.chat.completions",
+    "context": {
+      "trace_id": "trace-clean-distinct-payload",
+      "span_id": "llm-distinct-payload-b"
+    },
+    "parent_id": "root-distinct-payload",
+    "start_time": "2026-07-21T18:21:14.753000Z",
+    "end_time": "2026-07-21T18:21:14.910000Z",
+    "status_code": "OK",
+    "attributes": {
+      "openinference.span.kind": "LLM",
+      "llm.model_name": "gpt-4o-mini",
+      "llm.input_messages": [
+        {
+          "message.role": "user",
+          "message.content": "What is the policy status for customer 22?"
+        }
+      ],
+      "llm.output_messages": [
+        {
+          "message.role": "assistant",
+          "message.content": "Customer 22 is not eligible."
+        }
+      ]
+    }
+  },
+  {
+    "name": "agent.request",
+    "context": {
+      "trace_id": "trace-clean-time-gap",
+      "span_id": "root-time-gap"
+    },
+    "start_time": "2026-07-21T18:22:14.750000Z",
+    "end_time": "2026-07-21T18:22:16.100000Z",
+    "status_code": "OK",
+    "attributes": {
+      "openinference.span.kind": "AGENT",
+      "input.value": "Check the policy status for customer 23 before and after the renewal job.",
+      "output.value": "Customer 23 is eligible in both checks."
+    }
+  },
+  {
+    "name": "openai.chat.completions",
+    "context": {
+      "trace_id": "trace-clean-time-gap",
+      "span_id": "llm-time-gap-early"
+    },
+    "parent_id": "root-time-gap",
+    "start_time": "2026-07-21T18:22:14.751000Z",
+    "end_time": "2026-07-21T18:22:14.950000Z",
+    "status_code": "OK",
+    "attributes": {
+      "openinference.span.kind": "LLM",
+      "llm.model_name": "gpt-4o-mini",
+      "input.value": "What is the policy status for customer 23?",
+      "output.value": "Customer 23 is eligible."
+    }
+  },
+  {
+    "name": "openai.chat.completions",
+    "context": {
+      "trace_id": "trace-clean-time-gap",
+      "span_id": "llm-time-gap-late"
+    },
+    "parent_id": "root-time-gap",
+    "start_time": "2026-07-21T18:22:15.751000Z",
+    "end_time": "2026-07-21T18:22:15.950000Z",
+    "status_code": "OK",
+    "attributes": {
+      "openinference.span.kind": "LLM",
+      "llm.model_name": "gpt-4o-mini",
+      "input.value": "What is the policy status for customer 23?",
+      "output.value": "Customer 23 is eligible."
+    }
+  }
+]

@@ -55,6 +55,22 @@ SPECIFIC_PROMPTS = [
         ["arize-instrumentation"],
         ["specific", "instrumentation"],
     ),
+    # arize-instrumentation-health
+    (
+        "Check whether my Arize instrumentation is healthy",
+        ["arize-instrumentation-health"],
+        ["specific", "instrumentation-health"],
+    ),
+    (
+        "Run an instrumentation health audit on my project spans",
+        ["arize-instrumentation-health"],
+        ["specific", "instrumentation-health"],
+    ),
+    (
+        "Why are my token and cost dashboards showing zero? Audit my instrumentation",
+        ["arize-instrumentation-health"],
+        ["specific", "instrumentation-health"],
+    ),
     # arize-span-routing
     (
         "Route each agent's Python spans to its assigned Arize space and project",

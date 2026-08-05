@@ -8,6 +8,8 @@ Consult this when you need spans an auto-instrumentor won't create — tool exec
 
 Provider instrumentors wrap only the LLM *client* — they capture each API call's request (messages, tools) and response (text, `tool_use` blocks), but not what your code does next: running `run_tool(...)`, the tool's return value, or the fact that several API calls form one logical turn. Those are application-level, so the TOOL and CHAIN spans are yours to add (a *framework* instrumentor like LangChain/LangGraph adds them for you). Manual spans use the same TracerProvider, so they land in the same trace.
 
+**When you can skip manual spans:** if a *framework* instrumentor (LangChain, LangGraph, LlamaIndex, the Vercel AI SDK, etc.) already emits CHAIN/AGENT and TOOL spans, verify its spans first and add manual spans only for gaps. Manual spans are for **raw provider SDK / hand-rolled tool loops** (OpenAI, Anthropic, Bedrock, LiteLLM) where nothing above the LLM client is instrumented.
+
 ## Adding manual spans
 
 Manual spans capture the parts of a request an auto-instrumentor can't see. The classic case is an agent/tool loop, but the same applies to a **RAG pipeline** (retrieval + embedding), **rerankers**, **guardrails**, and **eval calls** — each is its own span kind (see the span-kind table below).
@@ -128,6 +130,8 @@ with tracer.start_as_current_span("run_agent") as chain_span:   # if you own run
     chain_span.set_attribute("output.value", final_reply)
     chain_span.set_status(Status(StatusCode.OK))   # REQUIRED — the CHAIN needs OK too, not just the tools
 ```
+
+Because `start_as_current_span` makes the CHAIN/TOOL span the **active** span, provider LLM calls made inside the block auto-nest under it — no manual parenting needed. In notebooks or short-lived scripts, call `tracer_provider.force_flush()` (then `shutdown()`) before the process exits so these spans are exported.
 
 The `with` block auto-sets `ERROR` only on an *uncaught* exception — a tool error you catch and feed back to the model (as above) needs the explicit `record_exception` + `set_status`, or the span exports `UNSET`. Keep the enclosing CHAIN `OK` when the turn still completes; the failure is already on the TOOL span.
 
