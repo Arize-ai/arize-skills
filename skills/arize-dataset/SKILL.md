@@ -4,7 +4,7 @@ description: Creates, manages, and queries Arize datasets and examples. Covers d
 metadata:
   author: arize
   version: "1.0"
-compatibility: Requires the ax CLI and a configured Arize profile.
+compatibility: Requires the ax CLI (≥ 0.27.0) and a configured Arize profile.
 ---
 
 # Arize Dataset Skill
@@ -246,6 +246,10 @@ echo '[{"question": "..."}]' | jq '.[0] | keys'
 ```
 
 Fields are free-form: extra fields in new examples are added, and missing fields become null. However, typos in field names (e.g., `queston` vs `question`) create new columns silently -- verify spelling before appending.
+
+## Update Examples: `ax datasets update-examples`
+
+`ax datasets update-examples` patches rows by example `id`; `ax datasets delete-examples` removes rows from a version. Uncommon — run `ax datasets update-examples --help` or `ax datasets delete-examples --help` for flags and input formats.
 
 ## Delete Dataset: `ax datasets delete`
 

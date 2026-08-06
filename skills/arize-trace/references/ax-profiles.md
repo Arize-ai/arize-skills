@@ -85,6 +85,29 @@ ax profiles show
 
 Confirm the API key and region are correct, then retry the original command.
 
+## Managing Multiple Profiles
+
+List all available profiles, with the active one marked:
+
+```bash
+ax profiles list
+```
+
+Switch to a different profile:
+
+```bash
+ax profiles use work
+```
+
+Delete a profile. You cannot delete the currently active profile; switch to another first if needed.
+
+```bash
+ax profiles delete staging
+
+# Use --force to skip the confirmation prompt
+ax profiles delete staging --force
+```
+
 ## Space
 
 There is no profile flag for space. Save it as an environment variable — accepts a space **name** (e.g., `my-workspace`) or a base64 space **ID** (e.g., `U3BhY2U6...`). Find yours with `ax spaces list -o json`.

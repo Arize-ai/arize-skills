@@ -4,7 +4,7 @@ description: Creates, runs, and analyzes Arize experiments for evaluating and co
 metadata:
   author: arize
   version: "1.0"
-compatibility: Requires the ax CLI and a configured Arize profile.
+compatibility: Requires the ax CLI (≥ 0.27.0) and a configured Arize profile.
 ---
 
 # Arize Experiment Skill
@@ -179,6 +179,57 @@ Additional columns are passed through as `additionalProperties` on the run.
 
 > **⚠️ Inline evaluations in the create file do NOT attach as scores.** `create` only reads `example_id` and `output`; every other column — including an `evaluations` object — is stored as a passthrough additional field, **not** as an experiment evaluation, and will **not** appear as a score in the UI. This fails silently (no error). To attach scores/labels, create the experiment first, then run `ax experiments annotate-runs`. The `evaluations` object in the schemas below is the **export (read)** shape returned once annotations exist — it is not an input to `create`.
 
+## Run a Task Locally: `ax experiments run`
+
+Unlike `create` (needs a pre-computed outputs file), `run` loads a Python task function, executes it against every dataset row, and uploads the results as an experiment.
+
+```bash
+ax experiments run -n "my-experiment" --dataset DATASET_NAME --space SPACE --task task.py
+ax experiments run -n "my-experiment" --dataset DATASET_NAME --space SPACE --task task.py --concurrency 5 --dry-run
+```
+
+`task.py` must define a top-level `task(dataset_row)` function returning a JSON-serializable value:
+
+```python
+from anthropic import Anthropic
+
+def task(dataset_row):
+    resp = Anthropic().messages.create(
+        model="claude-3-5-sonnet-20241022", max_tokens=256,
+        messages=[{"role": "user", "content": dataset_row["question"]}]
+    )
+    return resp.content[0].text
+```
+
+`--dry-run` tests against the first 10 examples without uploading, to validate the task before a full run.
+
+| Flag | Required | Description |
+|------|----------|-------------|
+| `--name, -n` | yes | Experiment name |
+| `--dataset` | yes | Dataset name or ID |
+| `--task` | yes | Path to Python file with a top-level `task(dataset_row)` function |
+| `--space, -s` | no | Required if using dataset name instead of ID |
+| `--concurrency, -c` | no | Concurrent task executions (default: 3) |
+| `--dry-run` | no | Run against first 10 examples only, no upload |
+| `-o, --output` | no | Output format |
+
+## List Runs: `ax experiments list-runs`
+
+Paginated terminal view of an experiment's runs (vs. `export`, which downloads them to a file).
+
+```bash
+ax experiments list-runs EXPERIMENT_NAME --dataset DATASET_NAME --space SPACE --limit 30
+ax experiments list-runs EXPERIMENT_ID
+```
+
+| Flag | Required | Description |
+|------|----------|-------------|
+| `NAME_OR_ID` | yes | Experiment name or ID (positional) |
+| `--dataset` | no | Required if using experiment name instead of ID |
+| `--space, -s` | no | Required when dataset is a name |
+| `--limit, -l` | no | Max runs to return (default: 15) |
+| `-o, --output` | no | Output format |
+
 ## Delete Experiment: `ax experiments delete`
 
 ```bash
@@ -302,63 +353,33 @@ At least one of `label`, `score`, or `explanation` should be present per evaluat
    runs = []
 
    for ex in examples:
-       # Inspect the exported JSON to find the right field (e.g. "input", "question", "prompt")
+       # find field from exported JSON, e.g. "input"/"question"/"prompt"
        user_input = ex.get("input") or ex.get("question") or ex.get("prompt") or str(ex)
-
        start = time.time()
 
-       # === CALL THE REAL MODEL API HERE — never fabricate or simulate ===
-       # Uncomment and adapt the provider block the user requested:
-       #
-       # OpenAI (pip install openai  — uses OPENAI_API_KEY env var):
-       #   from openai import OpenAI
-       #   resp = OpenAI().chat.completions.create(
-       #       model="gpt-4o",
-       #       messages=[{"role": "user", "content": user_input}]
-       #   )
-       #   output_text = resp.choices[0].message.content
-       #
-       # Anthropic (pip install anthropic  — uses ANTHROPIC_API_KEY env var):
-       #   import anthropic
-       #   resp = anthropic.Anthropic().messages.create(
-       #       model="claude-sonnet-4-6", max_tokens=1024,
-       #       messages=[{"role": "user", "content": user_input}]
-       #   )
-       #   output_text = resp.content[0].text
-       #
-       # Google Gemini (pip install google-genai  — uses GOOGLE_API_KEY env var):
-       #   from google import genai
-       #   resp = genai.Client().models.generate_content(
-       #       model="gemini-2.5-pro", contents=user_input
-       #   )
-       #   output_text = resp.text
-       #
-       # Custom / OpenAI-compatible proxy (pip install openai — uses CUSTOM_BASE_URL + CUSTOM_API_KEY env vars):
-       # Use this for Azure OpenAI, NVIDIA NIM, local Ollama, or any OpenAI-compatible endpoint,
-       # including a test integration proxy. Matches the `custom` provider in `ax ai-integrations create`.
-       #   import os
-       #   from openai import OpenAI
-       #   resp = OpenAI(
-       #       base_url=os.environ["CUSTOM_BASE_URL"],          # e.g. https://my-proxy.example.com/v1
-       #       api_key=os.environ.get("CUSTOM_API_KEY", "none"),
-       #   ).chat.completions.create(
-       #       model=os.environ.get("CUSTOM_MODEL", "default"),
-       #       messages=[{"role": "user", "content": user_input}]
-       #   )
-       #   output_text = resp.choices[0].message.content
+       # === CALL THE REAL MODEL API — never fabricate/simulate. Uncomment one provider: ===
+       # OpenAI (pip install openai, OPENAI_API_KEY):
+       # from openai import OpenAI
+       # output_text = OpenAI().chat.completions.create(model="gpt-4o", messages=[{"role": "user", "content": user_input}]).choices[0].message.content
+       # Anthropic (pip install anthropic, ANTHROPIC_API_KEY):
+       # import anthropic
+       # output_text = anthropic.Anthropic().messages.create(model="claude-sonnet-4-6", max_tokens=1024, messages=[{"role": "user", "content": user_input}]).content[0].text
+       # Google Gemini (pip install google-genai, GOOGLE_API_KEY):
+       # from google import genai
+       # output_text = genai.Client().models.generate_content(model="gemini-2.5-pro", contents=user_input).text
+       # Custom/OpenAI-compatible proxy — Azure OpenAI, NVIDIA NIM, Ollama, etc. (pip install openai, CUSTOM_BASE_URL + CUSTOM_API_KEY):
+       # from openai import OpenAI
+       # import os
+       # output_text = OpenAI(base_url=os.environ["CUSTOM_BASE_URL"], api_key=os.environ.get("CUSTOM_API_KEY", "none")).chat.completions.create(model=os.environ.get("CUSTOM_MODEL", "default"), messages=[{"role": "user", "content": user_input}]).choices[0].message.content
 
        latency_ms = round((time.time() - start) * 1000)
-       runs.append({
-           "example_id": ex["id"],
-           "output": output_text,
-           "metadata": {"model": "MODEL_NAME", "latency_ms": latency_ms}
-       })
+       runs.append({"example_id": ex["id"], "output": output_text, "metadata": {"model": "MODEL_NAME", "latency_ms": latency_ms}})
        print(f"  {ex['id']}: {latency_ms}ms", file=sys.stderr)
 
    json.dump(runs, sys.stdout, indent=2)
    ```
 
-   **Before running:** install the provider SDK (`pip install openai` / `anthropic` / `google-genai`) and ensure the API key is set as an environment variable in your shell. If you cannot access the API, stop and tell the user what is needed.
+   **Before running:** install the SDK, set the API key env var. If the API isn't reachable, stop and tell the user.
 
 4. Verify the runs file:
    ```bash
@@ -395,39 +416,24 @@ At least one of `label`, `score`, or `explanation` should be present per evaluat
    ax experiments export "experiment-a" --dataset DATASET_NAME --space SPACE --stdout > a.json
    ax experiments export "experiment-b" --dataset DATASET_NAME --space SPACE --stdout > b.json
    ```
-2. Compare evaluation scores by `example_id`:
+2. Average correctness score (swap `a.json` for `b.json` to check the other experiment):
    ```bash
-   # Average correctness score for experiment A
    jq '[.[] | .evaluations.correctness.score] | add / length' a.json
-
-   # Same for experiment B
-   jq '[.[] | .evaluations.correctness.score] | add / length' b.json
    ```
 3. Find examples where results differ:
    ```bash
-   jq -s '.[0] as $a | .[1][] | . as $run |
-     {
-       example_id: $run.example_id,
-       b_score: $run.evaluations.correctness.score,
-       a_score: ($a[] | select(.example_id == $run.example_id) | .evaluations.correctness.score)
-     }' a.json b.json
+   jq -s '.[0] as $a | .[1][] | . as $run | {example_id: $run.example_id, b_score: $run.evaluations.correctness.score, a_score: ($a[] | select(.example_id == $run.example_id) | .evaluations.correctness.score)}' a.json b.json
    ```
-4. Score distribution per evaluator (pass/fail/partial counts):
+4. Score distribution per evaluator (pass/fail/partial counts; swap files for the other experiment):
    ```bash
-   # Count by label for experiment A
    jq '[.[] | .evaluations.correctness.label] | group_by(.) | map({label: .[0], count: length})' a.json
    ```
 5. Find regressions (examples that passed in A but fail in B):
    ```bash
-   jq -s '
-     [.[0][] | select(.evaluations.correctness.label == "correct")] as $passed_a |
-     [.[1][] | select(.evaluations.correctness.label != "correct") |
-       select(.example_id as $id | $passed_a | any(.example_id == $id))
-     ]
-   ' a.json b.json
+   jq -s '[.[0][] | select(.evaluations.correctness.label == "correct")] as $passed_a | [.[1][] | select(.evaluations.correctness.label != "correct") | select(.example_id as $id | $passed_a | any(.example_id == $id))]' a.json b.json
    ```
 
-**Statistical significance note:** Score comparisons are most reliable with ≥ 30 examples per evaluator. With fewer examples, treat the delta as directional only — a 5% difference on n=10 may be noise. Report sample size alongside scores: `jq 'length' a.json`.
+**Statistical significance note:** reliable with ≥ 30 examples per evaluator; with fewer, treat the delta as directional only — a 5% difference on n=10 may be noise. Report sample size alongside scores: `jq 'length' a.json`.
 
 ### Download experiment results for analysis
 

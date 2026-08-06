@@ -4,7 +4,7 @@ description: Creates and manages annotation configs (categorical, continuous, fr
 metadata:
   author: arize
   version: "1.0"
-compatibility: Requires the ax CLI and a configured Arize profile.
+compatibility: Requires the ax CLI (≥ 0.27.0) and a configured Arize profile.
 ---
 
 # Arize Annotation Skill
@@ -41,7 +41,7 @@ An **annotation config** defines the schema for a single type of human feedback 
 | **Type** | `categorical` (pick from a list), `continuous` (numeric range), or `freeform` (free text). |
 | **Values** | For categorical: array of `{"label": str, "score": number}` pairs. |
 | **Min/Max Score** | For continuous: numeric bounds. |
-| **Optimization Direction** | Whether higher scores are better (`maximize`) or worse (`minimize`). Used to render trends in the UI. |
+| **Optimization Direction** | Whether higher scores are better (`MINIMIZE`) or worse (`MAXIMIZE`). Used to render trends in the UI. |
 
 ### Where labels get applied (surfaces)
 
@@ -121,6 +121,32 @@ ax annotation-configs get NAME_OR_ID -o json
 ax annotation-configs get NAME_OR_ID --space SPACE   # required when using name instead of ID
 ```
 
+### Update
+
+Each config type has its own update command. Only changed fields are updated.
+
+**Freeform:**
+
+```bash
+ax annotation-configs update freeform NAME_OR_ID --space SPACE --new-name "Updated Name"
+```
+
+**Continuous:**
+
+```bash
+ax annotation-configs update continuous NAME_OR_ID --space SPACE --min-score 1 --max-score 5 --optimization-direction MINIMIZE
+```
+
+**Categorical:**
+
+```bash
+ax annotation-configs update categorical NAME_OR_ID --space SPACE --value correct --value incorrect --optimization-direction MAXIMIZE
+```
+
+`--space` is required when using a name instead of ID. Each `--value` supplies the
+complete categorical label list: it replaces existing labels rather than appending to
+them. Repeat `--value` for every label that should remain, or omitted labels are removed.
+
 ### Delete
 
 ```bash
@@ -163,6 +189,21 @@ ax annotation-queues create \
 ```
 
 Repeat `--annotation-config-id` and `--annotator-email` to attach multiple configs or reviewers.
+
+### Add Records
+
+Add records to an existing queue after creation. Records can come from spans (by project and time range) or dataset examples.
+
+```bash
+ax annotation-queues add-records NAME_OR_ID --space SPACE --record-sources sources.json
+
+ax annotation-queues add-records NAME_OR_ID --space SPACE \
+  --record-sources '[{"record_type": "EXAMPLE", "dataset_id": "ds-1", "example_ids": ["ex-1", "ex-2"]}]'
+```
+
+`--record-sources` is required and accepts a JSON file path or inline JSON array. Each source specifies `record_type` (`SPAN` or `EXAMPLE`) plus type-specific fields:
+- **Span:** `project_id`, `start_time` (ISO 8601), `end_time` (ISO 8601), optional `span_ids`
+- **Example:** `dataset_id`, `example_ids`
 
 ### Update
 

@@ -4,7 +4,7 @@ description: Downloads, exports, and inspects existing Arize traces and spans to
 metadata:
   author: arize
   version: "1.0"
-compatibility: Requires the ax CLI and a configured Arize profile.
+compatibility: Requires the ax CLI (≥ 0.23.0) and a configured Arize profile.
 ---
 
 # Arize Trace Skill
@@ -259,6 +259,14 @@ ax spans annotate PROJECT --file annotations.json --days 7
 | `--days` | int | no | Lookback window in days (default 30) |
 
 The annotation file must contain the span ID and the annotation fields to write. Export a sample span first to confirm span IDs and available fields before bulk-annotating.
+
+## Delete Spans: `ax spans delete`
+Irreversible deletion by span ID; missing IDs in the lookback window are silently ignored. Confirms by default (`--force` to skip); pass `--space` with a project name.
+```bash
+ax spans delete PROJECT --span-id SPAN_ID
+ax spans delete PROJECT --span-id id1,id2 --force
+```
+`--span-id` accepts comma-separated or repeated values. Run `ax spans delete --help` for all flags.
 
 ## Filter Syntax Reference
 
