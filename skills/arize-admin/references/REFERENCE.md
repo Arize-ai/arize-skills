@@ -22,23 +22,22 @@ ax roles list --is-custom -o json
 ax users create \
   --full-name "Jane Doe" \
   --email jane@example.com \
-  --role member \
-  --invite-mode email_link
+  --role MEMBER \
+  --invite-mode EMAIL_LINK
 
 # 6. Get the user's global ID
 ax users list --email "jane@example.com" -o json
 
 # 7. Add the user to the org
-ax organizations add-user "Platform Team" --user-id USER_ID --role member
+ax organizations add-user "Platform Team" --user-id USER_ID --role MEMBER
 
 # 8. Add the user to the space
-ax spaces add-user "team-alpha" --user-id USER_ID --role member
+ax spaces add-user "team-alpha" --user-id USER_ID --role MEMBER
 
-# 9. Create a service key for the team's CI/CD pipeline
-ax api-keys create \
+# 9. Create a service key for the team's CI/CD pipeline (scoped via --assignments)
+ax api-keys create-service-key \
   --name "team-alpha-service-key" \
-  --key-type service \
-  --space "team-alpha"
+  --assignments '[{"org_id": "ORG_ID", "spaces": [{"space": "team-alpha"}]}]'
 ```
 
 ## Workflow 2: Configure SAML/SSO Role Mappings
@@ -90,11 +89,15 @@ ax roles list --is-custom -o json
 # Inspect a specific role's permission set
 ax roles get "Data Scientist" -o json
 
+# List role bindings for a resource type (--resource-type is required)
+ax role-bindings list --resource-type SPACE -l 100 -o json
+ax role-bindings list --resource-type PROJECT -l 100 -o json
+
 # List your own active API keys
-ax api-keys list --status active -o json
+ax api-keys list --status ACTIVE -o json
 ```
 
-> **CLI audit limitations:** `ax` cannot enumerate role bindings (no `list` subcommand) or other users' API keys. For a full access audit, use the Arize UI (Settings > Users & Permissions and Settings > API Keys).
+> **CLI audit limitations:** `ax api-keys list` only returns the authenticated user's own keys — it cannot enumerate other users' API keys. For a full access audit including other users' keys, use the Arize UI (Settings > API Keys).
 
 ## Workflow 5: Offboard a User
 
@@ -110,7 +113,7 @@ ax users list --email "jane@example.com" -o json
 #    all org/space memberships, API keys, and role bindings."
 
 # 3. After user confirms, delete
-ax users delete USER_ID --force
+ax users delete --id USER_ID --force
 ```
 
 If you also need to deactivate the user in your IdP (to prevent SSO re-login), do that separately in Okta/Azure AD/etc. For real-time automated key invalidation on IdP deactivation, configure SCIM 2.0 provisioning.
@@ -120,12 +123,12 @@ If you also need to deactivate the user in your IdP (to prevent SSO re-login), d
 One service key per tenant space — scoped permissions, no org-admin required:
 
 ```bash
-# Create a service key per tenant space
-ax api-keys create --name "tenant-acme-key" --key-type service --space "tenant-acme"
-ax api-keys create --name "tenant-beta-key" --key-type service --space "tenant-beta"
+# Create a service key per tenant space (ORG_ID from `ax organizations list -o json`)
+ax api-keys create-service-key --name "tenant-acme-key" --assignments '[{"org_id": "ORG_ID", "spaces": [{"space": "tenant-acme"}]}]'
+ax api-keys create-service-key --name "tenant-beta-key" --assignments '[{"org_id": "ORG_ID", "spaces": [{"space": "tenant-beta"}]}]'
 
 # Revoke a key (immediate invalidation)
-ax api-keys list --key-type service -o json   # find KEY_ID by name
+ax api-keys list --key-type SERVICE -o json   # find KEY_ID by name
 ax api-keys revoke KEY_ID --force
 
 # Rotate a key (zero-downtime, same scope)
@@ -145,6 +148,6 @@ Service keys can only write traces to their scoped space — they cannot access 
 | Role binding already exists | Idempotent — not an error | Safe to ignore; the existing binding is unchanged |
 | User not found in space add-user | User not yet an org member | Run `ax organizations add-user` first, then `ax spaces add-user` |
 | Role create fails with duplicate name | Name already in use | Use `ax roles list --is-custom` to find the existing role |
-| Service key create fails | `--space` missing or space doesn't exist | Verify with `ax spaces list`; `--space` is required for service keys |
+| Service key create fails | `--assignments` malformed or references a nonexistent org/space | Verify org ID with `ax organizations list -o json` and space with `ax spaces list`; `--assignments` is required for `create-service-key` |
 | Key value not saved | Raw key was not captured at creation | Refresh the key: `ax api-keys refresh KEY_ID` |
 | `Unknown command delete` on `ax api-keys` | `delete` was removed; use `revoke` instead | `ax api-keys revoke KEY_ID --force` |

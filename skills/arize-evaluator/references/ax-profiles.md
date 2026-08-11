@@ -81,6 +81,9 @@ After any create or update:
 
 ```bash
 ax profiles show
+
+# Or validate connectivity and configuration explicitly:
+ax profiles validate
 ```
 
 Confirm the API key and region are correct, then retry the original command.
@@ -99,30 +102,28 @@ Switch to a different profile:
 ax profiles use work
 ```
 
+Validate a profile without running a real command against it:
+
+```bash
+ax profiles validate         # active profile
+ax profiles validate work    # a specific profile
+```
+
 Delete a profile. You cannot delete the currently active profile; switch to another first if needed.
 
 ```bash
-ax profiles delete staging
-
-# Use --force to skip the confirmation prompt
-ax profiles delete staging --force
+ax profiles delete staging --force   # omit --force for a confirmation prompt
 ```
 
 ## Space
 
-There is no profile flag for space. Save it as an environment variable — accepts a space **name** (e.g., `my-workspace`) or a base64 space **ID** (e.g., `U3BhY2U6...`). Find yours with `ax spaces list -o json`.
+There is no profile field or environment variable for space. Every `ax` command that needs one takes it per-invocation via `-s`/`--space`, accepting a space **name** (e.g., `my-workspace`) or a base64 space **ID** (e.g., `U3BhY2U6...`). Find yours with `ax spaces list -o json`.
 
-**macOS/Linux** — add to `~/.zshrc` or `~/.bashrc`:
 ```bash
-export ARIZE_SPACE="my-workspace"    # name or base64 ID
+ax spans export my-project --space my-workspace
 ```
-Then `source ~/.zshrc` (or restart terminal).
 
-**Windows (PowerShell):**
-```powershell
-[System.Environment]::SetEnvironmentVariable('ARIZE_SPACE', 'my-workspace', 'User')
-```
-Restart terminal for it to take effect.
+**For app instrumentation (the `arize-otel` SDK), not the CLI:** the SDK reads the **`ARIZE_SPACE_ID`** env var — the **base64 Space ID**, not a name. That's a separate mechanism from the CLI's `--space` flag; see the **arize-instrumentation** skill for SDK env vars.
 
 ## Save Credentials for Future Use
 
@@ -130,13 +131,10 @@ At the **end of the session**, if the user manually provided any credentials dur
 
 **Skip this entirely if:**
 - The API key was already loaded from an existing profile or `ARIZE_API_KEY` env var
-- The space was already set via `ARIZE_SPACE` env var
-- The user only used base64 project IDs (no space was needed)
+- The user only used base64 project/space IDs and never needed to persist a space (there is no space env var for the CLI)
 
 **How to offer:** Use **AskQuestion**: *"Would you like to save your Arize credentials so you don't have to enter them next time?"* with options `"Yes, save them"` / `"No thanks"`.
 
 **If the user says yes:**
 
 1. **API key** — Run `ax profiles show` to check the current state. Then run `ax profiles create --api-key $ARIZE_API_KEY` or `ax profiles update --api-key $ARIZE_API_KEY` (the key must already be exported as an env var — never pass a raw key value).
-
-2. **Space** — See the Space section above to persist it as an environment variable.

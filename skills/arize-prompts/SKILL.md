@@ -5,7 +5,7 @@ description: "INVOKE THIS SKILL for Arize Prompt Hub and `ax prompts` workflows:
 
 # Arize Prompts Skill
 
-> **`SPACE`** — All `--space` flags and the `ARIZE_SPACE` env var accept a space **name** (e.g., `my-workspace`) or a base64 space **ID** (e.g., `U3BhY2U6...`). Find yours with `ax spaces list`.
+> **`SPACE`** — `--space` flags accept a space **name** (e.g., `my-workspace`) or a base64 space **ID** (e.g., `U3BhY2U6...`). There is no CLI env var for space; pass it per command. Find yours with `ax spaces list`.
 
 Official references (read the skill body first; open docs only if the user needs UI walkthroughs):
 - CLI: https://arize.com/docs/api-clients/cli/prompts
@@ -35,7 +35,7 @@ A **prompt** in Prompt Hub is a named, versioned template stored in a space — 
 Each prompt includes:
 
 - **Messages** — an ordered chat transcript (system, user, assistant, tool roles) as stored JSON. Typically a system message for behavior and a user message as the template that receives dataset or runtime variables.
-- **Template variables** — **must** be written with **single curly braces** around each name: `{` + identifier + `}` (same shape as `{}` with the variable name inside), e.g. `{question}`, `{context}`. Filled at runtime by experiments or your app. Always use `--input-variable-format f_string` for this style. **Do not ask the user which variable format to use** — default to `f_string` unless the template clearly uses Mustache `{{...}}` or you need `none` for literal braces with no substitution.
+- **Template variables** — **must** be written with **single curly braces** around each name: `{` + identifier + `}` (same shape as `{}` with the variable name inside), e.g. `{question}`, `{context}`. Filled at runtime by experiments or your app. Always use `--input-variable-format F_STRING` for this style. **Do not ask the user which variable format to use** — default to `F_STRING` unless the template clearly uses Mustache `{{...}}` (use `MUSTACHE`) or you need `NONE` for literal braces with no substitution.
 - **Provider and model** — the vendor and model this version targets. `--provider` is required by the CLI on every `create` and `create-version`. `--model` must always appear in commands this skill proposes — pick an explicit model string, propose a sensible default if unknown, and confirm before running.
 - **Invocation parameters** — optional model settings like temperature and max tokens, configured under Params in the UI. CLI flows still require provider and explicit model alongside messages and format.
 - **Version history** — every material change creates a new immutable version. Labels like `production` and `staging` are mutable pointers to specific versions so your app code never needs to change when you promote a new version.
@@ -66,7 +66,7 @@ Prefer resolving gaps with `ax` (e.g. `ax spaces list`, `ax prompts list`, `ax p
 2. **A few clarifying questions before I invoke it:**
 3. Ask minimal numbered questions — only what blocks the next `ax prompts` command.
 
-**Do not ask about `--input-variable-format`** — always default to `f_string` for `{variable}` templates.
+**Do not ask about `--input-variable-format`** — always default to `F_STRING` for `{variable}` templates.
 
 ---
 
@@ -97,16 +97,16 @@ Format-only example (not a default to paste — see Eliciting the prompt templat
 
 ```json
 [
-  {"role": "system", "content": "You are a concise trip planner. Keep responses under 200 words."},
-  {"role": "user", "content": "{duration} itinerary for {destination} ({travel_style} style):\nResearch: {research}\nBudget: {budget_info}"}
+  {"role": "SYSTEM", "content": "You are a concise trip planner. Keep responses under 200 words."},
+  {"role": "USER", "content": "{duration} itinerary for {destination} ({travel_style} style):\nResearch: {research}\nBudget: {budget_info}"}
 ]
 ```
 
-**Providers** (`--provider`): `openAI`, `anthropic`, `azureOpenAI`, `awsBedrock`, `vertexAI`, `gemini`, `custom`. Required on every `create` and `create-version`.
+**Providers** (`--provider`): `OPEN_AI`, `ANTHROPIC`, `AZURE_OPEN_AI`, `AWS_BEDROCK`, `VERTEX_AI`, `CUSTOM`. (No `GEMINI` option for prompts, unlike `ax ai-integrations`.) Required on every `create` and `create-version`.
 
 **Model** (`--model`): Always pass an explicit model. If unknown, propose a provider-appropriate default and confirm before running.
 
-**Variable format:** Placeholders **must** use **single** braces `{name}`. Always pass `--input-variable-format f_string` for that shape. Only use `mustache` for `{{name}}` or `none` for no interpolation — do not ask the user unless they stated a non-default requirement.
+**Variable format:** Placeholders **must** use **single** braces `{name}`. Always pass `--input-variable-format F_STRING` for that shape. Only use `MUSTACHE` for `{{name}}` or `NONE` for no interpolation — do not ask the user unless they stated a non-default requirement.
 
 ---
 
@@ -147,9 +147,9 @@ Then: **Use these as-is, or tell me what to change.**
 ax prompts create \
   --name "PROMPT_NAME" \
   --space SPACE \
-  --provider openAI \
+  --provider OPEN_AI \
   --model gpt-4o \
-  --input-variable-format f_string \
+  --input-variable-format F_STRING \
   --messages ./messages.json \
   --description "DESCRIPTION" \
   --commit-message "Initial version"
@@ -162,9 +162,9 @@ Every edit is a new immutable version. When the user wants to update message tex
 ```bash
 ax prompts create-version PROMPT_NAME_OR_ID \
   --space SPACE \
-  --provider openAI \
+  --provider OPEN_AI \
   --model gpt-4o \
-  --input-variable-format f_string \
+  --input-variable-format F_STRING \
   --messages ./updated_messages.json \
   --commit-message "What changed and why"
 ```
@@ -215,10 +215,10 @@ ax prompts list --space SPACE
 ax prompts create \
   --name "your-prompt-name" \
   --space SPACE \
-  --provider openAI \
+  --provider OPEN_AI \
   --model gpt-4o \
-  --input-variable-format f_string \
-  --messages '[{"role":"system","content":"Your system text."},{"role":"user","content":"{question}"}]' \
+  --input-variable-format F_STRING \
+  --messages '[{"role":"SYSTEM","content":"Your system text."},{"role":"USER","content":"{question}"}]' \
   --description "What this prompt does" \
   --commit-message "Initial version"
 ```
@@ -227,10 +227,10 @@ ax prompts create \
 ```bash
 ax prompts create-version PROMPT_NAME_OR_ID \
   --space SPACE \
-  --provider openAI \
+  --provider OPEN_AI \
   --model gpt-4o \
-  --input-variable-format f_string \
-  --messages '[{"role":"system","content":"Updated system text."},{"role":"user","content":"{question}"}]' \
+  --input-variable-format F_STRING \
+  --messages '[{"role":"SYSTEM","content":"Updated system text."},{"role":"USER","content":"{question}"}]' \
   --commit-message "Describe what changed"
 ```
 
@@ -317,9 +317,9 @@ Use a **new version** (immutable history). Propose `--commit-message` (version d
 ```bash
 ax prompts create-version PROMPT_NAME_OR_ID \
   --space SPACE \
-  --provider openAI \
+  --provider OPEN_AI \
   --model gpt-4o \
-  --input-variable-format f_string \
+  --input-variable-format F_STRING \
   --messages ./updated_messages.json \
   --commit-message "What changed and why"
 ```
@@ -347,7 +347,7 @@ ax prompts get "source-prompt" --space SPACE -o json
 # or: ax prompts get pr_abc123 --version-id prv_xyz789 -o json
 ```
 
-2. From the JSON, take **messages**, **provider**, **model**, and **input variable format** (`f_string` / `mustache` / `none`).
+2. From the JSON, take **messages**, **provider**, **model**, and **input variable format** (`F_STRING` / `MUSTACHE` / `NONE`).
 
 3. **Create** a new prompt with a new `--name` and the copied payload:
 
@@ -357,7 +357,7 @@ ax prompts create \
   --space SPACE \
   --provider PROVIDER_FROM_SOURCE \
   --model MODEL_FROM_SOURCE \
-  --input-variable-format f_string \
+  --input-variable-format F_STRING \
   --messages ./messages_extracted.json \
   --description "Copy of source-prompt" \
   --commit-message "Initial version (duplicated)"
@@ -372,11 +372,11 @@ Confirm the new name and space before `create`. Labels are **not** copied — us
 | Goal | Command |
 |------|---------|
 | List prompts | `ax prompts list --space SPACE` |
-| Create | `ax prompts create --name NAME --space SPACE --provider PROVIDER --model MODEL --input-variable-format f_string --messages ...` |
+| Create | `ax prompts create --name NAME --space SPACE --provider PROVIDER --model MODEL --input-variable-format F_STRING --messages ...` |
 | Get (latest) | `ax prompts get NAME_OR_ID [--space SPACE]` |
 | Get by version | `ax prompts get NAME_OR_ID --version-id prv_...` |
 | Get by label | `ax prompts get NAME_OR_ID --label LABEL` |
-| New version | `ax prompts create-version NAME_OR_ID --provider PROVIDER --model MODEL --input-variable-format f_string --messages ...` |
+| New version | `ax prompts create-version NAME_OR_ID --provider PROVIDER --model MODEL --input-variable-format F_STRING --messages ...` |
 | List versions | `ax prompts list-versions NAME_OR_ID [--space SPACE]` |
 | Resolve label | `ax prompts get-version-by-label NAME_OR_ID --label LABEL [--space SPACE]` |
 | Set labels | `ax prompts set-version-labels VERSION_ID --label L ...` |
@@ -396,8 +396,8 @@ For exhaustive flags and defaults, see [references/cli-prompts.md](references/cl
 | `Unknown command prompts` | Upgrade `ax` — see [references/ax-setup.md](references/ax-setup.md) |
 | `401 Unauthorized` | Check API key at https://app.arize.com/admin > API Keys |
 | Name not found | Pass `--space` when using a name instead of an ID |
-| Variables not interpolating | Confirm each placeholder is `{name}` (single `{` / `}` around the identifier) and `--input-variable-format f_string` |
+| Variables not interpolating | Confirm each placeholder is `{name}` (single `{` / `}` around the identifier) and `--input-variable-format F_STRING` |
 | Label pointing to wrong version | `get-version-by-label` to check, then `set-version-labels` on the correct `prv_...` ID |
 | Hub shows no default model | You omitted `--model` — always pass it explicitly |
-| CLI rejects missing `--provider` | Required on `create` and `create-version` — set one of `openAI`, `azureOpenAI`, `awsBedrock`, `vertexAI`, `custom` |
+| CLI rejects missing `--provider` | Required on `create` and `create-version` — set one of `OPEN_AI`, `AZURE_OPEN_AI`, `AWS_BEDROCK`, `VERTEX_AI`, `ANTHROPIC`, `CUSTOM` |
 | Need to change system text | Use `create-version` with updated `--messages` — `update` only changes metadata |

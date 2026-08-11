@@ -52,7 +52,7 @@ If the evaluator was created with `--data-granularity trace` but the task's `que
 
 **6. Check that all template variables resolve**
 
-Every `{variable}` in the evaluator template must have a corresponding `column_mappings` entry that resolves to a non-null value. Test resolution against a real span:
+Every `{{variable}}` in the evaluator template must have a corresponding `column_mappings` entry that resolves to a non-null value. Test resolution against a real span:
 ```bash
 ax spans export PROJECT --space SPACE -l 3 --days 7 --stdout | python3 -c "
 import sys, json

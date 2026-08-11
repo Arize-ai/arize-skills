@@ -41,8 +41,8 @@ ax prompts create \
 |--------|-------------|
 | `--name` | Unique prompt name within the space |
 | `--space` | Space name or ID |
-| `--provider` | **Required.** `openAI`, `anthropic`, `azureOpenAI`, `awsBedrock`, `vertexAI`, `gemini`, `custom` |
-| `--input-variable-format` | `f_string` (default for `{variable}` placeholders — use without asking the user), `mustache` for `{{variable}}`, or `none` |
+| `--provider` | **Required.** `OPEN_AI`, `ANTHROPIC`, `AZURE_OPEN_AI`, `AWS_BEDROCK`, `VERTEX_AI`, `CUSTOM` (no `GEMINI` option here, unlike `ax ai-integrations`) |
+| `--input-variable-format` | `F_STRING` (default for `{variable}` placeholders — use without asking the user), `MUSTACHE` for `{{variable}}`, or `NONE` |
 | `--messages` | Path to JSON file or inline JSON array of message objects |
 | `--commit-message` | Initial version message (default: `Initial version`). Same concept as Hub **Version description (optional)** on first save. |
 | `--description` | Optional prompt-level description (Hub **Description (optional)** on the prompt) |
@@ -106,8 +106,8 @@ ax prompts create-version NAME_OR_ID \
 
 | Option | Description |
 |--------|-------------|
-| `--provider` | **Required.** Same enum as `create`: `openAI`, `anthropic`, `azureOpenAI`, `awsBedrock`, `vertexAI`, `gemini`, `custom` |
-| `--input-variable-format` | Same as `create` (default `f_string` for `{variable}`) |
+| `--provider` | **Required.** Same enum as `create`: `OPEN_AI`, `ANTHROPIC`, `AZURE_OPEN_AI`, `AWS_BEDROCK`, `VERTEX_AI`, `CUSTOM` |
+| `--input-variable-format` | Same as `create` (default `F_STRING` for `{variable}`) |
 | `--messages` | Updated messages JSON for this version |
 | `--commit-message` | Same concept as Hub **Save New Version** → **Version description (optional)** (CLI default: `New version`) |
 | `--model` | Default model for this version — **always pass explicitly** per the main **SKILL.md** in this skill (confirm if unknown). |
@@ -153,7 +153,7 @@ Example:
 
 ```json
 [
-  {"role": "system", "content": "You are a helpful assistant for {company}."},
-  {"role": "user", "content": "Answer the question: {question}"}
+  {"role": "SYSTEM", "content": "You are a helpful assistant for {company}."},
+  {"role": "USER", "content": "Answer the question: {question}"}
 ]
 ```

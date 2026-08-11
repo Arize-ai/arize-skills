@@ -9,16 +9,16 @@ compatibility: Requires the ax CLI and a configured Arize profile.
 
 # Arize AI Integration Skill
 
-> **`SPACE`** — Most `--space` flags and the `ARIZE_SPACE` env var accept a space **name** (e.g., `my-workspace`) or a base64 space **ID** (e.g., `U3BhY2U6...`). Find yours with `ax spaces list`.
+> **`SPACE`** — `--space` flags accept a space **name** (e.g., `my-workspace`) or a base64 space **ID** (e.g., `U3BhY2U6...`). There is no CLI env var for space; pass it per command. Find yours with `ax spaces list`.
 > **Note:** `ai-integrations create` does **not** accept `--space` — AI integrations are account-scoped. Use `--space` only with `list`, `get`, `update`, and `delete`.
 
 ## Concepts
 
 - **AI Integration** = stored LLM provider credentials registered in Arize; used by evaluators to call a judge model and by other Arize features that need to invoke an LLM on your behalf
-- **Provider** = the LLM service backing the integration (e.g., `openAI`, `anthropic`, `awsBedrock`)
+- **Provider** = the LLM service backing the integration (e.g., `OPEN_AI`, `ANTHROPIC`, `AWS_BEDROCK`)
 - **Integration ID** = a base64-encoded global identifier for an integration (e.g., `TGxtSW50ZWdyYXRpb246MTI6YUJjRA==`); required for evaluator creation and other downstream operations
 - **Scoping** = visibility rules controlling which spaces or users can use an integration
-- **Auth type** = how Arize authenticates with the provider: `default` (provider API key), `proxy_with_headers` (proxy via custom headers), or `bearer_token` (bearer token auth)
+- **Auth type** = how Arize authenticates with the provider: `DEFAULT` (provider API key), `PROXY_WITH_HEADERS` (proxy via custom headers), or `BEARER_TOKEN` (bearer token auth)
 
 ## Prerequisites
 
@@ -80,7 +80,7 @@ ax ai-integrations list --space SPACE --limit 20 --cursor CURSOR_TOKEN -o json
 | `model_names` | Allowed model list, or `null` if all models are enabled |
 | `enable_default_models` | Whether default models for this provider are allowed |
 | `function_calling_enabled` | Whether tool/function calling is enabled |
-| `auth_type` | Authentication method: `default`, `proxy_with_headers`, or `bearer_token` |
+| `auth_type` | Authentication method: `DEFAULT`, `PROXY_WITH_HEADERS`, or `BEARER_TOKEN` |
 
 ---
 
@@ -111,7 +111,7 @@ If no suitable integration exists, create one. The required flags depend on the 
 ```bash
 ax ai-integrations create \
   --name "My OpenAI Integration" \
-  --provider openAI \
+  --provider OPEN_AI \
   --api-key $OPENAI_API_KEY
 ```
 
@@ -120,7 +120,7 @@ ax ai-integrations create \
 ```bash
 ax ai-integrations create \
   --name "My Anthropic Integration" \
-  --provider anthropic \
+  --provider ANTHROPIC \
   --api-key $ANTHROPIC_API_KEY
 ```
 
@@ -129,7 +129,7 @@ ax ai-integrations create \
 ```bash
 ax ai-integrations create \
   --name "My Azure OpenAI Integration" \
-  --provider azureOpenAI \
+  --provider AZURE_OPEN_AI \
   --api-key $AZURE_OPENAI_API_KEY \
   --base-url "https://my-resource.openai.azure.com/"
 ```
@@ -141,7 +141,7 @@ AWS Bedrock uses IAM role-based auth. Provide the ARN of the role Arize should a
 ```bash
 ax ai-integrations create \
   --name "My Bedrock Integration" \
-  --provider awsBedrock \
+  --provider AWS_BEDROCK \
   --provider-metadata '{"role_arn": "arn:aws:iam::123456789012:role/ArizeBedrockRole"}'
 ```
 
@@ -152,7 +152,7 @@ Vertex AI uses GCP service account credentials. Provide the GCP project and regi
 ```bash
 ax ai-integrations create \
   --name "My Vertex AI Integration" \
-  --provider vertexAI \
+  --provider VERTEX_AI \
   --provider-metadata '{"project_id": "my-gcp-project", "location": "us-central1"}'
 ```
 
@@ -161,7 +161,7 @@ ax ai-integrations create \
 ```bash
 ax ai-integrations create \
   --name "My Gemini Integration" \
-  --provider gemini \
+  --provider GEMINI \
   --api-key $GEMINI_API_KEY
 ```
 
@@ -170,7 +170,7 @@ ax ai-integrations create \
 ```bash
 ax ai-integrations create \
   --name "My NVIDIA NIM Integration" \
-  --provider nvidiaNim \
+  --provider NVIDIA_NIM \
   --api-key $NVIDIA_API_KEY \
   --base-url "https://integrate.api.nvidia.com/v1"
 ```
@@ -180,7 +180,7 @@ ax ai-integrations create \
 ```bash
 ax ai-integrations create \
   --name "My Custom Integration" \
-  --provider custom \
+  --provider CUSTOM \
   --base-url "https://my-llm-proxy.example.com/v1" \
   --api-key $CUSTOM_LLM_API_KEY
 ```
@@ -189,14 +189,14 @@ ax ai-integrations create \
 
 | Provider | Required extra flags |
 |----------|---------------------|
-| `openAI` | `--api-key <key>` |
-| `anthropic` | `--api-key <key>` |
-| `azureOpenAI` | `--api-key <key>`, `--base-url <azure-endpoint>` |
-| `awsBedrock` | `--provider-metadata '{"role_arn": "<arn>"}'` |
-| `vertexAI` | `--provider-metadata '{"project_id": "<gcp-project>", "location": "<region>"}'` |
-| `gemini` | `--api-key <key>` |
-| `nvidiaNim` | `--api-key <key>`, `--base-url <nim-endpoint>` |
-| `custom` | `--base-url <endpoint>` |
+| `OPEN_AI` | `--api-key <key>` |
+| `ANTHROPIC` | `--api-key <key>` |
+| `AZURE_OPEN_AI` | `--api-key <key>`, `--base-url <azure-endpoint>` |
+| `AWS_BEDROCK` | `--provider-metadata '{"role_arn": "<arn>"}'` |
+| `VERTEX_AI` | `--provider-metadata '{"project_id": "<gcp-project>", "location": "<region>"}'` |
+| `GEMINI` | `--api-key <key>` |
+| `NVIDIA_NIM` | `--api-key <key>`, `--base-url <nim-endpoint>` |
+| `CUSTOM` | `--base-url <endpoint>` |
 
 ### Optional flags for any provider
 
@@ -205,7 +205,7 @@ ax ai-integrations create \
 | `--model-name` | Allowed model name (repeat for multiple, e.g. `--model-name gpt-4o --model-name gpt-4o-mini`); omit to allow all models |
 | `--enable-default-models` | Enable the provider's default model list |
 | `--function-calling-enabled` | Enable tool/function calling support |
-| `--auth-type` | Authentication type: `default`, `proxy_with_headers`, or `bearer_token` |
+| `--auth-type` | Authentication type: `DEFAULT`, `PROXY_WITH_HEADERS`, or `BEARER_TOKEN` |
 | `--headers` | Custom headers as JSON object or file path (for proxy auth) |
 | `--provider-metadata` | Provider-specific metadata as JSON object or file path |
 
