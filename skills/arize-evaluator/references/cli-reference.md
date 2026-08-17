@@ -16,7 +16,7 @@ ax ai-integrations list --space SPACE
 # Create if none exists
 ax ai-integrations create \
   --name "My OpenAI Integration" \
-  --provider openAI \
+  --provider OPEN_AI \
   --api-key $OPENAI_API_KEY
 ```
 
@@ -57,13 +57,7 @@ ax evaluators create-template-evaluator \
   --include-explanation \
   --use-function-calling \
   --classification-choices '{"correct": 1, "incorrect": 0}' \
-  --template 'You are an evaluator. Given the user question and the model response, decide if the response correctly answers the question.
-
-User question: {input}
-
-Model response: {output}
-
-Respond with exactly one of these labels: correct, incorrect'
+  --template 'Judge if the response answers the question. Question: {{input}} Response: {{output}} Labels: correct, incorrect'
 
 # Create a new template version (for prompt or model changes — versions are immutable)
 ax evaluators create-template-evaluator-version NAME_OR_ID \
@@ -73,9 +67,7 @@ ax evaluators create-template-evaluator-version NAME_OR_ID \
   --model-name "gpt-4o" \
   --include-explanation \
   --classification-choices '{"correct": 1, "incorrect": 0}' \
-  --template 'Updated prompt...
-
-{input} / {output} / {context}'
+  --template 'Updated prompt with {{input}}, {{output}}, {{context}}'
 ```
 
 **Key flags for `create-template-evaluator`:**
@@ -88,7 +80,7 @@ ax evaluators create-template-evaluator-version NAME_OR_ID \
 | `--commit-message` | yes | Description of this version |
 | `--ai-integration-id` | yes | AI integration ID (from above) |
 | `--model-name` | yes | Judge model (e.g. `gpt-4o`) |
-| `--template` | yes | Prompt with `{variable}` placeholders (single-quoted in bash) |
+| `--template` | yes | Prompt with `{{variable}}` placeholders (double curly braces; single-quoted in bash) |
 | `--classification-choices` | yes | JSON object mapping choice labels to numeric scores e.g. `'{"correct": 1, "incorrect": 0}'` |
 | `--description` | no | Human-readable description |
 | `--include-explanation` | no | Include reasoning alongside the label |
@@ -96,7 +88,7 @@ ax evaluators create-template-evaluator-version NAME_OR_ID \
 | `--invocation-params` | no | JSON of model params e.g. `'{"temperature": 0}'` |
 | `--provider-params` | no | JSON object of provider-specific parameters |
 | `--data-granularity` | no | `span` (default), `trace`, or `session`. Only relevant for project tasks, not dataset/experiment tasks. See Data Granularity section. |
-| `--direction` | no | Optimization direction: `maximize`, `minimize`, or `none`. Sets how the UI renders trends. |
+| `--direction` | no | Optimization direction: `MAXIMIZE`, `MINIMIZE`, or `NONE`. Sets how the UI renders trends. |
 
 #### Code evaluators (deterministic, no LLM)
 
@@ -325,7 +317,7 @@ ax evaluators create-code-evaluator-version NAME_OR_ID \
 | `--query-filter` | no | SQL-style filter to restrict which spans are evaluated |
 | `--description` | no | Human-readable description |
 | `--data-granularity` | no | `span` (default), `trace`, or `session` |
-| `--direction` | no | Optimization direction: `maximize`, `minimize`, or `none` |
+| `--direction` | no | Optimization direction: `MAXIMIZE`, `MINIMIZE`, or `NONE` |
 
 ### Tasks
 

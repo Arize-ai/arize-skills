@@ -9,7 +9,7 @@ compatibility: Requires the ax CLI and a configured Arize profile.
 
 # Arize Prompt Optimization Skill
 
-> **`SPACE`** — All `--space` flags and the `ARIZE_SPACE` env var accept a space **name** (e.g., `my-workspace`) or a base64 space **ID** (e.g., `U3BhY2U6...`). Find yours with `ax spaces list`.
+> **`SPACE`** — `--space` flags accept a space **name** (e.g., `my-workspace`) or a base64 space **ID** (e.g., `U3BhY2U6...`). Find yours with `ax spaces list`.
 
 ## Related skills
 
@@ -124,8 +124,8 @@ Once you have the span data, reconstruct the prompt as a messages array:
 
 ```json
 [
-  {"role": "system", "content": "You are a helpful assistant that..."},
-  {"role": "user", "content": "Given {input}, answer the question: {question}"}
+  {"role": "SYSTEM", "content": "You are a helpful assistant that..."},
+  {"role": "USER", "content": "Given {input}, answer the question: {question}"}
 ]
 ```
 
@@ -271,8 +271,8 @@ OUTPUT FORMAT
 Return the revised prompt as a JSON array of messages:
 
 [
-  {"role": "system", "content": "..."},
-  {"role": "user", "content": "..."}
+  {"role": "SYSTEM", "content": "..."},
+  {"role": "USER", "content": "..."}
 ]
 
 Also provide a brief reasoning section (bulleted list) explaining:

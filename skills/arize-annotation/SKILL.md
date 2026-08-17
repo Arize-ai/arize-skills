@@ -9,7 +9,7 @@ compatibility: Requires the ax CLI (≥ 0.27.0) and a configured Arize profile.
 
 # Arize Annotation Skill
 
-> **`SPACE`** — All `--space` flags and the `ARIZE_SPACE` env var accept a space **name** (e.g., `my-workspace`) or a base64 space **ID** (e.g., `U3BhY2U6...`). Find yours with `ax spaces list`.
+> **`SPACE`** — `--space` flags accept a space **name** (e.g., `my-workspace`) or a base64 space **ID** (e.g., `U3BhY2U6...`). Find yours with `ax spaces list`.
 
 This skill covers **annotation configs** (the label schema) and **annotation queues** (human review workflows), as well as programmatically annotating project spans via the Python SDK.
 
@@ -38,7 +38,7 @@ An **annotation config** defines the schema for a single type of human feedback 
 | Field | Description |
 |-------|-------------|
 | **Name** | Descriptive identifier (e.g. `Correctness`, `Helpfulness`). Must be unique within the space. |
-| **Type** | `categorical` (pick from a list), `continuous` (numeric range), or `freeform` (free text). |
+| **Type** | `CATEGORICAL` (pick from a list), `CONTINUOUS` (numeric range), or `FREEFORM` (free text). |
 | **Values** | For categorical: array of `{"label": str, "score": number}` pairs. |
 | **Min/Max Score** | For continuous: numeric bounds. |
 | **Optimization Direction** | Whether higher scores are better (`MINIMIZE`) or worse (`MAXIMIZE`). Used to render trends in the UI. |
@@ -75,10 +75,10 @@ Categorical configs present a fixed set of labels for reviewers to choose from.
 ax annotation-configs create \
   --name "Correctness" \
   --space SPACE \
-  --type categorical \
+  --type CATEGORICAL \
   --value correct \
   --value incorrect \
-  --optimization-direction maximize
+  --optimization-direction MAXIMIZE
 ```
 
 Common binary label pairs:
@@ -96,10 +96,10 @@ Continuous configs let reviewers enter a numeric score within a defined range.
 ax annotation-configs create \
   --name "Quality Score" \
   --space SPACE \
-  --type continuous \
+  --type CONTINUOUS \
   --min-score 0 \
   --max-score 10 \
-  --optimization-direction maximize
+  --optimization-direction MAXIMIZE
 ```
 
 ### Create — Freeform
@@ -110,7 +110,7 @@ Freeform configs collect open-ended text feedback. No additional flags needed be
 ax annotation-configs create \
   --name "Reviewer Notes" \
   --space SPACE \
-  --type freeform
+  --type FREEFORM
 ```
 
 ### Get
@@ -185,7 +185,7 @@ ax annotation-queues create \
   --annotation-config-id CONFIG_ID \
   --annotator-email reviewer@example.com \
   --instructions "Label each response as correct or incorrect." \
-  --assignment-method all   # or: random
+  --assignment-method ALL   # or: RANDOM
 ```
 
 Repeat `--annotation-config-id` and `--annotator-email` to attach multiple configs or reviewers.

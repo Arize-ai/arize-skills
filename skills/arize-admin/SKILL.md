@@ -55,8 +55,8 @@ Ask before running any commands:
 ### Inviting users (standalone)
 Ask before running any commands:
 - **Name and email** — for each user to invite
-- **Role** — `admin`, `member`, or `read-only` (present as options)
-- **Invite mode** — `email_link` (default), `temporary_password`, or `none`
+- **Role** — `ADMIN`, `MEMBER`, or `ANNOTATOR` (present as options; account-level user creation has no `READ_ONLY` role)
+- **Invite mode** — `EMAIL_LINK` (default), `TEMPORARY_PASSWORD`, or `NONE`
 
 ### Revoking or rotating an API key
 Ask before running any commands:
@@ -69,7 +69,7 @@ If the user says "delete" an API key, use `ax api-keys revoke` — there is no `
 
 - **Organization** — a named grouping within an account (e.g. one per business unit). Spaces live inside organizations. Users are added to the account first, then to orgs, then to spaces.
 - **Space** — a workspace that isolates traces, datasets, and projects. A user must be an org member before they can be added to a space within that org.
-- **Role** — a named set of permissions. Predefined roles are system-managed. Custom roles are created by admins. The roles for org/space membership (`admin`, `member`, `read-only`, `annotator`) are separate from custom RBAC roles used with `ax role-bindings`.
+- **Role** — a named set of permissions. Predefined roles are system-managed. Custom roles are created by admins. The roles for org/space membership (`ADMIN`, `MEMBER`, `READ_ONLY`, `ANNOTATOR`) are separate from custom RBAC roles used with `ax role-bindings`.
 - **Role binding** — fine-grained assignment of a custom role to a user on a specific resource (a space or a project).
 - **Resource restriction** — marks a project so that only users with an explicit role binding on that project can access it. Roles bound at any higher hierarchy level (space, org, account) are excluded.
 - **API key** — either a *user* key (authenticates as the creator, full user permissions) or a *service* key (scoped to a specific space, for automated pipelines).
@@ -90,7 +90,7 @@ If an `ax` command fails:
 
 ## Users
 
-A user must exist in the account before they can be added to an org or space. **Account-level roles:** `admin`, `member`, `annotator`
+A user must exist in the account before they can be added to an org or space. **Account-level roles:** `ADMIN`, `MEMBER`, `ANNOTATOR`
 
 ```bash
 ax users list                                  # all users
@@ -103,13 +103,14 @@ ax users get USER_ID
 ax users create \
   --full-name "Jane Doe" \
   --email jane@example.com \
-  --role member \
-  --invite-mode email_link        # or: none | temporary_password
+  --role MEMBER \
+  --invite-mode EMAIL_LINK        # or: NONE | TEMPORARY_PASSWORD
 
 ax users update USER_ID --full-name "Jane Smith"
 ax users update USER_ID --is-developer          # grant developer flag
 
-ax users delete USER_ID --force   # ⚠ confirm first — cascades: org/space memberships, API key revocation, role bindings
+ax users delete --id USER_ID --force   # ⚠ confirm first — cascades: org/space memberships, API key revocation, role bindings
+ax users delete --email jane@example.com --force   # or resolve by email instead of ID
 
 ax users resend-invitation USER_ID
 ax users reset-password USER_ID
@@ -119,7 +120,7 @@ ax users reset-password USER_ID
 
 ## Organizations
 
-**Organization roles:** `admin`, `member`, `read-only`, `annotator`
+**Organization roles:** `ADMIN`, `MEMBER`, `READ_ONLY`, `ANNOTATOR`
 
 ```bash
 ax organizations list
@@ -133,7 +134,7 @@ ax organizations create --name "Platform Team" --description "Core ML platform"
 ax organizations update "Platform Team" --name "ML Platform" --description "Updated"
 
 # Add user (must exist in account first)
-ax organizations add-user "Platform Team" --user-id USER_ID --role member
+ax organizations add-user "Platform Team" --user-id USER_ID --role MEMBER
 
 # Remove user (also removes from all child spaces) — ⚠ confirm first
 ax organizations remove-user "Platform Team" --user-id USER_ID --force
@@ -146,7 +147,7 @@ ax organizations delete "Platform Team" --force
 
 ## Spaces
 
-**Space roles:** `admin`, `member`, `read-only`, `annotator`
+**Space roles:** `ADMIN`, `MEMBER`, `READ_ONLY`, `ANNOTATOR`
 
 ```bash
 ax spaces list
@@ -162,7 +163,7 @@ ax spaces update "team-alpha" --name "team-alpha-v2"
 ax spaces delete "team-alpha" --force   # ⚠ confirm first — irreversible; deletes all resources
 
 # User must be an org member before being added to a space
-ax spaces add-user "team-alpha" --user-id USER_ID --role member
+ax spaces add-user "team-alpha" --user-id USER_ID --role MEMBER
 ax spaces remove-user "team-alpha" --user-id USER_ID --force   # ⚠ confirm first
 ```
 
@@ -170,7 +171,7 @@ ax spaces remove-user "team-alpha" --user-id USER_ID --force   # ⚠ confirm fir
 
 ## Roles
 
-Custom RBAC roles used with `ax role-bindings`. Separate from the simpler `admin`/`member`/`read-only`/`annotator` roles in org/space membership.
+Custom RBAC roles used with `ax role-bindings`. Separate from the simpler `ADMIN`/`MEMBER`/`READ_ONLY`/`ANNOTATOR` roles in org/space membership.
 
 ```bash
 ax roles list                          # all roles
@@ -216,6 +217,10 @@ ax role-bindings create \
 ax role-bindings get BINDING_ID
 ax role-bindings update BINDING_ID --role-id NEW_ROLE_ID
 ax role-bindings delete BINDING_ID --force   # ⚠ confirm first
+
+# List bindings for a resource type (--resource-type is required)
+ax role-bindings list --resource-type SPACE
+ax role-bindings list --resource-type PROJECT --user-id USER_GLOBAL_ID -o json
 ```
 
 Idempotent — if a binding already exists for the user on that resource, exits without error.
@@ -245,16 +250,16 @@ ax projects list -l 100 -o json --space "my-workspace"
 
 ```bash
 ax api-keys list
-ax api-keys list --key-type service --status active -o json
+ax api-keys list --key-type SERVICE --status ACTIVE -o json
 
 # User key — authenticates as creator, inherits their full permissions
 ax api-keys create --name "CI pipeline" --expires-at "2027-01-01T00:00:00"
 
-# Service key — space-scoped bot user (recommended for CI/CD pipelines)
+# Service key — bot user scoped to org(s)/space(s) via --assignments JSON
+# (recommended for CI/CD pipelines; get ORG_ID from `ax organizations list -o json`)
 ax api-keys create-service-key \
   --name "team-alpha-traces" \
-  --space "team-alpha" \
-  --space-role member \
+  --assignments '[{"org_id": "ORG_ID", "spaces": [{"space": "team-alpha"}]}]' \
   --expires-at "2027-01-01T00:00:00"
 
 ax api-keys revoke KEY_ID --force   # ⚠ confirm first — invalidates the key immediately
@@ -271,12 +276,12 @@ ax api-keys refresh KEY_ID --expires-at "2028-01-01T00:00:00"
 | Flag | Required | Description |
 |------|----------|-------------|
 | `--name` | yes | Key name |
-| `--space` | yes | Space this service key is scoped to |
-| `--space-role` | no | Role in the space: `admin`, `member`, `read-only` |
-| `--org-role` | no | Role in the parent organization |
-| `--account-role` | no | Role at account level |
+| `--assignments` | yes | JSON array (or path to a JSON file) of org/space assignments for the bot user: `[{"org_id": "<id>", "role": "<org-role>", "spaces": [{"space": "<name-or-id>", "role": "<space-role>"}]}]`. `role` is optional at both levels — omitted roles default to `space=MEMBER`, `org=READ_ONLY`. Custom roles use `{"type": "CUSTOM", "id": "<role-id>"}`. |
+| `--account-role` | no | Account-level role for the bot user: `ADMIN`, `MEMBER`, or `ANNOTATOR` (default `MEMBER`) |
 | `--expires-at` | no | ISO 8601 expiry date |
 | `--description` | no | Optional description |
+
+There is no `--space`/`--space-role`/`--org-role` flag on `create-service-key` — scoping is entirely through `--assignments`.
 
 ---
 
