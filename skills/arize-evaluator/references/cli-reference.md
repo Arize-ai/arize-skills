@@ -57,13 +57,7 @@ ax evaluators create-template-evaluator \
   --include-explanation \
   --use-function-calling \
   --classification-choices '{"correct": 1, "incorrect": 0}' \
-  --template 'You are an evaluator. Given the user question and the model response, decide if the response correctly answers the question.
-
-User question: {{input}}
-
-Model response: {{output}}
-
-Respond with exactly one of these labels: correct, incorrect'
+  --template 'Judge if the response answers the question. Question: {{input}} Response: {{output}} Labels: correct, incorrect'
 
 # Create a new template version (for prompt or model changes — versions are immutable)
 ax evaluators create-template-evaluator-version NAME_OR_ID \
@@ -73,9 +67,7 @@ ax evaluators create-template-evaluator-version NAME_OR_ID \
   --model-name "gpt-4o" \
   --include-explanation \
   --classification-choices '{"correct": 1, "incorrect": 0}' \
-  --template 'Updated prompt...
-
-{{input}} / {{output}} / {{context}}'
+  --template 'Updated prompt with {{input}}, {{output}}, {{context}}'
 ```
 
 **Key flags for `create-template-evaluator`:**

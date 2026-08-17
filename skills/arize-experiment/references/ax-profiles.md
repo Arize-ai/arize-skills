@@ -102,13 +102,6 @@ Switch to a different profile:
 ax profiles use work
 ```
 
-Validate a profile without running a real command against it:
-
-```bash
-ax profiles validate         # active profile
-ax profiles validate work    # a specific profile
-```
-
 Delete a profile. You cannot delete the currently active profile; switch to another first if needed.
 
 ```bash
