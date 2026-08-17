@@ -158,6 +158,7 @@ For interactive setup, `ax profiles create` also offers **Advanced → Single en
 | [arize-dataset](skills/arize-dataset/SKILL.md) | Create, manage, and download datasets and examples. |
 | [arize-experiment](skills/arize-experiment/SKILL.md) | Run and analyze experiments against datasets. |
 | [arize-evaluator](skills/arize-evaluator/SKILL.md) | Create LLM-as-judge evaluators, run evaluation tasks, and set up continuous monitoring. |
+| [arize-instrumentation-health](skills/arize-instrumentation-health/SKILL.md) | Audit instrumentation health of existing traces — find orphaned, flat, or empty spans and other tracing gaps. |
 | [arize-ai-provider-integration](skills/arize-ai-provider-integration/SKILL.md) | Create and manage LLM provider credentials (OpenAI, Anthropic, Azure, Bedrock, Vertex, and more). |
 | [arize-annotation](skills/arize-annotation/SKILL.md) | Create and manage annotation configs (categorical, continuous, freeform); bulk-annotate project spans via the Python SDK. |
 | [arize-prompt-optimization](skills/arize-prompt-optimization/SKILL.md) | Optimize prompts using trace data, experiments, and meta-prompting. |
@@ -256,8 +257,8 @@ python tests/run_skill.py --skill arize-trace --prompt "Export trace abc123"
 
 ## Links
 
-- [Arize Documentation](https://docs.arize.com)
-- [Arize REST API Reference](https://docs.arize.com/arize/api-reference/rest-api)
+- [Arize Documentation](https://arize.com/docs)
+- [Arize REST API Reference](https://arize.com/docs/arize/api-reference/rest-api)
 - [ax CLI (arize-ax-cli)](https://github.com/Arize-ai/arize-ax-cli)
 - [OpenInference Semantic Conventions](https://github.com/Arize-ai/openinference)
 

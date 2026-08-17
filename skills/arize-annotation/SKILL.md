@@ -250,10 +250,10 @@ ax annotation-queues annotate-record NAME_OR_ID RECORD_ID \
 
 ### Assign a Record
 
-Assign users to review a specific record:
+Assign users to review a specific record. `--email` fully replaces existing assignments — repeat it for multiple reviewers, or omit it entirely to clear all assignments:
 
 ```bash
-ax annotation-queues assign-record NAME_OR_ID RECORD_ID --space SPACE
+ax annotation-queues assign-record NAME_OR_ID RECORD_ID --email reviewer@company.com --space SPACE
 ```
 
 ### Delete Records

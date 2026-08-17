@@ -23,14 +23,6 @@ If `ax` is installed (not `command not found`), always run `ax --version` before
 
 Upgrade: `uv tool install --force --reinstall arize-ax-cli`, `pipx upgrade arize-ax-cli`, or `pip install --upgrade arize-ax-cli`
 
-## Stale or corrupted cache
-
-Clear the cache to remove stale data and force a refresh:
-
-```bash
-ax cache clear
-```
-
 ## SSL/certificate error
 
 - macOS: `export SSL_CERT_FILE=/etc/ssl/cert.pem`
