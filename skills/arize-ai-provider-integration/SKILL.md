@@ -9,7 +9,7 @@ compatibility: Requires the ax CLI and a configured Arize profile.
 
 # Arize AI Integration Skill
 
-> **`SPACE`** — `--space` flags accept a space **name** (e.g., `my-workspace`) or a base64 space **ID** (e.g., `U3BhY2U6...`). There is no CLI env var for space; pass it per command. Find yours with `ax spaces list`.
+> **`SPACE`** — `--space` flags accept a space **name** (e.g., `my-workspace`) or a base64 space **ID** (e.g., `U3BhY2U6...`). Find yours with `ax spaces list`.
 > **Note:** `ai-integrations create` does **not** accept `--space` — AI integrations are account-scoped. Use `--space` only with `list`, `get`, `update`, and `delete`.
 
 ## Concepts

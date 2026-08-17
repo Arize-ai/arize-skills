@@ -9,7 +9,7 @@ compatibility: Requires the ax CLI (≥ 0.23.0) and a configured Arize profile.
 
 # Arize Trace Skill
 
-> **`SPACE`** — `--space` flags accept a space **name** (e.g., `my-workspace`) or a base64 space **ID** (e.g., `U3BhY2U6...`). There is no CLI env var for space; pass it per command. Find yours with `ax spaces list`.
+> **`SPACE`** — `--space` flags accept a space **name** (e.g., `my-workspace`) or a base64 space **ID** (e.g., `U3BhY2U6...`). Find yours with `ax spaces list`.
 
 ## Concepts
 
@@ -350,6 +350,10 @@ Core columns you'll need on almost every task:
 |--------|-------------|
 | `name` | Span operation name (e.g., `ChatCompletion`, `retrieve_docs`) |
 | `context.trace_id` / `context.span_id` | Trace ID (shared by all spans in a trace) / unique span ID |
+| `parent_id` | Parent span ID. `null` for root spans (= traces) |
+| `start_time` / `end_time` | When the span started / ended (ISO 8601) |
+| `latency_ms` | Duration in milliseconds |
+| `status_code` / `status_message` | `OK`, `ERROR`, `UNSET` / optional message (usually set on errors) |
 | `attributes.openinference.span.kind` | `LLM`, `CHAIN`, `TOOL`, `AGENT`, `RETRIEVER`, `RERANKER`, `EMBEDDING`, `GUARDRAIL`, `EVALUATOR` |
 | `attributes.input.value` / `attributes.output.value` | Generic input/output for any span kind |
 | `attributes.llm.input_messages` / `attributes.llm.output_messages` | Structured chat message arrays — where LLM-span prompts and responses actually live |

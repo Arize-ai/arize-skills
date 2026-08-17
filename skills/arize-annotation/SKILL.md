@@ -9,7 +9,7 @@ compatibility: Requires the ax CLI (≥ 0.27.0) and a configured Arize profile.
 
 # Arize Annotation Skill
 
-> **`SPACE`** — `--space` flags accept a space **name** (e.g., `my-workspace`) or a base64 space **ID** (e.g., `U3BhY2U6...`). There is no CLI env var for space; pass it per command. Find yours with `ax spaces list`.
+> **`SPACE`** — `--space` flags accept a space **name** (e.g., `my-workspace`) or a base64 space **ID** (e.g., `U3BhY2U6...`). Find yours with `ax spaces list`.
 
 This skill covers **annotation configs** (the label schema) and **annotation queues** (human review workflows), as well as programmatically annotating project spans via the Python SDK.
 

@@ -9,7 +9,7 @@ compatibility: Requires the ax CLI and a configured Arize profile with an AI int
 
 # Arize Evaluator Skill
 
-> **`SPACE`** — `--space` flags accept a space **name** (e.g., `my-workspace`) or a base64 space **ID** (e.g., `U3BhY2U6...`). There is no CLI env var for space; pass it per command. Find yours with `ax spaces list`.
+> **`SPACE`** — `--space` flags accept a space **name** (e.g., `my-workspace`) or a base64 space **ID** (e.g., `U3BhY2U6...`). Find yours with `ax spaces list`.
 
 This skill covers designing, creating, and running **evaluators** on Arize — both **LLM-as-judge (template)** evaluators and **code evaluators** (deterministic, no LLM required). An evaluator defines the judge; a **task** is how you run it against real data.
 

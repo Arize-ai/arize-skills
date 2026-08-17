@@ -112,7 +112,7 @@ ax profiles validate work    # a specific profile
 Delete a profile. You cannot delete the currently active profile; switch to another first if needed.
 
 ```bash
-ax profiles delete staging --force   # omit --force for a confirmation prompt
+ax profiles delete staging --force
 ```
 
 ## Space
@@ -131,7 +131,7 @@ At the **end of the session**, if the user manually provided any credentials dur
 
 **Skip this entirely if:**
 - The API key was already loaded from an existing profile or `ARIZE_API_KEY` env var
-- The user only used base64 project/space IDs and never needed to persist a space (there is no space env var for the CLI)
+- The user only used base64 project/space IDs and never needed to persist a space
 
 **How to offer:** Use **AskQuestion**: *"Would you like to save your Arize credentials so you don't have to enter them next time?"* with options `"Yes, save them"` / `"No thanks"`.
 
