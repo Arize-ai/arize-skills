@@ -8,6 +8,12 @@ Placeholders used throughout:
 
 ---
 
+## Project
+
+```
+https://app.arize.com/organizations/{org_id}/spaces/{space_id}/projects/{project_id}
+```
+
 ## Trace
 
 ```
