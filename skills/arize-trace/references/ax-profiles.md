@@ -56,9 +56,10 @@ ax profiles create --api-key $ARIZE_API_KEY --region us-east-1b
 ax profiles create work --api-key $ARIZE_API_KEY --region us-east-1b
 ```
 
-To use a named profile with any `ax` command, add `-p NAME`:
+To use a named profile, switch to it first — profile selection is stateful, not a per-command flag (there is no global `-p`/`--profile` option):
 ```bash
-ax spans export PROJECT -p work
+ax profiles use work
+ax spans export PROJECT
 ```
 
 ## 4. Getting the API key
