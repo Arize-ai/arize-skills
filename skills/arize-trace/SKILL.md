@@ -76,7 +76,7 @@ ax spans export PROJECT --span-id SPAN_ID --output-dir .arize-tmp-traces
 ax spans export PROJECT --session-id SESSION_ID --output-dir .arize-tmp-traces
 ```
 
-Flags: run `ax spans export --help`.
+Flags: see [references/spans-cli.md](references/spans-cli.md#ax-spans-export).
 
 Output is a JSON array of span objects. File naming: `{type}_{id}_{timestamp}/spans.json`.
 
@@ -192,7 +192,7 @@ ax traces export PROJECT --filter "status_code = 'ERROR'" --stdout
 ax traces export PROJECT --space SPACE --filter "status_code = 'ERROR'" --all --output-dir .arize-tmp-traces
 ```
 
-Flags: run `ax traces export --help`.
+Flags: see [references/spans-cli.md](references/spans-cli.md#ax-traces-export).
 
 ### How it differs from `ax spans export`
 
@@ -233,7 +233,7 @@ ax spans annotate PROJECT --file annotations.json --start-time "2026-05-01T00:00
 ax spans annotate PROJECT --file annotations.json --days 7
 ```
 
-Flags: run `ax spans annotate --help`.
+Flags: see [references/spans-cli.md](references/spans-cli.md#ax-spans-annotate).
 
 The annotation file must contain the span ID and the annotation fields to write. Export a sample span first to confirm span IDs and available fields before bulk-annotating.
 
