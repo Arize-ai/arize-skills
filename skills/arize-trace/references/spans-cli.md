@@ -1,51 +1,6 @@
-# `ax spans` / `ax traces` — Flag and Filter Reference
+# `ax spans` / `ax traces` — Filter Syntax Reference
 
-Flag tables and `--filter` syntax. See [SKILL.md](../SKILL.md) for workflows and export strategy, and [span-columns.md](span-columns.md) for the full span attribute reference.
-
-## `ax spans export`
-
-| Flag | Default | Description |
-|------|---------|-------------|
-| `PROJECT` (positional) | `$ARIZE_DEFAULT_PROJECT` | Project name or base64 ID |
-| `--trace-id` | — | Filter by `context.trace_id` (mutex with other ID flags) |
-| `--span-id` | — | Filter by `context.span_id` (mutex with other ID flags) |
-| `--session-id` | — | Filter by `attributes.session.id` (mutex with other ID flags) |
-| `--filter` | — | SQL-like filter; combinable with any ID flag |
-| `--limit, -l` | 100 | Max spans (REST); ignored with `--all` |
-| `--space` | — | Required when using `--all` (Arrow Flight); not needed for project name in spans export |
-| `--days` | 30 | Lookback window; ignored if `--start-time`/`--end-time` set |
-| `--start-time` / `--end-time` | — | ISO 8601 time range override |
-| `--output-dir` | `.arize-tmp-traces` | Output directory |
-| `--stdout` | false | Print JSON to stdout instead of file |
-| `--all` | false | Unlimited bulk export via Arrow Flight |
-
-## `ax traces export`
-
-| Flag | Type | Default | Description |
-|------|------|---------|-------------|
-| `PROJECT` | string | required | Project name or base64 ID (positional arg) |
-| `--filter` | string | none | Filter expression for phase-1 span lookup |
-| `--space` | string | none | Space name or ID; required when `PROJECT` is a name or when using `--all` (Arrow Flight) |
-| `--limit, -l` | int | 50 | Max number of traces to export |
-| `--days` | int | 30 | Lookback window in days |
-| `--start-time` | string | none | Override start (ISO 8601) |
-| `--end-time` | string | none | Override end (ISO 8601) |
-| `--output-dir` | string | `.` | Output directory |
-| `--stdout` | bool | false | Print JSON to stdout instead of file |
-| `--all` | bool | false | Use Arrow Flight for both phases |
-
-## `ax spans annotate`
-
-| Flag | Type | Required | Description |
-|------|------|----------|-------------|
-| `PROJECT` | string | yes | Project name or base64 ID (positional) |
-| `--file, -f` | path | yes | Annotation file: JSON, JSONL, CSV, or Parquet (use `-` for stdin) |
-| `--space` | string | no | Space name or ID |
-| `--start-time` | string | no | ISO 8601 start of annotation window |
-| `--end-time` | string | no | ISO 8601 end of annotation window |
-| `--days` | int | no | Lookback window in days (default 30) |
-
----
+`--filter` syntax for `ax spans export`, `ax traces export`, `ax traces list`, and `ax spans annotate`. Run `ax spans export --help` / `ax traces export --help` / `ax spans annotate --help` for flags — not documented here. See [SKILL.md](../SKILL.md) for workflows and export strategy, and [span-columns.md](span-columns.md) for the full span attribute reference.
 
 ## Filter Syntax
 
