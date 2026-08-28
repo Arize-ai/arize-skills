@@ -201,7 +201,7 @@ Flags: see [references/spans-cli.md](references/spans-cli.md#ax-traces-export).
 
 ## Browse Traces: `ax traces list`
 
-Paginated table of traces in a project — use this to **find** a trace ID before exporting, rather than exporting blind. Much cheaper than `ax traces export` when you only need to see what exists.
+Paginated table of traces in a project. This is mainly useful for open-ended human-style browsing when you don't yet know what filter or trace ID to use — if you already know the filter/time range you need, skip straight to `ax traces export` or `ax spans export` instead of listing first.
 
 ```bash
 ax traces list PROJECT --space SPACE -l 30
@@ -211,7 +211,7 @@ ax traces list PROJECT --space SPACE --start-time "2026-08-01T00:00:00Z" -o json
 
 `--space` is required when `PROJECT` is a name. Flags: `--filter`, `--start-time`/`--end-time` (ISO 8601), `--limit, -l` (default 15), `--cursor, -c`, `-o, --output`. The same [filter syntax](references/spans-cli.md#filter-syntax) applies.
 
-**Typical flow:** `ax traces list` to locate a trace → `ax spans export PROJECT --trace-id TRACE_ID` to pull its spans (immediately consistent; see Time-series index lag below).
+**When the filter is unknown:** `ax traces list` to locate a trace → `ax spans export PROJECT --trace-id TRACE_ID` to pull its spans (immediately consistent; see Time-series index lag below). When you already know the filter, skip listing and export directly.
 
 ### Time-series index lag
 

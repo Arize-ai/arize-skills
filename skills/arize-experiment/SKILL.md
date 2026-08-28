@@ -43,7 +43,7 @@ ax experiments list --cursor CURSOR_TOKEN
 ax experiments list -o json
 ```
 
-Flags: see [references/experiments-cli.md#list](references/experiments-cli.md#list).
+Flags: run `ax experiments list --help`.
 
 ## Get Experiment: `ax experiments get`
 
@@ -55,7 +55,19 @@ ax experiments get NAME_OR_ID -o json
 ax experiments get NAME_OR_ID --dataset DATASET_NAME --space SPACE   # required when using experiment name instead of ID
 ```
 
-Flags and response fields: see [references/experiments-cli.md#get](references/experiments-cli.md#get).
+Flags: run `ax experiments get --help`.
+
+### Response fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | string | Experiment ID |
+| `name` | string | Experiment name |
+| `dataset_id` | string | Linked dataset ID |
+| `dataset_version_id` | string | Specific dataset version used |
+| `experiment_traces_project_id` | string | Project where experiment traces are stored |
+| `created_at` | datetime | When the experiment was created |
+| `updated_at` | datetime | Last modification time |
 
 ## Export Experiment: `ax experiments export`
 
@@ -72,7 +84,7 @@ ax experiments export EXPERIMENT_NAME --dataset DATASET_NAME --space SPACE --std
 ax experiments export EXPERIMENT_NAME --dataset DATASET_NAME --space SPACE --stdout | jq '.[0]'
 ```
 
-Flags: see [references/experiments-cli.md#export](references/experiments-cli.md#export).
+Flags: run `ax experiments export --help`.
 
 ### REST vs Flight (`--all`)
 
@@ -107,7 +119,7 @@ ax experiments create --name "gpt-4o-baseline" --dataset DATASET_NAME --space SP
 ax experiments create --name "claude-test" --dataset DATASET_NAME --space SPACE --file runs.csv
 ```
 
-Flags: see [references/experiments-cli.md#create](references/experiments-cli.md#create).
+Flags: run `ax experiments create --help`.
 
 ### Passing data via stdin
 
@@ -157,9 +169,9 @@ def task(dataset_row):
     return resp.content[0].text
 ```
 
-`--dry-run` tests against the first 10 examples without uploading, to validate the task before a full run. Flags: see [references/experiments-cli.md#run](references/experiments-cli.md#run).
+`--dry-run` tests against the first 10 examples without uploading, to validate the task before a full run. Flags: run `ax experiments run --help`.
 
-> **Two different ways to run an experiment — pick deliberately.** `ax experiments run` (this command) executes *your* Python task on *your* machine and uploads the results; you control the code, and it needs no AI integration. `ax tasks create-run-experiment` instead registers a **platform-side** `run_experiment` task that Arize executes on a schedule or on demand, driven by a JSON `--run-configuration` (model + messages + AI integration) rather than your code. Use `ax experiments run` for local/ad-hoc runs and custom logic; use the task path for recurring, hosted runs — see the **arize-evaluator** skill for that route.
+> **Choose the run path based on where the logic lives.** Use `ax experiments run` when there's a local Python task to execute — it runs `task.py` on this machine and uploads the results; no AI integration is required. Use `ax tasks create-run-experiment` when the run should be hosted and recurring — it registers a platform-side `run_experiment` task that Arize executes on a schedule or on demand, driven by a JSON `--run-configuration` (model + messages + AI integration) instead of local code. Default to `ax experiments run` for local/ad-hoc runs and custom logic; use the task path for recurring, hosted runs — see the **arize-evaluator** skill for that route.
 
 ## List Runs: `ax experiments list-runs`
 
@@ -170,7 +182,7 @@ ax experiments list-runs EXPERIMENT_NAME --dataset DATASET_NAME --space SPACE --
 ax experiments list-runs EXPERIMENT_ID
 ```
 
-Flags: see [references/experiments-cli.md#list-runs](references/experiments-cli.md#list-runs).
+Flags: run `ax experiments list-runs --help`.
 
 ## Delete Experiment: `ax experiments delete`
 
@@ -180,7 +192,7 @@ ax experiments delete NAME_OR_ID --dataset DATASET_NAME --space SPACE   # requir
 ax experiments delete NAME_OR_ID --force   # skip confirmation prompt
 ```
 
-Flags: see [references/experiments-cli.md#delete](references/experiments-cli.md#delete).
+Flags: run `ax experiments delete --help`.
 
 ## Annotate Runs: `ax experiments annotate-runs`
 
@@ -218,7 +230,7 @@ A JSON array; each item annotates one run:
 
 > `record_id` keys on the **run** id, which only exists after `create`. So the order is always: `create` → `export` (to read each run's `id`) → build annotations → `annotate-runs`.
 
-Flags: see [references/experiments-cli.md#annotate-runs](references/experiments-cli.md#annotate-runs).
+Flags: run `ax experiments annotate-runs --help`.
 
 ## Experiment Run Schema
 

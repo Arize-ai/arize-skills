@@ -54,7 +54,7 @@ ax evaluators create-template-evaluator \
   --commit-message "Initial version" \
   --ai-integration-id INT_ID \
   --model-name "gpt-4o" \
-  --include-explanation \
+  --include-explanations \
   --use-function-calling \
   --classification-choices '{"correct": 1, "incorrect": 0}' \
   --template 'Judge if the response answers the question. Question: {{input}} Response: {{output}} Labels: correct, incorrect'
@@ -65,7 +65,7 @@ ax evaluators create-template-evaluator-version NAME_OR_ID \
   --template-name "correctness" \
   --ai-integration-id INT_ID \
   --model-name "gpt-4o" \
-  --include-explanation \
+  --include-explanations \
   --classification-choices '{"correct": 1, "incorrect": 0}' \
   --template 'Updated prompt with {{input}}, {{output}}, {{context}}'
 ```
@@ -83,7 +83,7 @@ ax evaluators create-template-evaluator-version NAME_OR_ID \
 | `--template` | yes | Prompt with `{{variable}}` placeholders (double curly braces; single-quoted in bash) |
 | `--classification-choices` | yes | JSON object mapping choice labels to numeric scores e.g. `'{"correct": 1, "incorrect": 0}'` |
 | `--description` | no | Human-readable description |
-| `--include-explanation` | no | Include reasoning alongside the label |
+| `--include-explanations` | no | Include reasoning alongside the label |
 | `--use-function-calling` | no | Prefer structured function-call output |
 | `--invocation-params` | no | JSON of model params e.g. `'{"temperature": 0}'` |
 | `--provider-params` | no | JSON object of provider-specific parameters |

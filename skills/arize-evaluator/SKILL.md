@@ -153,7 +153,7 @@ ax evaluators create-template-evaluator \
   --commit-message "Initial version" \
   --ai-integration-id INT_ID \
   --model-name "gpt-4o" \
-  --include-explanation \
+  --include-explanations \
   --use-function-calling \
   --classification-choices '{"factual": 1, "hallucinated": 0}' \
   --template 'You are an evaluator. Given the user question and the model response, decide if the response is factual or contains unsupported claims.
@@ -377,7 +377,7 @@ Is this hallucinated? Answer yes or no.
 
 Pass `--invocation-params '{"temperature": 0}'` for reproducible scoring. Higher temperatures introduce noise into evaluation results.
 
-### 5. Use `--include-explanation` for debugging
+### 5. Use `--include-explanations` for debugging
 
 During initial setup, always include explanations so you can verify the judge is reasoning correctly before trusting the labels at scale.
 
@@ -418,7 +418,7 @@ The labels in `--classification-choices` must exactly match the labels reference
 | Run `cancelled` ~3min | Found spans but LLM call failed — wrong model name or bad key |
 | Run `completed`, 0 spans | Widen time window; eval index may not cover older data |
 | No scores in UI | Fix `column_mappings` to match real paths on your spans/runs |
-| Scores look wrong | Add `--include-explanation` and inspect judge reasoning on a few samples |
+| Scores look wrong | Add `--include-explanations` and inspect judge reasoning on a few samples |
 | Evaluator cancels on wrong span kind | Match `query_filter` and `column_mappings` to LLM vs CHAIN spans |
 | Time format error on `trigger-run` | Use `2026-03-21T09:00:00` — no trailing `Z` |
 | Run failed: "missing rails and classification choices" | Add `--classification-choices '{"label_a": 1, "label_b": 0}'` to `ax evaluators create-template-evaluator` — labels must match the template |
