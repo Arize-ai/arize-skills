@@ -43,15 +43,7 @@ ax experiments list --cursor CURSOR_TOKEN
 ax experiments list -o json
 ```
 
-### Flags
-
-| Flag | Type | Default | Description |
-|------|------|---------|-------------|
-| `--dataset` | string | none | Filter by dataset |
-| `--name, -n` | string | none | Substring filter on experiment name |
-| `--limit, -l` | int | 15 | Max results (1-100) |
-| `--cursor` | string | none | Pagination cursor from previous response |
-| `-o, --output` | string | table | Output format: table, json, csv, parquet, or file path |
+Flags: see [references/experiments-cli.md#list](references/experiments-cli.md#list).
 
 ## Get Experiment: `ax experiments get`
 
@@ -63,14 +55,7 @@ ax experiments get NAME_OR_ID -o json
 ax experiments get NAME_OR_ID --dataset DATASET_NAME --space SPACE   # required when using experiment name instead of ID
 ```
 
-### Flags
-
-| Flag | Type | Default | Description |
-|------|------|---------|-------------|
-| `NAME_OR_ID` | string | required | Experiment name or ID (positional) |
-| `--dataset` | string | none | Dataset name or ID (required if using experiment name instead of ID) |
-| `--space` | string | none | Space name or ID (required if using dataset name instead of ID) |
-| `-o, --output` | string | table | Output format |
+Flags: see [references/experiments-cli.md#get](references/experiments-cli.md#get).
 
 ### Response fields
 
@@ -99,16 +84,7 @@ ax experiments export EXPERIMENT_NAME --dataset DATASET_NAME --space SPACE --std
 ax experiments export EXPERIMENT_NAME --dataset DATASET_NAME --space SPACE --stdout | jq '.[0]'
 ```
 
-### Flags
-
-| Flag | Type | Default | Description |
-|------|------|---------|-------------|
-| `NAME_OR_ID` | string | required | Experiment name or ID (positional) |
-| `--dataset` | string | none | Dataset name or ID (required if using experiment name instead of ID) |
-| `--space` | string | none | Space name or ID (required if using dataset name instead of ID) |
-| `--all` | bool | false | Use Arrow Flight for bulk export (see below) |
-| `--output-dir` | string | `.` | Output directory |
-| `--stdout` | bool | false | Print JSON to stdout instead of file |
+Flags: see [references/experiments-cli.md#export](references/experiments-cli.md#export).
 
 ### REST vs Flight (`--all`)
 
@@ -143,15 +119,7 @@ ax experiments create --name "gpt-4o-baseline" --dataset DATASET_NAME --space SP
 ax experiments create --name "claude-test" --dataset DATASET_NAME --space SPACE --file runs.csv
 ```
 
-### Flags
-
-| Flag | Type | Required | Description |
-|------|------|----------|-------------|
-| `--name, -n` | string | yes | Experiment name |
-| `--dataset` | string | yes | Dataset to run the experiment against |
-| `--space, -s` | string | no | Space name or ID (required if using dataset name instead of ID) |
-| `--file, -f` | path | yes | Data file with runs: CSV, JSON, JSONL, or Parquet |
-| `-o, --output` | string | no | Output format |
+Flags: see [references/experiments-cli.md#create](references/experiments-cli.md#create). `--dataset` is optional — omit it to create a standalone experiment with no linked dataset (then `--space` is required instead).
 
 ### Passing data via stdin
 
@@ -201,17 +169,9 @@ def task(dataset_row):
     return resp.content[0].text
 ```
 
-`--dry-run` tests against the first 10 examples without uploading, to validate the task before a full run.
+`--dry-run` tests against the first 10 examples without uploading, to validate the task before a full run. Flags: see [references/experiments-cli.md#run](references/experiments-cli.md#run).
 
-| Flag | Required | Description |
-|------|----------|-------------|
-| `--name, -n` | yes | Experiment name |
-| `--dataset` | yes | Dataset name or ID |
-| `--task` | yes | Path to Python file with a top-level `task(dataset_row)` function |
-| `--space, -s` | no | Required if using dataset name instead of ID |
-| `--concurrency, -c` | no | Concurrent task executions (default: 3) |
-| `--dry-run` | no | Run against first 10 examples only, no upload |
-| `-o, --output` | no | Output format |
+> **Choose the run path based on where the logic lives.** Use `ax experiments run` when there's a local Python task to execute — it runs `task.py` on this machine and uploads the results; no AI integration is required. Use `ax tasks create-run-experiment` when the run should be hosted and recurring — it registers a platform-side `run_experiment` task that Arize executes on a schedule or on demand, driven by a JSON `--run-configuration` (model + messages + AI integration) instead of local code. Default to `ax experiments run` for local/ad-hoc runs and custom logic; use the task path for recurring, hosted runs — see the **arize-evaluator** skill for that route.
 
 ## List Runs: `ax experiments list-runs`
 
@@ -222,13 +182,7 @@ ax experiments list-runs EXPERIMENT_NAME --dataset DATASET_NAME --space SPACE --
 ax experiments list-runs EXPERIMENT_ID
 ```
 
-| Flag | Required | Description |
-|------|----------|-------------|
-| `NAME_OR_ID` | yes | Experiment name or ID (positional) |
-| `--dataset` | no | Required if using experiment name instead of ID |
-| `--space, -s` | no | Required when dataset is a name |
-| `--limit, -l` | no | Max runs to return (default: 15) |
-| `-o, --output` | no | Output format |
+Flags: see [references/experiments-cli.md#list-runs](references/experiments-cli.md#list-runs).
 
 ## Delete Experiment: `ax experiments delete`
 
@@ -238,14 +192,7 @@ ax experiments delete NAME_OR_ID --dataset DATASET_NAME --space SPACE   # requir
 ax experiments delete NAME_OR_ID --force   # skip confirmation prompt
 ```
 
-### Flags
-
-| Flag | Type | Default | Description |
-|------|------|---------|-------------|
-| `NAME_OR_ID` | string | required | Experiment name or ID (positional) |
-| `--dataset` | string | none | Dataset name or ID (required if using experiment name instead of ID) |
-| `--space` | string | none | Space name or ID (required if using dataset name instead of ID) |
-| `--force, -f` | bool | false | Skip confirmation prompt |
+Flags: see [references/experiments-cli.md#delete](references/experiments-cli.md#delete).
 
 ## Annotate Runs: `ax experiments annotate-runs`
 
@@ -283,14 +230,7 @@ A JSON array; each item annotates one run:
 
 > `record_id` keys on the **run** id, which only exists after `create`. So the order is always: `create` → `export` (to read each run's `id`) → build annotations → `annotate-runs`.
 
-### Flags
-
-| Flag | Type | Required | Description |
-|------|------|----------|-------------|
-| `NAME_OR_ID` | string | yes | Experiment name or ID (positional) |
-| `--file, -f` | path | yes | Annotation file: JSON, JSONL, CSV, or Parquet (use `-` for stdin) |
-| `--dataset` | string | yes | Dataset name or ID (required when using experiment name instead of ID) |
-| `--space` | string | no | Space name or ID |
+Flags: see [references/experiments-cli.md#annotate-runs](references/experiments-cli.md#annotate-runs).
 
 ## Experiment Run Schema
 
@@ -344,40 +284,7 @@ At least one of `label`, `score`, or `explanation` should be present per evaluat
    ax datasets export DATASET_NAME --space SPACE --stdout | python3 infer.py > runs.json
    ```
 
-   Write `infer.py` to read examples from stdin, call the target model, and write runs JSON to stdout. The script below is a template — first inspect the exported dataset JSON to find the correct input field name, then uncomment the provider block the user wants:
-
-   ```python
-   import json, sys, time
-
-   examples = json.load(sys.stdin)
-   runs = []
-
-   for ex in examples:
-       # find field from exported JSON, e.g. "input"/"question"/"prompt"
-       user_input = ex.get("input") or ex.get("question") or ex.get("prompt") or str(ex)
-       start = time.time()
-
-       # === CALL THE REAL MODEL API — never fabricate/simulate. Uncomment one provider: ===
-       # OpenAI (pip install openai, OPENAI_API_KEY):
-       # from openai import OpenAI
-       # output_text = OpenAI().chat.completions.create(model="gpt-4o", messages=[{"role": "user", "content": user_input}]).choices[0].message.content
-       # Anthropic (pip install anthropic, ANTHROPIC_API_KEY):
-       # import anthropic
-       # output_text = anthropic.Anthropic().messages.create(model="claude-sonnet-4-6", max_tokens=1024, messages=[{"role": "user", "content": user_input}]).content[0].text
-       # Google Gemini (pip install google-genai, GOOGLE_API_KEY):
-       # from google import genai
-       # output_text = genai.Client().models.generate_content(model="gemini-2.5-pro", contents=user_input).text
-       # Custom/OpenAI-compatible proxy — Azure OpenAI, NVIDIA NIM, Ollama, etc. (pip install openai, CUSTOM_BASE_URL + CUSTOM_API_KEY):
-       # from openai import OpenAI
-       # import os
-       # output_text = OpenAI(base_url=os.environ["CUSTOM_BASE_URL"], api_key=os.environ.get("CUSTOM_API_KEY", "none")).chat.completions.create(model=os.environ.get("CUSTOM_MODEL", "default"), messages=[{"role": "user", "content": user_input}]).choices[0].message.content
-
-       latency_ms = round((time.time() - start) * 1000)
-       runs.append({"example_id": ex["id"], "output": output_text, "metadata": {"model": "MODEL_NAME", "latency_ms": latency_ms}})
-       print(f"  {ex['id']}: {latency_ms}ms", file=sys.stderr)
-
-   json.dump(runs, sys.stdout, indent=2)
-   ```
+   Write `infer.py` to read examples from stdin, call the target model, and write runs JSON to stdout. Start from the template at `references/inference-template.py` — copy it, inspect the exported dataset JSON to confirm the input field name, then uncomment the provider block the user wants.
 
    **Before running:** install the SDK, set the API key env var. If the API isn't reachable, stop and tell the user.
 

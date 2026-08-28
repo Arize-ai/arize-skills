@@ -76,22 +76,7 @@ ax spans export PROJECT --span-id SPAN_ID --output-dir .arize-tmp-traces
 ax spans export PROJECT --session-id SESSION_ID --output-dir .arize-tmp-traces
 ```
 
-### Flags
-
-| Flag | Default | Description |
-|------|---------|-------------|
-| `PROJECT` (positional) | `$ARIZE_DEFAULT_PROJECT` | Project name or base64 ID |
-| `--trace-id` | — | Filter by `context.trace_id` (mutex with other ID flags) |
-| `--span-id` | — | Filter by `context.span_id` (mutex with other ID flags) |
-| `--session-id` | — | Filter by `attributes.session.id` (mutex with other ID flags) |
-| `--filter` | — | SQL-like filter; combinable with any ID flag |
-| `--limit, -l` | 100 | Max spans (REST); ignored with `--all` |
-| `--space` | — | Required when using `--all` (Arrow Flight); not needed for project name in spans export |
-| `--days` | 30 | Lookback window; ignored if `--start-time`/`--end-time` set |
-| `--start-time` / `--end-time` | — | ISO 8601 time range override |
-| `--output-dir` | `.arize-tmp-traces` | Output directory |
-| `--stdout` | false | Print JSON to stdout instead of file |
-| `--all` | false | Unlimited bulk export via Arrow Flight (see below) |
+Flags: see [references/spans-cli.md](references/spans-cli.md#ax-spans-export).
 
 Output is a JSON array of span objects. File naming: `{type}_{id}_{timestamp}/spans.json`.
 
@@ -207,25 +192,26 @@ ax traces export PROJECT --filter "status_code = 'ERROR'" --stdout
 ax traces export PROJECT --space SPACE --filter "status_code = 'ERROR'" --all --output-dir .arize-tmp-traces
 ```
 
-### Flags
-
-| Flag | Type | Default | Description |
-|------|------|---------|-------------|
-| `PROJECT` | string | required | Project name or base64 ID (positional arg) |
-| `--filter` | string | none | Filter expression for phase-1 span lookup |
-| `--space` | string | none | Space name or ID; required when `PROJECT` is a name or when using `--all` (Arrow Flight) |
-| `--limit, -l` | int | 50 | Max number of traces to export |
-| `--days` | int | 30 | Lookback window in days |
-| `--start-time` | string | none | Override start (ISO 8601) |
-| `--end-time` | string | none | Override end (ISO 8601) |
-| `--output-dir` | string | `.` | Output directory |
-| `--stdout` | bool | false | Print JSON to stdout instead of file |
-| `--all` | bool | false | Use Arrow Flight for both phases (see spans `--all` docs above) |
+Flags: see [references/spans-cli.md](references/spans-cli.md#ax-traces-export).
 
 ### How it differs from `ax spans export`
 
 - `ax spans export` exports individual spans matching a filter
 - `ax traces export` exports complete traces -- it finds spans matching the filter, then pulls ALL spans for those traces (including siblings and children that may not match the filter)
+
+## Browse Traces: `ax traces list`
+
+Paginated table of traces in a project. This is mainly useful for open-ended human-style browsing when you don't yet know what filter or trace ID to use — if you already know the filter/time range you need, skip straight to `ax traces export` or `ax spans export` instead of listing first.
+
+```bash
+ax traces list PROJECT --space SPACE -l 30
+ax traces list PROJECT --space SPACE --filter "status_code = 'ERROR'"
+ax traces list PROJECT --space SPACE --start-time "2026-08-01T00:00:00Z" -o json
+```
+
+`--space` is required when `PROJECT` is a name. Flags: `--filter`, `--start-time`/`--end-time` (ISO 8601), `--limit, -l` (default 15), `--cursor, -c`, `-o, --output`. The same [filter syntax](references/spans-cli.md#filter-syntax) applies.
+
+**When the filter is unknown:** `ax traces list` to locate a trace → `ax spans export PROJECT --trace-id TRACE_ID` to pull its spans (immediately consistent; see Time-series index lag below). When you already know the filter, skip listing and export directly.
 
 ### Time-series index lag
 
@@ -247,16 +233,7 @@ ax spans annotate PROJECT --file annotations.json --start-time "2026-05-01T00:00
 ax spans annotate PROJECT --file annotations.json --days 7
 ```
 
-### Flags
-
-| Flag | Type | Required | Description |
-|------|------|----------|-------------|
-| `PROJECT` | string | yes | Project name or base64 ID (positional) |
-| `--file, -f` | path | yes | Annotation file: JSON, JSONL, CSV, or Parquet (use `-` for stdin) |
-| `--space` | string | no | Space name or ID |
-| `--start-time` | string | no | ISO 8601 start of annotation window |
-| `--end-time` | string | no | ISO 8601 end of annotation window |
-| `--days` | int | no | Lookback window in days (default 30) |
+Flags: see [references/spans-cli.md](references/spans-cli.md#ax-spans-annotate).
 
 The annotation file must contain the span ID and the annotation fields to write. Export a sample span first to confirm span IDs and available fields before bulk-annotating.
 
@@ -268,51 +245,9 @@ ax spans delete PROJECT --span-id id1,id2 --force
 ```
 `--span-id` accepts comma-separated or repeated values. Run `ax spans delete --help` for all flags.
 
-## Filter Syntax Reference
+## Filter Syntax
 
-SQL-like expressions passed to `--filter`.
-
-### Common filterable columns
-
-| Column | Type | Description | Example Values |
-|--------|------|-------------|----------------|
-| `name` | string | Span name | `'ChatCompletion'`, `'retrieve_docs'` |
-| `status_code` | string | Status | `'OK'`, `'ERROR'`, `'UNSET'` |
-| `latency_ms` | number | Duration in ms | `100`, `5000` |
-| `parent_id` | string | Parent span ID | null for root spans |
-| `context.trace_id` | string | Trace ID | |
-| `context.span_id` | string | Span ID | |
-| `attributes.session.id` | string | Session ID | |
-| `attributes.openinference.span.kind` | string | Span kind | `'LLM'`, `'CHAIN'`, `'TOOL'`, `'AGENT'`, `'RETRIEVER'`, `'RERANKER'`, `'EMBEDDING'`, `'GUARDRAIL'`, `'EVALUATOR'` |
-| `attributes.llm.model_name` | string | LLM model | `'gpt-4o'`, `'claude-3'` |
-| `attributes.input.value` | string | Span input | |
-| `attributes.output.value` | string | Span output | |
-| `attributes.error.type` | string | Error type | `'ValueError'`, `'TimeoutError'` |
-| `attributes.error.message` | string | Error message | |
-| `event.attributes` | string | Error tracebacks | Use CONTAINS (not exact match) |
-
-### Operators
-
-`=`, `!=`, `<`, `<=`, `>`, `>=`, `AND`, `OR`, `IN`, `CONTAINS`, `LIKE`, `IS NULL`, `IS NOT NULL`
-
-### Examples
-
-```
-status_code = 'ERROR'
-latency_ms > 5000
-name = 'ChatCompletion' AND status_code = 'ERROR'
-attributes.llm.model_name = 'gpt-4o'
-attributes.openinference.span.kind IN ('LLM', 'AGENT')
-attributes.error.type LIKE '%Transport%'
-event.attributes CONTAINS 'TimeoutError'
-```
-
-### Tips
-
-- Prefer `IN` over multiple `OR` conditions: `name IN ('a', 'b', 'c')` not `name = 'a' OR name = 'b' OR name = 'c'`
-- Start broad with `LIKE`, then switch to `=` or `IN` once you know exact values
-- Use `CONTAINS` for `event.attributes` (error tracebacks) -- exact match is unreliable on complex text
-- Always wrap string values in single quotes
+`--filter` takes SQL-like expressions, e.g. `status_code = 'ERROR'`, `latency_ms > 5000`, `attributes.openinference.span.kind IN ('LLM', 'AGENT')`. Always wrap string values in single quotes. Full column list, operators, and tips: see [references/spans-cli.md](references/spans-cli.md#filter-syntax).
 
 ## Workflows
 

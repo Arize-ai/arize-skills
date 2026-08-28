@@ -153,7 +153,7 @@ ax evaluators create-template-evaluator \
   --commit-message "Initial version" \
   --ai-integration-id INT_ID \
   --model-name "gpt-4o" \
-  --include-explanation \
+  --include-explanations \
   --use-function-calling \
   --classification-choices '{"factual": 1, "hallucinated": 0}' \
   --template 'You are an evaluator. Given the user question and the model response, decide if the response is factual or contains unsupported claims.
