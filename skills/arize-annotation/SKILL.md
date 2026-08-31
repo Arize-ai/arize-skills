@@ -72,10 +72,9 @@ ax annotation-configs list --space SPACE --name "Correctness"   # substring filt
 Categorical configs present a fixed set of labels for reviewers to choose from.
 
 ```bash
-ax annotation-configs create \
+ax annotation-configs create categorical \
   --name "Correctness" \
   --space SPACE \
-  --type CATEGORICAL \
   --value correct \
   --value incorrect \
   --optimization-direction MAXIMIZE
@@ -93,10 +92,9 @@ Common binary label pairs:
 Continuous configs let reviewers enter a numeric score within a defined range.
 
 ```bash
-ax annotation-configs create \
+ax annotation-configs create continuous \
   --name "Quality Score" \
   --space SPACE \
-  --type CONTINUOUS \
   --min-score 0 \
   --max-score 10 \
   --optimization-direction MAXIMIZE
@@ -104,13 +102,12 @@ ax annotation-configs create \
 
 ### Create — Freeform
 
-Freeform configs collect open-ended text feedback. No additional flags needed beyond name, space, and type.
+Freeform configs collect open-ended text feedback. No additional flags needed beyond name and space.
 
 ```bash
-ax annotation-configs create \
+ax annotation-configs create freeform \
   --name "Reviewer Notes" \
-  --space SPACE \
-  --type FREEFORM
+  --space SPACE
 ```
 
 ### Get

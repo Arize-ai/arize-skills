@@ -1,6 +1,6 @@
 # `ax experiments` — Flag Reference
 
-Full flag tables for every `ax experiments` subcommand, verified against `ax experiments <subcommand> --help` on arize-ax-cli 0.31.1. See [SKILL.md](../SKILL.md) for usage examples, workflows, and data schemas.
+Full flag tables for every `ax experiments` subcommand, verified against `ax experiments <subcommand> --help` on arize-ax-cli 0.32.0. See [SKILL.md](../SKILL.md) for usage examples, workflows, and data schemas.
 
 **Standalone experiments:** every subcommand below accepts an experiment with no linked dataset. Omit `--dataset` for a standalone experiment; `--space` then becomes required instead (to resolve the experiment directly). When `--dataset` is given, `--space` is only needed to resolve the dataset by name.
 
