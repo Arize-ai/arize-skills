@@ -5,20 +5,7 @@ Full CRUD reference for AI integrations, evaluators (template and code), and tas
 
 ### AI Integrations
 
-AI integrations store the LLM provider credentials the evaluator uses. For full CRUD — listing, creating for all providers (OpenAI, Anthropic, Azure, Bedrock, Vertex, Gemini, NVIDIA NIM, custom), updating, and deleting — use the **arize-ai-provider-integration** skill.
-
-Quick reference for the common case (OpenAI):
-
-```bash
-# Check for an existing integration first
-ax ai-integrations list --space SPACE
-
-# Create if none exists
-ax ai-integrations create \
-  --name "My OpenAI Integration" \
-  --provider OPEN_AI \
-  --api-key $OPENAI_API_KEY
-```
+AI integrations store the LLM provider credentials the evaluator uses. Check for an existing integration first with `ax ai-integrations list --space SPACE`. If none exists, use the **arize-ai-provider-integration** skill to create one for the needed provider (OpenAI, Anthropic, Azure, Bedrock, Vertex, Gemini, NVIDIA NIM, or custom).
 
 Copy the returned integration ID — it is required for `ax evaluators create-template-evaluator --ai-integration-id`.
 

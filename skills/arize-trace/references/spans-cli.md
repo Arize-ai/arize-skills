@@ -1,6 +1,6 @@
 # `ax spans` / `ax traces` — Flag and Filter Reference
 
-Flag tables (verified against `--help` on arize-ax-cli 0.31.1) and `--filter` syntax. See [SKILL.md](../SKILL.md) for workflows and export strategy, and [span-columns.md](span-columns.md) for the full span attribute reference.
+Flag tables (verified against `--help` on arize-ax-cli 0.32.0) and `--filter` syntax. See [SKILL.md](../SKILL.md) for workflows and export strategy, and [span-columns.md](span-columns.md) for the full span attribute reference.
 
 ## `ax spans export`
 
