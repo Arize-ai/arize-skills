@@ -153,6 +153,7 @@ For interactive setup, `ax profiles create` also offers **Advanced → Single en
 | Skill | Description |
 |-------|-------------|
 | [arize-trace](skills/arize-trace/SKILL.md) | Export traces and spans by trace ID, span ID, or session ID. Debug LLM application issues. |
+| [arize-phoenix-migration](skills/arize-phoenix-migration/SKILL.md) | Migrate Phoenix traces into Arize AX and validate FileImporter-backed Phoenix import jobs. |
 | [arize-instrumentation](skills/arize-instrumentation/SKILL.md) | Add Arize AX tracing to an app. Two-phase flow: analyze codebase, then implement instrumentation (uses [Agent-Assisted Tracing](https://arize.com/docs/ax/alyx/tracing-assistant)). |
 | [arize-span-routing](skills/arize-span-routing/SKILL.md) | Send each agent's or tenant's Python spans to its correct Arize space and project using application metadata. |
 | [arize-dataset](skills/arize-dataset/SKILL.md) | Create, manage, and download datasets and examples. |
