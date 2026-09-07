@@ -153,7 +153,7 @@ Vertex AI uses GCP service account credentials. Provide the GCP project and regi
 ax ai-integrations create \
   --name "My Vertex AI Integration" \
   --provider VERTEX_AI \
-  --provider-metadata '{"project_id": "my-gcp-project", "location": "us-central1"}'
+  --provider-metadata '{"project_id": "my-gcp-project", "location": "us-central1", "project_access_label": "my-access-label"}'
 ```
 
 ### Gemini
@@ -185,6 +185,16 @@ ax ai-integrations create \
   --api-key $CUSTOM_LLM_API_KEY
 ```
 
+### LiteLLM
+
+```bash
+ax ai-integrations create \
+  --name "My LiteLLM Integration" \
+  --provider LITELLM \
+  --base-url "https://my-litellm-proxy.example.com" \
+  --api-key $LITELLM_API_KEY
+```
+
 ### Supported Providers
 
 | Provider | Required extra flags |
@@ -193,10 +203,11 @@ ax ai-integrations create \
 | `ANTHROPIC` | `--api-key <key>` |
 | `AZURE_OPEN_AI` | `--api-key <key>`, `--base-url <azure-endpoint>` |
 | `AWS_BEDROCK` | `--provider-metadata '{"role_arn": "<arn>"}'` |
-| `VERTEX_AI` | `--provider-metadata '{"project_id": "<gcp-project>", "location": "<region>"}'` |
+| `VERTEX_AI` | `--provider-metadata '{"project_id": "<gcp-project>", "location": "<region>", "project_access_label": "<label>"}'` |
 | `GEMINI` | `--api-key <key>` |
 | `NVIDIA_NIM` | `--api-key <key>`, `--base-url <nim-endpoint>` |
 | `CUSTOM` | `--base-url <endpoint>` |
+| `LITELLM` | `--base-url <endpoint>` |
 
 ### Optional flags for any provider
 
@@ -205,7 +216,7 @@ ax ai-integrations create \
 | `--model-name` | Allowed model name (repeat for multiple, e.g. `--model-name gpt-4o --model-name gpt-4o-mini`); omit to allow all models |
 | `--enable-default-models` | Enable the provider's default model list |
 | `--function-calling-enabled` | Enable tool/function calling support |
-| `--auth-type` | Authentication type: `DEFAULT`, `PROXY_WITH_HEADERS`, or `BEARER_TOKEN` |
+| `--auth-type` | Authentication type: `DEFAULT`, `PROXY_WITH_HEADERS`, `BEARER_TOKEN`, or `OAUTH2_CLIENT_CREDENTIALS` |
 | `--headers` | Custom headers as JSON object or file path (for proxy auth) |
 | `--provider-metadata` | Provider-specific metadata as JSON object or file path |
 

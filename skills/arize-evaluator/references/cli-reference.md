@@ -295,7 +295,7 @@ ax evaluators create-code-evaluator-version NAME_OR_ID \
 | `--space` | yes | Space name or ID to create in |
 | `--commit-message` | yes | Description of this version |
 | `--code-type` | yes | `managed` (built-in pattern) or `custom` (Python class) |
-| `--code-name` | yes | Eval column name — alphanumeric, spaces, hyphens, underscores. (Code evaluators have **no** `--template-name` flag; that flag belongs to `create-template-evaluator`.) |
+| `--code-name` | yes | Eval column name — alphanumeric, spaces, hyphens, underscores. (Use `--template-name` on `create-template-evaluator` instead when creating a template-based evaluator.) |
 | `--variables` | yes | JSON array of column/attribute names (strings), e.g. `'["prediction", "actual"]'`. For `custom`, each must match a named `evaluate()` parameter. For `managed`, these are the input columns the check reads — the check's own config (pattern, keyword list) goes in `--static-params`. |
 | `--managed-evaluator` | managed only | Case-sensitive; one of: `MATCHES_REGEX`, `JSON_PARSEABLE`, `CONTAINS_ANY_KEYWORD`, `CONTAINS_ALL_KEYWORDS`, `EXACT_MATCH` |
 | `--code` | custom only | Python source for the `CodeEvaluator` subclass only — no imports (or `@filepath` to read from file) |
@@ -336,11 +336,12 @@ ax tasks create-evaluation \
   --no-continuous
 
 # Create evaluation task (experiment / dataset)
+# --experiment-ids takes base64 IDs from `ax experiments list --space SPACE -o json`
 ax tasks create-evaluation \
   --name "Experiment Scoring" \
   --task-type TEMPLATE_EVALUATION \
   --dataset DATASET_NAME --space SPACE \
-  --experiment-ids "EXP_ID_1,EXP_ID_2" \   # base64 IDs from `ax experiments list --space SPACE -o json`
+  --experiment-ids "EXP_ID_1,EXP_ID_2" \
   --evaluators '[{"evaluator_id": "EVAL_ID", "column_mappings": {"output": "output"}}]' \
   --no-continuous
 
@@ -348,7 +349,7 @@ ax tasks create-evaluation \
 ax tasks create-run-experiment \
   --name "GPT-4o Baseline Run" \
   --dataset DATASET_NAME \
-  --run-configuration '{"model": "gpt-4o", "temperature": 0}' \
+  --run-configuration '{"experiment_type": "LLM_GENERATION", "ai_integration_id": "AI_INTEGRATION_ID", "model_name": "gpt-4o", "messages": [{"role": "USER", "content": "{{input}}"}]}' \
   --space SPACE
 
 # Update a task (mutable fields only)
@@ -369,8 +370,9 @@ ax tasks trigger-run TASK_ID \
   --wait
 
 # Trigger a run (experiment task — use experiment IDs)
+# --experiment-ids takes the base64 ID from `ax experiments list --space SPACE -o json`
 ax tasks trigger-run TASK_ID \
-  --experiment-ids "EXP_ID_1" \   # base64 ID from `ax experiments list --space SPACE -o json`
+  --experiment-ids "EXP_ID_1" \
   --wait
 
 # Monitor

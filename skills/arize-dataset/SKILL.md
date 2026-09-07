@@ -4,7 +4,7 @@ description: Creates, manages, and queries Arize datasets and examples. Covers d
 metadata:
   author: arize
   version: "1.0"
-compatibility: Requires the ax CLI (≥ 0.27.0) and a configured Arize profile.
+compatibility: Requires the ax CLI (≥ 0.33.0) and a configured Arize profile.
 ---
 
 # Arize Dataset Skill
@@ -313,7 +313,8 @@ ax datasets get "eval-set-v1" --space SPACE
 ax datasets export "eval-set-v1" --space SPACE
 
 # Or resolve name to ID via list if you need the base64 ID
-ax datasets list -o json | jq '.[] | select(.name == "eval-set-v1") | .id'
+# ax datasets list -o json wraps the array under a "datasets" key
+ax datasets list -o json | jq '.datasets[] | select(.name == "eval-set-v1") | .id'
 ```
 
 ### Create a dataset from file for evaluation
