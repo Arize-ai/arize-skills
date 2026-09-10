@@ -4,7 +4,7 @@ description: Downloads, exports, and inspects existing Arize traces and spans to
 metadata:
   author: arize
   version: "1.0"
-compatibility: Requires the ax CLI (≥ 0.23.0) and a configured Arize profile.
+compatibility: Requires the ax CLI (≥ 0.33.0) and a configured Arize profile.
 ---
 
 # Arize Trace Skill
@@ -115,24 +115,24 @@ If a user asks for a specific tool call's action, input, and output, export the 
 
 ### Bulk export with `--all`
 
-By default, `ax spans export` is capped at 500 spans by `-l`. Pass `--all` for unlimited bulk export.
+By default, `ax spans export` is capped at 100 spans by `-l`. Pass `--all` for unlimited bulk export.
 
 ```bash
 ax spans export PROJECT --space SPACE --filter "status_code = 'ERROR'" --all --output-dir .arize-tmp-traces
 ```
 
 **When to use `--all`:**
-- Exporting more than 500 spans
+- Exporting more than 100 spans
 - Downloading full traces with many child spans
 - Large time-range exports
 
-**Always report span count in every summary:** After every export, state the count explicitly — e.g., "Got 47 spans" or "Got 500/500 spans". When the count equals the limit (or 500 if no `-l` was set), flag it clearly: `⚠️ Result hit the limit (500/500) — likely truncated.`
+**Always report span count in every summary:** After every export, state the count explicitly — e.g., "Got 47 spans" or "Got 100/100 spans". When the count equals the limit (or 100 if no `-l` was set), flag it clearly: `⚠️ Result hit the limit (100/100) — likely truncated.`
 
 **Auto-escalation rules (two cases):**
 
 *Targeted export* (`--trace-id`, `--span-id`, or `--session-id` present): The span count is bounded by the trace/session. If the result equals the limit, **automatically re-run with `--all`** — do not wait for the user to ask. Users always want complete data for a specific trace.
 
-*Exploratory export* (no ID filter): If the result equals the limit, **surface the truncation prominently and offer to re-run**: "Got exactly 500 spans — results are likely truncated. Re-run with `--all` to get the full dataset?" Wait for confirmation before re-running (exploratory exports can be slow or large).
+*Exploratory export* (no ID filter): If the result equals the limit, **surface the truncation prominently and offer to re-run**: "Got exactly 100 spans — results are likely truncated. Re-run with `--all` to get the full dataset?" Wait for confirmation before re-running (exploratory exports can be slow or large).
 
 **Decision tree:**
 ```
@@ -143,8 +143,8 @@ Do you have a --trace-id, --span-id, or --session-id?
 └─ NO (exploratory):
     ├─ Just browsing a sample? → use -l 50, report count
     └─ Need all matching spans?
-        ├─ Expected < 500 → -l is fine; report count
-        └─ Expected ≥ 500 or unknown → use --all
+        ├─ Expected < 100 → -l is fine; report count
+        └─ Expected ≥ 100 or unknown → use --all
             ├─ Result = limit after -l? → offer to re-run with --all
             └─ Times out? → batch by --days (e.g., --days 7) and loop
 ```
@@ -185,7 +185,7 @@ ax traces export PROJECT --space SPACE \
   --start-time "2026-06-07T00:00:00Z" \
   -l 50 --output-dir .arize-tmp-traces
 
-# Export traces with error spans (REST, up to 500 spans in phase 1)
+# Export traces with error spans (REST, up to 50 traces in phase 1 — ax traces export's default -l)
 ax traces export PROJECT --filter "status_code = 'ERROR'" --stdout
 
 # Export all traces matching a filter via Flight (no limit)

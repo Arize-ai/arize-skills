@@ -4,7 +4,7 @@ description: Creates and manages annotation configs (categorical, continuous, fr
 metadata:
   author: arize
   version: "1.0"
-compatibility: Requires the ax CLI (≥ 0.27.0) and a configured Arize profile.
+compatibility: Requires the ax CLI (≥ 0.33.0) and a configured Arize profile.
 ---
 
 # Arize Annotation Skill
@@ -247,10 +247,10 @@ ax annotation-queues annotate-record NAME_OR_ID RECORD_ID \
 
 ### Assign a Record
 
-Assign users to review a specific record:
+Assign users to review a specific record by repeating `--email`; this fully replaces existing assignments, so pass every assignee each time (passing no `--email` flags clears all assignments):
 
 ```bash
-ax annotation-queues assign-record NAME_OR_ID RECORD_ID --space SPACE
+ax annotation-queues assign-record NAME_OR_ID RECORD_ID --email user@example.com --space SPACE
 ```
 
 ### Delete Records

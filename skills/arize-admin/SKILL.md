@@ -4,7 +4,7 @@ description: "Manages Arize users, organizations, spaces, projects, roles, role 
 metadata:
   author: arize
   version: "1.0"
-compatibility: Requires the ax CLI (≥ 0.27.0) and a configured Arize profile with org-admin privileges.
+compatibility: Requires the ax CLI (≥ 0.33.0) and a configured Arize profile with org-admin privileges.
 ---
 
 # Arize Admin Skill
@@ -63,7 +63,7 @@ Ask before running any commands:
 - **Which key?** — run `ax api-keys list -o json` and present options by name and status; or ask for `KEY_ID`
 - **Revoke or rotate?** — `revoke` invalidates immediately; `refresh` issues a new key with the same scope (zero-downtime rotation)
 
-If the user says "delete" an API key, use `ax api-keys revoke` — there is no `delete` subcommand for API keys.
+If the user says "delete" an API key, use `ax api-keys revoke` to invalidate it.
 
 ## Concepts
 
@@ -229,14 +229,15 @@ Idempotent — if a binding already exists for the user on that resource, exits 
 
 ## Resource Restrictions
 
-Restricts a **project** so only users with an explicit role binding on that project can access it. Space/org-level roles are excluded.
+Restricts a **project or dashboard** so only users with an explicit role binding on that resource can access it. Space/org-level roles are excluded.
 
 ```bash
 ax resource-restrictions list                                          # all restrictions, paginated
+ax resource-restrictions list --resource-type DASHBOARD                # filter to one resource type (PROJECT or DASHBOARD)
 ax resource-restrictions list --limit 50 --cursor PAGINATION_CURSOR    # fetch next page
 
-ax resource-restrictions restrict --resource-id PROJECT_GLOBAL_ID     # idempotent
-ax resource-restrictions unrestrict --resource-id PROJECT_GLOBAL_ID --force   # ⚠ confirm first
+ax resource-restrictions restrict --resource-id PROJECT_OR_DASHBOARD_GLOBAL_ID     # idempotent
+ax resource-restrictions unrestrict --resource-id PROJECT_OR_DASHBOARD_GLOBAL_ID --force   # ⚠ confirm first
 
 # Finding project IDs
 ax projects list -l 100 -o json --space "my-workspace"
@@ -281,7 +282,7 @@ ax api-keys refresh KEY_ID --expires-at "2028-01-01T00:00:00"
 | `--expires-at` | no | ISO 8601 expiry date |
 | `--description` | no | Optional description |
 
-There is no `--space`/`--space-role`/`--org-role` flag on `create-service-key` — scoping is entirely through `--assignments`.
+Scope `create-service-key` entirely through `--assignments`, not through separate `--space`/`--space-role`/`--org-role` flags.
 
 ---
 

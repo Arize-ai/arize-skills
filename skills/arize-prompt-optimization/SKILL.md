@@ -317,11 +317,11 @@ When optimizing prompts that use template variables:
 
 ### Optimize a prompt from a failing trace
 
-1. Find failing traces:
+1. Find a failing trace ID directly from the known filter — skip `ax traces list`'s human-browsing view and go straight to the scriptable path:
    ```bash
-   ax traces list PROJECT --filter "status_code = 'ERROR'" --limit 5
+   ax spans export PROJECT --filter "status_code = 'ERROR'" -l 5 --stdout | jq -r '.[0].context.trace_id'
    ```
-2. Export the trace:
+2. Export the full trace:
    ```bash
    ax spans export PROJECT --trace-id TRACE_ID
    ```

@@ -65,7 +65,7 @@ A **task** is how you run one or more evaluators against real data. Tasks are at
 
 ## Data Granularity
 
-The `--data-granularity` flag controls what unit of data the evaluator scores. It defaults to `span` and only applies to **project tasks** (not dataset/experiment tasks — those evaluate experiment runs directly).
+Set `--data-granularity` when creating the evaluator (`ax evaluators create-template-evaluator` / `create-code-evaluator`), not on the task — it controls what unit of data that evaluator scores whenever it runs against a **project task** (not dataset/experiment tasks — those evaluate experiment runs directly). It defaults to `span`.
 
 | Level | What it evaluates | Use for | Result column prefix |
 |-------|-------------------|---------|---------------------|
@@ -321,12 +321,14 @@ ax datasets export DATASET_NAME --space SPACE --stdout | python3 -c "import sys,
 
 ### Step 6: Create the task
 
+`--experiment-ids` takes the base64 ID from `ax experiments list --space SPACE -o json`.
+
 ```bash
 ax tasks create-evaluation \
   --name "Experiment Correctness" \
   --task-type TEMPLATE_EVALUATION \
   --dataset DATASET_NAME --space SPACE \
-  --experiment-ids "EXP_ID" \   # base64 ID from `ax experiments list --space SPACE -o json`
+  --experiment-ids "EXP_ID" \
   --evaluators '[{"evaluator_id": "EVAL_ID", "column_mappings": {"output": "output"}}]' \
   --no-continuous
 ```
@@ -335,7 +337,7 @@ ax tasks create-evaluation \
 
 ```bash
 ax tasks trigger-run TASK_ID \
-  --experiment-ids "EXP_ID" \   # base64 ID from `ax experiments list --space SPACE -o json`
+  --experiment-ids "EXP_ID" \
   --wait
 
 ax tasks list-runs TASK_ID

@@ -300,7 +300,7 @@ ax prompts get pr_abc123 --label production
 |-----------------|-----|-----|
 | **System / user / assistant text**, variables, or default **model** / **provider** | Save as a **new version** (same prompt name) | `ax prompts create-version` with updated `--messages` and/or `--model` / `--provider` (same pattern as **Workflow A** step 4). `ax prompts update` does **not** change messages or model. |
 | **Prompt description** (prompt-level) | Edit prompt metadata | `ax prompts update NAME_OR_ID --description "..." [--space SPACE]` |
-| **Prompt name** or **tags** | Edit in Hub | No dedicated flags on `ax prompts update` today — use Hub or `ax prompts update --help` for your CLI version. |
+| **Prompt name** or **tags** | Edit in Hub | Use Hub, or run `ax prompts update --help` to check for a dedicated flag on the installed CLI version. |
 | **Remove prompt entirely** | Delete in Hub | **Step 4c** below |
 | **Copy to a new prompt** | Duplicate in Hub | **Step 4d** below |
 
