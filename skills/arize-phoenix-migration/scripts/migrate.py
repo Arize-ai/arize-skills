@@ -105,7 +105,13 @@ class APIs:
                 continue
             if response.status_code == 429 or response.status_code >= 500:
                 if attempt < 3:
-                    self.sleep(2**attempt)
+                    delay = (
+                        10 * 2**attempt if response.status_code == 429 else 2**attempt
+                    )
+                    retry_after = response.headers.get("Retry-After", "")
+                    if retry_after.isdigit():
+                        delay = max(delay, min(int(retry_after), 60))
+                    self.sleep(delay)
                     continue
             if not 200 <= response.status_code < 300:
                 raise MigrationError(
@@ -177,26 +183,49 @@ class APIs:
             seen.add(cursor)
 
     def ax_spans(self, project, start, end):
-        cursor = None
-        seen = set()
+        # Cursor pagination can omit records in historical multi-segment queries.
+        # Query disjoint millisecond windows, splitting any truncated response.
+        start_ms = nanos(start) // 1_000_000
+        end_ms = (nanos(end) + 999_999) // 1_000_000
+        windows = [(start_ms, end_ms)]
         rows = []
-        while True:
-            params = {"limit": 100}
-            if cursor:
-                params["cursor"] = cursor
+        requests = 0
+        while windows:
+            lower, upper = windows.pop()
+            requests += 1
+            if requests > 4096:
+                raise MigrationError(
+                    "AX verification exceeded 4096 time-window requests."
+                )
+            if requests > 1:
+                self.sleep(2)
             page = self.ax(
                 "POST",
                 "spans",
-                params=params,
-                json={"project_id": project, "start_time": start, "end_time": end},
+                params={"limit": 500},
+                json={
+                    "project_id": project,
+                    "start_time": (
+                        datetime(1970, 1, 1, tzinfo=timezone.utc)
+                        + timedelta(milliseconds=lower)
+                    ).isoformat(),
+                    "end_time": (
+                        datetime(1970, 1, 1, tzinfo=timezone.utc)
+                        + timedelta(milliseconds=upper)
+                    ).isoformat(),
+                },
             )
-            rows.extend(page.get("spans", page.get("data", [])))
-            cursor = page.get("pagination", {}).get("next_cursor")
-            if not cursor:
-                return rows
-            if cursor in seen:
-                raise MigrationError("AX span pagination repeated a cursor.")
-            seen.add(cursor)
+            pagination = page.get("pagination", {})
+            if pagination.get("has_more") or pagination.get("next_cursor"):
+                if upper - lower <= 1:
+                    raise MigrationError(
+                        "More than 500 AX spans share a millisecond; complete readback requires another export method."
+                    )
+                middle = (lower + upper) // 2
+                windows.extend([(lower, middle), (middle, upper)])
+            else:
+                rows.extend(page.get("spans", page.get("data", [])))
+        return rows
 
 
 def preflight(api):

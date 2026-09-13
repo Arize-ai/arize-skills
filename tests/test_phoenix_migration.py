@@ -424,23 +424,53 @@ def test_api_retry_is_bounded(config):
     assert len(calls) == 4
 
 
-def test_ax_pagination_uses_nested_cursor(config):
+def test_ax_readback_splits_truncated_time_windows(config):
     calls = []
 
     def response(request):
         calls.append(request)
+        body = json.loads(request.content)
+        assert "cursor" not in request.url.params
+        assert request.url.params["limit"] == "500"
+        if len(calls) == 1:
+            return httpx.Response(
+                200,
+                json={
+                    "spans": [{"discard": True}],
+                    "pagination": {"has_more": True, "next_cursor": "broken"},
+                },
+            )
         return httpx.Response(
-            200,
-            json={
-                "spans": [],
-                "pagination": {"next_cursor": "second" if len(calls) == 1 else None},
-            },
+            200, json={"spans": [{"window": body}], "pagination": {"has_more": False}}
         )
 
-    api = migrate.APIs(config, httpx.Client(transport=httpx.MockTransport(response)))
-    assert api.ax_spans("project", "start", "end") == []
-    assert calls[1].url.params["cursor"] == "second"
+    api = migrate.APIs(
+        config,
+        httpx.Client(transport=httpx.MockTransport(response)),
+        sleep=lambda _: None,
+    )
+    rows = api.ax_spans("project", "2026-03-22T00:00:00Z", "2026-03-22T00:00:02Z")
+    assert len(rows) == 2
+    bodies = [json.loads(c.content) for c in calls]
+    assert bodies[1]["start_time"] == bodies[2]["end_time"]
+    assert bodies[2]["start_time"] == bodies[0]["start_time"]
+    assert bodies[1]["end_time"] == bodies[0]["end_time"]
     assert calls[0].url.path == "/v2/spans"
+
+
+def test_ax_readback_refuses_truncated_single_millisecond(config):
+    api = migrate.APIs(
+        config,
+        httpx.Client(
+            transport=httpx.MockTransport(
+                lambda request: httpx.Response(
+                    200, json={"pagination": {"has_more": True}}
+                )
+            )
+        ),
+    )
+    with pytest.raises(migrate.MigrationError, match="share a millisecond"):
+        api.ax_spans("project", "2026-03-22T00:00:00Z", "2026-03-22T00:00:00.001Z")
 
 
 def test_cli_missing_input_is_machine_readable(monkeypatch, capsys):
