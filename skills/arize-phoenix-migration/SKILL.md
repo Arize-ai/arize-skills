@@ -24,9 +24,17 @@ Explain how to configure missing credentials locally in environment variables or
 
 If the user only supplies a space name, resolve it with existing AX APIs and ask them to choose if multiple spaces match. Use a fresh destination project; suggest a source-derived name when none is specified and establish that destination with the user. Do not ask about the separate AX button, feature flags, or browser tokens.
 
+## Set expectations and wait for continue
+
+Before starting setup or migration commands, explain that setup, export, upload, and AX indexing/readback can take several minutes. Verification may wait up to 15 minutes for indexing, and readback or larger projects can take longer; do not promise a fixed completion time.
+
+For example: "This migration may take a few minutes. After upload, AX indexing and verification can take 15 minutes or longer. I'll verify the traces before reporting success. Continue?"
+
+Wait for the user's continue before starting. A request to migrate alone does not acknowledge the expected wait. If the user has already acknowledged it and said to continue, or explicitly requested execution without pausing, proceed. Ask once for the migration, not again for each stage. A read-only planning request needs no migration confirmation.
+
 ## Run the migration
 
-Locate this installed skill's root and run its bundled commands by absolute path, so they work from any workspace. Create an isolated Python environment if needed and install the [helper dependencies](scripts/requirements.txt).
+Locate this installed skill's root and run its bundled commands by absolute path, so they work from any workspace. Check the chosen interpreter is Python 3.10 or later before creating an isolated environment or installing the [helper dependencies](scripts/requirements.txt). Use an available compatible interpreter if the default is older.
 
 1. Run `scripts/migrate.py preflight` with the user's local configuration and chosen destination. Present a short source/destination summary. Missing configuration returns `needs_input`; ask for those fields. A dry-run or planning request stops here without uploading.
 2. Run `scripts/migrate.py export --manifest <local-path>` to export every page under a fixed snapshot boundary. For selected complete traces, repeat `--trace-id` for each trace ID. Export does not change Phoenix or AX.
@@ -34,6 +42,8 @@ Locate this installed skill's root and run its bundled commands by absolute path
 4. Run `scripts/migrate.py verify --manifest <local-path>`. Only `verified` establishes success. Otherwise report uploaded-but-unverified with counts, differing field names, and the command for rerunning verification.
 
 Use `--env-file <path>` on each command when the user has configured a local file. Use `--project <name>` to set the destination without modifying their environment. See the [migration reference](references/migration.md) for resume and troubleshooting.
+
+While running, keep the user informed at stage changes and during long waits. Distinguish installing dependencies, exporting, uploading, waiting for AX indexing, and verifying readback. If the helper has not returned progress, say the result is still pending rather than inventing counts or implying the migration is verified. Do not retry uploads just because verification is slow.
 
 ## Preserve and report
 
