@@ -1,81 +1,44 @@
 ---
 name: arize-phoenix-migration
-description: Migrates Phoenix traces into Arize AX and validates Phoenix import jobs using the FileImporter-backed AX tracing path. Use when the user asks to move Phoenix/PX traces to AX, test Phoenix connector imports, or debug Phoenix migration jobs.
+description: Migrate existing Phoenix (PX) project traces into Arize AX, preserving historical IDs and timestamps and verifying the imported spans. Use when users ask to move or copy Phoenix traces to AX; not for adding live instrumentation or exporting AX traces alone.
 metadata:
   author: arize
   version: "1.0"
-compatibility: Requires access to the source Phoenix instance, an Arize AX account/profile, and whichever Phoenix migration route is available in the target environment.
 ---
 
-# Arize Phoenix Migration Skill
+# Phoenix to AX migration
 
-Use this skill for Phoenix-to-Arize AX trace migration, Phoenix connector setup, migration job testing, and migration debugging.
+Help the user migrate a Phoenix project to AX using the bundled helper. Handle setup and commands yourself; the user should only need to supply their source and destination details.
 
-Before making changes or running a migration, read the current handoff in [working notes](references/working-notes.md). It records the latest known product route, PR context, test assumptions, and open questions.
+Requires Python 3.10 or later, shell access, and network access to Phoenix and AX. No particular coding agent, ax CLI, or AX Phoenix connector is required.
 
-## Route
+## Gather missing details
 
-Prefer the productized FileImporter route for current work:
+Reuse details from the request and configured environment. Ask only for missing information:
 
-`Phoenix REST spans -> durable Phoenix import work items -> Arrow ArizeSpans file -> FileImporter ImportFile -> AX tracing storage`
+- Phoenix host URL and source project name.
+- Phoenix API key if that instance requires authentication.
+- AX API key, destination space ID, and destination project name.
 
-Do not revive the older direct OTLP receiver migration or the Python SDK batch logger path unless the user explicitly asks to investigate those historical approaches. The important historical lesson is still relevant: migrated trace queryability must be driven by the original Phoenix event timestamps, not by migration receipt time.
+Explain how to configure missing credentials locally in environment variables or a Git-ignored `.env`. Never echo credentials, place them in command arguments, or copy them to reports. Load an explicitly chosen environment file through the helper; do not print or source its contents. See [configuration and migration details](references/migration.md) for variable names and examples.
 
-## Inputs
+If the user only supplies a space name, resolve it with existing AX APIs and ask them to choose if multiple spaces match. Use a fresh destination project; suggest a source-derived name when none is specified and establish that destination with the user. Do not ask about the separate AX button, feature flags, or browser tokens.
 
-Collect only the inputs needed for the chosen route:
+## Run the migration
 
-- Phoenix endpoint
-- Phoenix API key, if the source requires auth
-- source Phoenix project
-- target AX space
-- target AX project name
-- Arize AX credentials through an `ax` profile or environment already configured by the user
+Locate this installed skill's root and run its bundled commands by absolute path, so they work from any workspace. Create an isolated Python environment if needed and install the [helper dependencies](scripts/requirements.txt).
 
-Treat Phoenix and AX credentials as secrets. Never search `.env` files, never print raw API keys, and never include secrets in notes, logs, job events, request fingerprints, or test artifacts. If credentials are missing, ask the user to configure them through the relevant CLI/profile or UI path rather than pasting them into chat.
+1. Run `scripts/migrate.py preflight` with the user's local configuration and chosen destination. Present a short source/destination summary. Missing configuration returns `needs_input`; ask for those fields. A dry-run or planning request stops here without uploading.
+2. Run `scripts/migrate.py export --manifest <local-path>` to export every page under a fixed snapshot boundary. For selected complete traces, repeat `--trace-id` for each trace ID. Export does not change Phoenix or AX.
+3. Run `scripts/migrate.py import --manifest <local-path>` when the user's request authorizes migration to the resolved destination. It refuses an existing destination on the first import. Keep the original manifest for resuming the same migration.
+4. Run `scripts/migrate.py verify --manifest <local-path>`. Only `verified` establishes success. Otherwise report uploaded-but-unverified with counts, differing field names, and the command for rerunning verification.
 
-## Current Product Behavior
+Use `--env-file <path>` on each command when the user has configured a local file. Use `--project <name>` to set the destination without modifying their environment. See the [migration reference](references/migration.md) for resume and troubleshooting.
 
-The FileImporter implementation uses Phoenix `GET /v1/projects/{project_identifier}/spans` as the page source, with cursor pagination and a job-level `snapshot_end_time`. A Phoenix page is the durable retry unit.
+## Preserve and report
 
-For AX import, Phoenix spans must be normalized into the AX `ArizeSpans` tracing schema:
+Preserve original span/trace IDs, parents, historical timestamps, span kinds, input/output, sessions, token counts, and attributes. The helper also stores original attributes, events, and timestamp strings in AX metadata for preservation checks. It reports AX REST timestamp readback differences up to 128 ns separately and requires exact original timestamp preservation in metadata. It does not migrate Phoenix datasets, prompts, experiments, evaluations, or annotations.
 
-- preserve `trace_id`, `span_id`, `parent_id`, name, status, start time, and end time
-- map known OpenInference attributes into first-class tracing columns
-- keep span kind values uppercase, e.g. `LLM` and `TOOL`
-- preserve unsupported or unmapped Phoenix attributes in `attributes.metadata` where practical
-- keep token counts numeric and costs as floats
-- ensure `input.value`, `output.value`, and their MIME types survive when present
+Do not change historical timestamps to make traces appear in a recent-time UI filter. Do not label a successful upload as a verified migration. The helper does not guarantee server-side ingestion idempotency: reconcile uncertain submissions through readback rather than blindly retrying them.
 
-When using the PR route, expect GraphQL/UI surfaces for saved Phoenix connectors, project discovery, import job creation, import job listing, and synthesized job events.
-
-## Validation
-
-Use a small migration first. Verify all of these before calling a migration successful:
-
-- the Phoenix connector can list source projects
-- the import job returns an existing active job on duplicate create rather than creating duplicates
-- work-item counts progress from discovered to completed
-- retryable Phoenix/API/object-store failures schedule retries and terminal failures surface a useful error
-- migrated spans are queryable in AX by the original Phoenix event-time window
-- exported AX spans preserve representative OpenInference fields and unmapped metadata
-
-For AX-side verification, use the installed `ax` CLI where available. Export a targeted trace or a small recent sample rather than bulk-exporting an unknown project.
-
-## Environment Constraints
-
-Cloud/productized imports may restrict Phoenix endpoints to a configured Phoenix origin and public HTTPS/443 reachability. Current worker-side hardening rejects unsafe hosts before sending the Phoenix API key, including loopback/private/link-local/metadata/CGNAT addresses and explicit non-443 ports.
-
-If testing a local or private Phoenix instance, confirm the environment supports that path before assuming `localhost:6006` or private network URLs will work. A public HTTPS tunnel, dev-only bypass, or a different deployment profile may be required.
-
-## Handoff
-
-After each meaningful investigation or test run, update [working notes](references/working-notes.md) with:
-
-- date and environment
-- branch or PR revision inspected
-- Phoenix source and AX target identifiers, excluding secrets
-- commands or UI path used
-- span/job counts
-- first failing boundary, if any
-- links to authoritative docs or PR review threads used for decisions
+Summarize source and destination, exported/imported/verified counts, and any differences or unverified outcomes. Keep raw exports, manifests, and credentials local and ignored by version control. Report core fields stored in AX separately from values preserved only in metadata.
