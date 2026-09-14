@@ -6,49 +6,17 @@ Consult when you need full flag lists or edge cases. Official docs: https://ariz
 
 ## `ax prompts list`
 
-List prompts in a space.
-
-```bash
-ax prompts list [--space SPACE] [--name FILTER] [--limit N] [--cursor CURSOR] [--output FILE]
-```
-
-| Option | Description |
-|--------|-------------|
-| `--space` | Space name or ID |
-| `--name` | Case-insensitive substring filter on prompt name |
-| `--limit` | Max results (default 15) |
-| `--cursor` | Pagination cursor |
+List prompts in a space. Run `ax prompts list --help` for the full flag list.
 
 ---
 
 ## `ax prompts create`
 
-Create a prompt with an initial version.
+Create a prompt with an initial version. Run `ax prompts create --help` for the full flag list.
 
-```bash
-ax prompts create \
-  --name NAME \
-  --space SPACE \
-  --provider PROVIDER \
-  --input-variable-format FORMAT \
-  --messages JSON_OR_PATH \
-  [--commit-message MSG] \
-  [--description DESC] \
-  [--model MODEL]
-```
+Notes beyond `--help`: `--provider` has no `GEMINI` option (unlike `ax ai-integrations`). `F_STRING` (the default `--input-variable-format`, for `{variable}` placeholders) can be used without asking the user; `MUSTACHE` is for `{{variable}}`. `--commit-message` is the same concept as Prompt Hub's **Version description (optional)** on first save, and `--description` the same as Hub's **Description (optional)**. `--model` is optional in the CLI, but the main **SKILL.md** for this skill requires always passing an explicit `--model` when proposing `create` commands.
 
-| Option | Description |
-|--------|-------------|
-| `--name` | Unique prompt name within the space |
-| `--space` | Space name or ID |
-| `--provider` | **Required.** `OPEN_AI`, `ANTHROPIC`, `AZURE_OPEN_AI`, `AWS_BEDROCK`, `VERTEX_AI`, `CUSTOM` (no `GEMINI` option here, unlike `ax ai-integrations`) |
-| `--input-variable-format` | `F_STRING` (default for `{variable}` placeholders — use without asking the user), `MUSTACHE` for `{{variable}}`, or `NONE` |
-| `--messages` | Path to JSON file or inline JSON array of message objects |
-| `--commit-message` | Initial version message (default: `Initial version`). Same concept as Hub **Version description (optional)** on first save. |
-| `--description` | Optional prompt-level description (Hub **Description (optional)** on the prompt) |
-| `--model` | Default model for this version. CLI may allow omission; the main **SKILL.md** for this skill requires always passing an explicit `--model` when proposing `create` commands. |
-
-**Tags:** Prompt Hub lets you set comma-separated **Tags (optional)** on the new-prompt save form. There is no `--tags` (or similar) on `ax prompts create` in current CLI help — add tags in the UI after create, or document them for the user to paste.
+**Tags:** Prompt Hub lets you set comma-separated **Tags (optional)** on the new-prompt save form. There is no `--tags` (or similar) on `ax prompts create` — add tags in the UI after create, or document them for the user to paste.
 
 ---
 
@@ -92,26 +60,9 @@ ax prompts list-versions NAME_OR_ID [--space SPACE] [--limit N] [--cursor CURSOR
 
 ## `ax prompts create-version`
 
-Add a new immutable version to an existing prompt.
+Add a new immutable version to an existing prompt. Run `ax prompts create-version --help` for the full flag list.
 
-```bash
-ax prompts create-version NAME_OR_ID \
-  --provider PROVIDER \
-  --input-variable-format FORMAT \
-  --messages JSON_OR_PATH \
-  [--space SPACE] \
-  [--commit-message MSG] \
-  [--model MODEL]
-```
-
-| Option | Description |
-|--------|-------------|
-| `--provider` | **Required.** Same enum as `create`: `OPEN_AI`, `ANTHROPIC`, `AZURE_OPEN_AI`, `AWS_BEDROCK`, `VERTEX_AI`, `CUSTOM` |
-| `--input-variable-format` | Same as `create` (default `F_STRING` for `{variable}`) |
-| `--messages` | Updated messages JSON for this version |
-| `--commit-message` | Same concept as Hub **Save New Version** → **Version description (optional)** (CLI default: `New version`) |
-| `--model` | Default model for this version — **always pass explicitly** per the main **SKILL.md** in this skill (confirm if unknown). |
-| `--space` | Required when `NAME_OR_ID` is a prompt name |
+Notes beyond `--help`: `--provider`/`--input-variable-format` use the same enums as `create`. `--commit-message` is the same concept as Hub's **Save New Version** → **Version description (optional)**. Per the main **SKILL.md** in this skill, always pass `--model` explicitly (confirm with the user if unknown) even though the CLI allows omitting it.
 
 ---
 

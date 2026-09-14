@@ -7,7 +7,7 @@ Full CRUD reference for AI integrations, evaluators (template and code), and tas
 
 AI integrations store the LLM provider credentials the evaluator uses. Check for an existing integration first with `ax ai-integrations list --space SPACE`. If none exists, use the **arize-ai-provider-integration** skill to create one for the needed provider (OpenAI, Anthropic, Azure, Bedrock, Vertex, Gemini, NVIDIA NIM, or custom).
 
-Copy the returned integration ID — it is required for `ax evaluators create-template-evaluator --ai-integration-id`.
+Copy the returned integration ID — it is required for `ax evaluators create-evaluator template --ai-integration-id`.
 
 ### Evaluators
 
@@ -33,7 +33,7 @@ ax evaluators delete NAME_OR_ID
 
 ```bash
 # Create a template evaluator (LLM-as-judge)
-ax evaluators create-template-evaluator \
+ax evaluators create-evaluator template \
   --name "Answer Correctness" \
   --space SPACE \
   --description "Judges if the model answer is correct" \
@@ -47,7 +47,7 @@ ax evaluators create-template-evaluator \
   --template 'Judge if the response answers the question. Question: {{input}} Response: {{output}} Labels: correct, incorrect'
 
 # Create a new template version (for prompt or model changes — versions are immutable)
-ax evaluators create-template-evaluator-version NAME_OR_ID \
+ax evaluators create-evaluator-version template NAME_OR_ID \
   --commit-message "Added context grounding" \
   --template-name "correctness" \
   --ai-integration-id INT_ID \
@@ -57,25 +57,7 @@ ax evaluators create-template-evaluator-version NAME_OR_ID \
   --template 'Updated prompt with {{input}}, {{output}}, {{context}}'
 ```
 
-**Key flags for `create-template-evaluator`:**
-
-| Flag | Required | Description |
-|------|----------|-------------|
-| `--name` | yes | Evaluator name (unique within space) |
-| `--space` | yes | Space name or ID to create in |
-| `--template-name` | yes | Eval column name — alphanumeric, spaces, hyphens, underscores |
-| `--commit-message` | yes | Description of this version |
-| `--ai-integration-id` | yes | AI integration ID (from above) |
-| `--model-name` | yes | Judge model (e.g. `gpt-4o`) |
-| `--template` | yes | Prompt with `{{variable}}` placeholders (double curly braces; single-quoted in bash) |
-| `--classification-choices` | yes | JSON object mapping choice labels to numeric scores e.g. `'{"correct": 1, "incorrect": 0}'` |
-| `--description` | no | Human-readable description |
-| `--include-explanations` | no | Include reasoning alongside the label |
-| `--use-function-calling` | no | Prefer structured function-call output |
-| `--invocation-params` | no | JSON of model params e.g. `'{"temperature": 0}'` |
-| `--provider-params` | no | JSON object of provider-specific parameters |
-| `--data-granularity` | no | `span` (default), `trace`, or `session`. Only relevant for project tasks, not dataset/experiment tasks. See Data Granularity section. |
-| `--direction` | no | Optimization direction: `MAXIMIZE`, `MINIMIZE`, or `NONE`. Sets how the UI renders trends. |
+Run `ax evaluators create-evaluator template --help` for the full flag list. Notes beyond `--help`: `--data-granularity` (`span`/`trace`/`session`) only matters for project tasks, not dataset/experiment tasks — see Data Granularity below. `--direction` controls how the UI renders the trend arrow, not the score itself.
 
 #### Code evaluators (deterministic, no LLM)
 
@@ -89,7 +71,7 @@ list — goes through `--static-params`, not `--variables`.
 
 ```bash
 # Managed: check output is valid JSON
-ax evaluators create-code-evaluator \
+ax evaluators create-evaluator code \
   --name "JSON Format Check" \
   --space SPACE \
   --commit-message "Initial version" \
@@ -99,7 +81,7 @@ ax evaluators create-code-evaluator \
   --variables '["output"]'
 
 # Managed: check output contains required keywords
-ax evaluators create-code-evaluator \
+ax evaluators create-evaluator code \
   --name "Safety Keywords" \
   --space SPACE \
   --commit-message "Initial version" \
@@ -214,7 +196,7 @@ class JSONSchemaEval(CodeEvaluator):
 
 ```bash
 # Custom Python (recommended): load imports + class from files
-ax evaluators create-code-evaluator \
+ax evaluators create-evaluator code \
   --name "JSON Schema Check" \
   --space SPACE \
   --commit-message "Initial version" \
@@ -232,7 +214,7 @@ like this, the file-based form above is easier to read and less error-prone:
 
 ```bash
 # Custom Python (inline): workable, but harder to maintain than the file form
-ax evaluators create-code-evaluator \
+ax evaluators create-evaluator code \
   --name "JSON Schema Check" \
   --space SPACE \
   --commit-message "Initial version" \
@@ -278,7 +260,7 @@ from arize.experimental.datasets.experiments.evaluators.base import (
 
 ```bash
 # Create a new version of a code evaluator
-ax evaluators create-code-evaluator-version NAME_OR_ID \
+ax evaluators create-evaluator-version code NAME_OR_ID \
   --commit-message "Updated regex pattern" \
   --code-type managed \
   --code-name "regex_check" \
@@ -287,24 +269,7 @@ ax evaluators create-code-evaluator-version NAME_OR_ID \
   --static-params '[{"name": "pattern", "type": "REGEX", "default_value": "^[A-Z]"}]'
 ```
 
-**Key flags for `create-code-evaluator`:**
-
-| Flag | Required | Description |
-|------|----------|-------------|
-| `--name` | yes | Evaluator name (unique within space) |
-| `--space` | yes | Space name or ID to create in |
-| `--commit-message` | yes | Description of this version |
-| `--code-type` | yes | `managed` (built-in pattern) or `custom` (Python class) |
-| `--code-name` | yes | Eval column name — alphanumeric, spaces, hyphens, underscores. (Use `--template-name` on `create-template-evaluator` instead when creating a template-based evaluator.) |
-| `--variables` | yes | JSON array of column/attribute names (strings), e.g. `'["prediction", "actual"]'`. For `custom`, each must match a named `evaluate()` parameter. For `managed`, these are the input columns the check reads — the check's own config (pattern, keyword list) goes in `--static-params`. |
-| `--managed-evaluator` | managed only | Case-sensitive; one of: `MATCHES_REGEX`, `JSON_PARSEABLE`, `CONTAINS_ANY_KEYWORD`, `CONTAINS_ALL_KEYWORDS`, `EXACT_MATCH` |
-| `--code` | custom only | Python source for the `CodeEvaluator` subclass only — no imports (or `@filepath` to read from file) |
-| `--imports` | custom only | Python import block for `--code`, e.g. the `arize.experimental.datasets.experiments.evaluators.base` import (or `@filepath`) |
-| `--static-params` | no | JSON array of static config parameters read via `self.<name>` inside `evaluate()`. Each item: `{"name": ..., "type": "STRING"\|"STRING_ARRAY"\|"REGEX", "default_value": ...}` — `default_value` is a string for `STRING`/`REGEX` and an array of strings for `STRING_ARRAY`; cast numerics explicitly (e.g. `int(self.<name>)`) |
-| `--query-filter` | no | SQL-style filter to restrict which spans are evaluated |
-| `--description` | no | Human-readable description |
-| `--data-granularity` | no | `span` (default), `trace`, or `session` |
-| `--direction` | no | Optimization direction: `MAXIMIZE`, `MINIMIZE`, or `NONE` |
+Run `ax evaluators create-evaluator code --help` for the full flag list. Notes beyond `--help`: use `--template-name` (not `--code-name`) when creating a template-based evaluator instead. For `custom`, each `--variables` entry must match a named `evaluate()` parameter; for `managed`, `--variables` lists the input columns the check reads, while the check's own config (pattern, keyword list) goes in `--static-params`. Each `--static-params` item's `default_value` is a string for `STRING`/`REGEX` and an array of strings for `STRING_ARRAY`; cast numeric static params explicitly inside `evaluate()` (e.g. `int(self.<name>)`). `--data-granularity`/`--direction` behave as described above.
 
 ### Tasks
 
@@ -386,15 +351,7 @@ ax tasks cancel-run RUN_ID --force
 
 **Time format for trigger-run:** `2026-03-21T09:00:00` — no trailing `Z`.
 
-**Additional trigger-run flags:**
-
-| Flag | Description |
-|------|-------------|
-| `--max-spans` | Cap processed spans (default 10,000) |
-| `--override-evaluations` | Re-score spans that already have labels |
-| `--wait` / `-w` | Block until the run finishes |
-| `--timeout` | Seconds to wait with `--wait` (default 600) |
-| `--poll-interval` | Poll interval in seconds when waiting (default 5) |
+Run `ax tasks trigger-run --help` for the full flag list (`--max-spans`, `--override-evaluations`, `--wait`, `--timeout`, `--poll-interval`, and the experiment/run-experiment-only flags).
 
 **Run status guide:**
 
