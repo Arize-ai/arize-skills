@@ -71,7 +71,7 @@ class FakeAPI:
     def ax_project(self, name, space):
         return self.existing
 
-    def ax_spans(self, project, start, end):
+    def ax_spans(self, project, start, end, progress=None):
         self.calls.append((project, start, end))
         return self.actual
 
@@ -581,3 +581,207 @@ def test_non_https_endpoint_rejected_before_upload(config, span):
                 config, [span], {"space_id": "space-1", "project_name": "test"}
             )
     upload.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "service,expected",
+    [("phoenix", "Phoenix project lookup"), ("ax", "AX destination lookup")],
+)
+def test_authentication_errors_identify_service(config, service, expected):
+    api = migrate.APIs(
+        config,
+        httpx.Client(
+            transport=httpx.MockTransport(
+                lambda request: httpx.Response(401, text="private error detail")
+            )
+        ),
+    )
+    with pytest.raises(migrate.APIRequestError, match=expected) as failure:
+        api.project() if service == "phoenix" else api.space()
+    assert "private error detail" not in str(failure.value)
+
+
+def test_phoenix_export_error_identifies_stage(config):
+    api = migrate.APIs(
+        config,
+        httpx.Client(
+            transport=httpx.MockTransport(lambda request: httpx.Response(403))
+        ),
+    )
+    with pytest.raises(migrate.APIRequestError, match="Phoenix span export"):
+        api.phoenix("projects/source/spans")
+
+
+@pytest.mark.parametrize("operation", ["import", "verify"])
+def test_empty_snapshot_cli_needs_no_keys_or_network(
+    tmp_path, config, monkeypatch, capsys, operation
+):
+    _, path = exported(tmp_path, config, [])
+    monkeypatch.setattr(migrate, "configuration", lambda *args: {})
+
+    def forbidden(*args, **kwargs):
+        raise AssertionError("Empty snapshots must make no API calls")
+
+    monkeypatch.setattr(migrate, "APIs", forbidden)
+    monkeypatch.setattr("sys.argv", ["migrate.py", operation, "--manifest", str(path)])
+    assert migrate.main() == 0
+    result = json.loads(capsys.readouterr().out)
+    assert result["status"] == "empty"
+    assert result["destination_span_count"] == 0
+    assert migrate.load_manifest(path)["destination"] is None
+
+
+@pytest.mark.parametrize("status", [401, 403, 404])
+@pytest.mark.parametrize("denied_path", ["projects", "spans"])
+def test_submitted_spans_with_unreadable_key_remain_unverified(
+    tmp_path, config, span, status, denied_path
+):
+    from unittest.mock import patch
+
+    api, path = exported(tmp_path, config, [span])
+    with patch("arize.spans.client.post_arrow_table"):
+        migrate.import_snapshot(api, path)
+
+    def response(request):
+        if request.url.path.endswith("/" + denied_path):
+            return httpx.Response(status, text="private server payload")
+        return httpx.Response(
+            200,
+            json={
+                "projects": [
+                    {"id": "destination", "name": config["ARIZE_PROJECT_NAME"]}
+                ]
+            },
+        )
+
+    reader = migrate.APIs(config, httpx.Client(transport=httpx.MockTransport(response)))
+    progress = []
+    result = migrate.verify_snapshot(reader, path, 0, progress=progress.append)
+    assert result["status"] == "uploaded_unverified"
+    assert result["readback_http_status"] == status
+    assert "AX " in result["reason"]
+    assert "private server payload" not in json.dumps(result)
+    assert migrate.load_manifest(path)["batches"][0]["status"] == "submitted"
+    assert "verification" not in migrate.load_manifest(path)
+    assert progress[-1]["stage"] == (
+        "readback_unavailable" if status == 404 else "readback_denied"
+    )
+
+
+def test_ingest_only_key_cannot_bypass_destination_read_checks(tmp_path, config, span):
+    from unittest.mock import patch
+
+    _, path = exported(tmp_path, config, [span])
+    api = migrate.APIs(
+        config,
+        httpx.Client(
+            transport=httpx.MockTransport(lambda request: httpx.Response(403))
+        ),
+    )
+    with patch("arize.spans.client.post_arrow_table") as upload:
+        with pytest.raises(migrate.APIRequestError, match="AX destination lookup"):
+            migrate.import_snapshot(api, path)
+    upload.assert_not_called()
+    assert migrate.load_manifest(path)["destination"] is None
+
+
+def test_read_only_key_rejected_by_ingestion_keeps_pending(tmp_path, config, span):
+    from unittest.mock import patch
+
+    from arize.exceptions.auth import AuthenticationError
+
+    _, path = exported(tmp_path, config, [span])
+
+    def response(request):
+        if request.url.path.endswith("/spaces/space-1"):
+            return httpx.Response(200, json={"id": "space-1", "name": "sandbox"})
+        return httpx.Response(200, json={"projects": []})
+
+    api = migrate.APIs(config, httpx.Client(transport=httpx.MockTransport(response)))
+    with patch(
+        "arize.spans.client.post_arrow_table",
+        side_effect=AuthenticationError(403, "private payload"),
+    ):
+        with pytest.raises(migrate.RejectedUpload, match="HTTP 403"):
+            migrate.import_snapshot(api, path)
+    assert migrate.load_manifest(path)["batches"][0]["status"] == "pending"
+
+
+def test_verification_progress_stderr_preserves_final_stdout(
+    tmp_path, config, span, monkeypatch, capsys
+):
+    api, path = exported(tmp_path, config, [span])
+    migrate.import_snapshot(api, path, upload=lambda *args: None)
+    api.existing = {"id": "destination"}
+    api.actual = [observed(span)]
+    monkeypatch.setattr(migrate, "configuration", lambda *args: config)
+    monkeypatch.setattr(migrate, "APIs", lambda *args: api)
+    monkeypatch.setattr(
+        "sys.argv",
+        ["migrate.py", "verify", "--manifest", str(path), "--wait-seconds", "0"],
+    )
+    assert migrate.main() == 0
+    output = capsys.readouterr()
+    assert json.loads(output.out)["status"] == "verified"
+    progress = [json.loads(line) for line in output.err.splitlines()]
+    assert progress[0]["expected_span_count"] == 1
+    assert progress[-1]["found_span_count"] == 1
+    assert all("elapsed_seconds" in event for event in progress)
+    for private in [
+        config["ARIZE_API_KEY"],
+        span["attributes"]["input.value"],
+        span["context"]["span_id"],
+    ]:
+        assert private not in output.err
+
+
+def test_denied_readback_cli_exits_unverified(
+    tmp_path, config, span, monkeypatch, capsys
+):
+    api, path = exported(tmp_path, config, [span])
+    migrate.import_snapshot(api, path, upload=lambda *args: None)
+    reader = migrate.APIs(
+        config,
+        httpx.Client(
+            transport=httpx.MockTransport(lambda request: httpx.Response(403))
+        ),
+    )
+    monkeypatch.setattr(migrate, "configuration", lambda *args: config)
+    monkeypatch.setattr(migrate, "APIs", lambda *args: reader)
+    monkeypatch.setattr(
+        "sys.argv",
+        ["migrate.py", "verify", "--manifest", str(path), "--wait-seconds", "0"],
+    )
+    assert migrate.main() == 3
+    assert json.loads(capsys.readouterr().out)["status"] == "uploaded_unverified"
+
+
+def test_window_progress_reports_partial_counts(config):
+    calls = []
+
+    def response(request):
+        calls.append(request)
+        return httpx.Response(
+            200,
+            json={
+                "spans": [] if len(calls) == 1 else [{"synthetic": len(calls)}],
+                "pagination": {"has_more": len(calls) == 1},
+            },
+        )
+
+    api = migrate.APIs(
+        config,
+        httpx.Client(transport=httpx.MockTransport(response)),
+        sleep=lambda _: None,
+    )
+    progress = []
+    rows = api.ax_spans(
+        "destination",
+        "2026-03-22T00:00:00Z",
+        "2026-03-22T00:00:02Z",
+        progress=lambda stage, **counts: progress.append(counts),
+    )
+    assert len(rows) == 2
+    assert progress[0]["found_span_count"] == 0
+    assert progress[-1]["found_span_count"] == 2
+    assert progress[-1]["pending_windows"] == 0

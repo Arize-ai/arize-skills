@@ -23,6 +23,14 @@ class MigrationError(Exception):
     pass
 
 
+class APIRequestError(MigrationError):
+    def __init__(self, context, status):
+        self.status = status
+        super().__init__(
+            f"{context} returned HTTP {status}; check credentials, permissions, and endpoint configuration."
+        )
+
+
 class RejectedUpload(MigrationError):
     pass
 
@@ -114,7 +122,7 @@ class APIs:
         self.client = client or httpx.Client(timeout=60, follow_redirects=False)
         self.sleep = sleep
 
-    def request(self, method, url, key=None, **kwargs):
+    def request(self, method, url, key=None, context="API request", **kwargs):
         headers = {"Accept": "application/json"}
         if key:
             headers["Authorization"] = "Bearer " + key
@@ -124,7 +132,7 @@ class APIs:
             except httpx.TransportError:
                 if attempt == 3:
                     raise MigrationError(
-                        "API connection failed after four attempts."
+                        f"{context} connection failed after four attempts."
                     ) from None
                 self.sleep(2**attempt)
                 continue
@@ -139,14 +147,12 @@ class APIs:
                     self.sleep(delay)
                     continue
             if not 200 <= response.status_code < 300:
-                raise MigrationError(
-                    f"API request returned HTTP {response.status_code}; check endpoint, credentials, and permissions."
-                )
+                raise APIRequestError(context, response.status_code)
             try:
                 return response.json()
             except ValueError:
-                raise MigrationError("API returned an invalid JSON response.") from None
-        raise MigrationError("API request did not complete.")
+                raise MigrationError(f"{context} returned invalid JSON.") from None
+        raise MigrationError(f"{context} did not complete.")
 
     def phoenix(self, path, params=None):
         base = self.config["PHOENIX_BASE_URL"].rstrip("/")
@@ -159,6 +165,9 @@ class APIs:
             base + "/v1/" + path,
             self.config.get("PHOENIX_API_KEY"),
             params=params,
+            context="Phoenix span export"
+            if path.endswith("/spans")
+            else "Phoenix project lookup",
         )
 
     def ax(self, method, path, **kwargs):
@@ -167,6 +176,9 @@ class APIs:
             method,
             base + "/v2/" + path,
             self.config["ARIZE_API_KEY"],
+            context="AX verification readback"
+            if path == "spans"
+            else "AX destination lookup",
             **kwargs,
         )
 
@@ -199,7 +211,7 @@ class APIs:
                 raise MigrationError("AX project pagination repeated a cursor.")
             seen.add(cursor)
 
-    def ax_spans(self, project, start, end):
+    def ax_spans(self, project, start, end, progress=None):
         # Cursor pagination can omit records in historical multi-segment queries.
         # Query disjoint millisecond windows, splitting any truncated response.
         start_ms = nanos(start) // 1_000_000
@@ -207,6 +219,7 @@ class APIs:
         windows = [(start_ms, end_ms)]
         rows = []
         requests = 0
+        last_progress = float("-inf")
         while windows:
             lower, upper = windows.pop()
             requests += 1
@@ -242,6 +255,14 @@ class APIs:
                 windows.extend([(lower, middle), (middle, upper)])
             else:
                 rows.extend(page.get("spans", page.get("data", [])))
+            if progress and (time.monotonic() - last_progress >= 15 or not windows):
+                last_progress = time.monotonic()
+                progress(
+                    "reading_spans",
+                    found_span_count=len(rows),
+                    request_count=requests,
+                    pending_windows=len(windows),
+                )
         return rows
 
 
@@ -622,36 +643,88 @@ def compare(source, actual):
     }
 
 
-def verify_snapshot(api, path, wait_seconds=900, interval=15):
+def emit_progress(result):
+    print(dump(result), file=sys.stderr, flush=True)
+
+
+def verify_snapshot(api, path, wait_seconds=900, interval=15, progress=None):
     manifest = load_manifest(path)
+    spans = manifest["spans"]
+    if not spans:
+        return {
+            "status": "empty",
+            "reason": "Snapshot contains no spans; nothing was uploaded or requires verification.",
+            "source_span_count": 0,
+            "destination_span_count": 0,
+        }
     destination = manifest["destination"]
     if not destination:
         raise MigrationError("Manifest has no import destination.")
     if destination["space_id"] != api.config["ARIZE_SPACE_ID"]:
         raise MigrationError("Configured AX space differs from the manifest.")
-    spans = manifest["spans"]
     start = (
         min(utc(s["start_time"]) for s in spans) - timedelta(seconds=1)
     ).isoformat()
     end = (max(utc(s["end_time"]) for s in spans) + timedelta(seconds=1)).isoformat()
-    deadline = time.monotonic() + wait_seconds
+    began = time.monotonic()
+    deadline = began + wait_seconds
+
+    def notify(stage, **counts):
+        if progress:
+            progress(
+                {
+                    "event": "verification_progress",
+                    "stage": stage,
+                    "elapsed_seconds": round(time.monotonic() - began, 1),
+                    "expected_span_count": len(spans),
+                    **counts,
+                }
+            )
+
     result = {
         "status": "uploaded_unverified",
         "reason": "Destination project is not yet visible.",
     }
+    notify("looking_up_destination", found_span_count=0)
     while True:
-        project = api.ax_project(destination["project_name"], destination["space_id"])
-        if project:
-            actual = api.ax_spans(project["id"], start, end)
-            result = compare(spans, actual)
-            if result["status"] == "verified":
-                for batch in manifest["batches"]:
-                    batch["status"] = "submitted"
-                manifest["verification"] = result
-                save(path, manifest)
-                return result
+        try:
+            project = api.ax_project(
+                destination["project_name"], destination["space_id"]
+            )
+            if project:
+                notify("reading_spans", found_span_count=0)
+                actual = api.ax_spans(
+                    project["id"], start, end, progress=notify if progress else None
+                )
+                result = compare(spans, actual)
+                notify(
+                    "readback_checked",
+                    found_span_count=len(actual),
+                    missing_span_count=result["missing_span_count"],
+                    difference_count=result["difference_count"],
+                )
+                if result["status"] == "verified":
+                    for batch in manifest["batches"]:
+                        batch["status"] = "submitted"
+                    manifest["verification"] = result
+                    save(path, manifest)
+                    return result
+        except APIRequestError as exc:
+            if exc.status not in (401, 403, 404):
+                raise
+            notify("readback_unavailable" if exc.status == 404 else "readback_denied")
+            return {
+                "status": "uploaded_unverified",
+                "source_span_count": len(spans),
+                "reason": str(exc),
+                "readback_http_status": exc.status,
+            }
         if time.monotonic() >= deadline:
             return result
+        notify(
+            "waiting_for_indexing",
+            found_span_count=result.get("destination_span_count", 0),
+        )
         api.sleep(min(interval, max(0, deadline - time.monotonic())))
 
 
@@ -679,15 +752,6 @@ def main():
     parser.add_argument("--wait-seconds", type=int, default=900)
     args = parser.parse_args()
     try:
-        config = configuration(args.env_file)
-        if args.project:
-            config["ARIZE_PROJECT_NAME"] = args.project
-        missing = missing_inputs(config, args.operation)
-        if missing:
-            print(dump({"status": "needs_input", "missing": missing}))
-            return 2
-        if args.operation != "preflight" and not args.manifest:
-            raise MigrationError("This operation requires --manifest.")
         if (
             args.batch_size < 1
             or args.wait_seconds < 0
@@ -696,6 +760,19 @@ def main():
             raise MigrationError(
                 "Batch sizes must be positive and wait time nonnegative."
             )
+        config = configuration(args.env_file)
+        if args.project:
+            config["ARIZE_PROJECT_NAME"] = args.project
+        if args.operation in ("import", "verify") and args.manifest:
+            if not load_manifest(args.manifest)["spans"]:
+                print(dump(verify_snapshot(None, args.manifest)))
+                return 0
+        missing = missing_inputs(config, args.operation)
+        if missing:
+            print(dump({"status": "needs_input", "missing": missing}))
+            return 2
+        if args.operation != "preflight" and not args.manifest:
+            raise MigrationError("This operation requires --manifest.")
         api = APIs(config)
         if args.operation == "preflight":
             result = preflight(api)
@@ -706,7 +783,9 @@ def main():
                 api, args.manifest, args.batch_size, args.max_batches
             )
         else:
-            result = verify_snapshot(api, args.manifest, args.wait_seconds)
+            result = verify_snapshot(
+                api, args.manifest, args.wait_seconds, progress=emit_progress
+            )
         print(dump(result))
         return (
             3

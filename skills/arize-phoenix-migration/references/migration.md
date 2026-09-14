@@ -44,3 +44,12 @@ The manifest records a batch as uncertain before submitting it. If the process d
 Verification polls every 15 seconds for up to 900 seconds. `--wait-seconds 0` makes one readback attempt. Missing records can reflect indexing delay, retention limits, or a failed upload. Report the result accurately and rerun verification later without reuploading.
 
 HTTP 401/403 requires fixing credentials or permissions. HTTP 429/5xx and connection failures on read-only requests use four bounded attempts. Unexpected redirects, invalid JSON, and other HTTP failures stop the operation. Definite authentication and other client-side upload rejections return the batch to pending so the user can fix the problem and rerun import. HTTP 408/5xx and transport failures remain uncertain because acceptance cannot be established; run verification before retrying. No upload is retried automatically.
+
+
+## Progress and permission failures
+
+The verify CLI writes throttled redacted progress JSON to stderr and one final result JSON to stdout. Progress includes stage, elapsed seconds, expected spans, and spans accumulated from completed disjoint query windows. Those partial counts are not the total indexed count; they reset for each polling attempt. Use them for updates without displaying trace payloads or keys.
+
+Phoenix project/export and AX destination/readback failures identify the service and stage. A key with read but no ingestion permission fails upload and leaves a definitely rejected batch pending. A key without destination read permission cannot pass preflight or start import, even if it has ingestion permission. If spans were already submitted and verification receives HTTP 401/403 or a missing/inaccessible destination returns 404, report uploaded_unverified with the readback error and keep the manifest for verification after credentials are corrected. Never infer ingestion permission from preflight or verified success from an accepted upload.
+
+An empty snapshot returns empty with zero counts and no API request or destination creation for import/verify. It is a no-upload outcome, not a verified nonempty migration. Local manifests are checksum-validated even in this case.
