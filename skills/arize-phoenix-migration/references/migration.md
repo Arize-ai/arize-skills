@@ -2,20 +2,11 @@
 
 ## Configuration
 
-Set these locally. Never include real credentials in a prompt or command argument:
-
-```dotenv
-PHOENIX_BASE_URL=https://app.phoenix.arize.com/s/your-space
-PHOENIX_PROJECT_NAME=your-source-project
-PHOENIX_API_KEY=
-ARIZE_API_KEY=
-ARIZE_SPACE_ID=
-ARIZE_PROJECT_NAME=your-fresh-destination
-```
+The agent reads source and destination configuration using the variable names in the [user setup README](../README.md). Reuse an existing credential file; do not embed secrets in commands, scripts, edit diffs, or tool requests. If credentials are missing, ask the user to configure them privately.
 
 An explicit `--env-file` loads these values without executing shell code. Environment variables override file values; `--project` overrides the destination name. Public unauthenticated Phoenix does not need a key. An authenticated Phoenix URL must use HTTPS; redirects are not followed with credentials.
 
-AX API readback uses `https://api.arize.com/v2` by default. `ARIZE_API_HOST` supports an explicitly configured alternative host; use the SDK's `ARIZE_REGION` and endpoint configuration for deployments outside the default region. Read and upload permissions are checked by actual requests; a read-only preflight cannot prove ingestion permission. API-key GraphQL access to the separate Phoenix connector is unnecessary.
+AX API readback uses `https://api.arize.com/v2` by default. Both REST readback and uploads use the same SDK-resolved endpoint configuration: `ARIZE_API_HOST`, `ARIZE_API_PORT`, `ARIZE_API_SCHEME`, `ARIZE_SINGLE_HOST`, `ARIZE_SINGLE_PORT`, `ARIZE_BASE_DOMAIN`, and `ARIZE_REGION`. SDK precedence and mutually exclusive region/single-endpoint/base-domain rules apply; HTTPS is required. Read and upload permissions are checked by actual requests; a read-only preflight cannot prove ingestion permission. API-key GraphQL access to the separate Phoenix connector is unnecessary.
 
 ## Commands
 
@@ -52,4 +43,4 @@ The manifest records a batch as uncertain before submitting it. If the process d
 
 Verification polls every 15 seconds for up to 900 seconds. `--wait-seconds 0` makes one readback attempt. Missing records can reflect indexing delay, retention limits, or a failed upload. Report the result accurately and rerun verification later without reuploading.
 
-HTTP 401/403 requires fixing credentials or permissions. HTTP 429/5xx and connection failures on read-only requests use four bounded attempts. Unexpected redirects, invalid JSON, and other HTTP failures stop the operation. Upload failures are treated as uncertain, not blindly retried by the helper.
+HTTP 401/403 requires fixing credentials or permissions. HTTP 429/5xx and connection failures on read-only requests use four bounded attempts. Unexpected redirects, invalid JSON, and other HTTP failures stop the operation. Definite authentication and other client-side upload rejections return the batch to pending so the user can fix the problem and rerun import. HTTP 408/5xx and transport failures remain uncertain because acceptance cannot be established; run verification before retrying. No upload is retried automatically.

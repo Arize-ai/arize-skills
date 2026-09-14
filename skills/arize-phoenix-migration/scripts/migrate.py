@@ -23,6 +23,10 @@ class MigrationError(Exception):
     pass
 
 
+class RejectedUpload(MigrationError):
+    pass
+
+
 class PreparationError(MigrationError):
     pass
 
@@ -83,6 +87,27 @@ def save(path, value):
     path.chmod(0o600)
 
 
+def sdk_client(config):
+    from arize import ArizeClient
+    from arize.regions import Region
+
+    logging.getLogger("arize").setLevel(logging.CRITICAL)
+    options = {
+        name: config["ARIZE_" + name.upper()]
+        for name in ("api_host", "api_scheme", "single_host", "base_domain")
+        if config.get("ARIZE_" + name.upper())
+    }
+    for name in ("api_port", "single_port"):
+        if config.get("ARIZE_" + name.upper()):
+            options[name] = int(config["ARIZE_" + name.upper()])
+    if config.get("ARIZE_REGION"):
+        options["region"] = Region(config["ARIZE_REGION"])
+    client = ArizeClient(api_key=config["ARIZE_API_KEY"], **options)
+    if urlsplit(client.sdk_config.api_url).scheme != "https":
+        raise MigrationError("AX API requests require HTTPS.")
+    return client
+
+
 class APIs:
     def __init__(self, config, client=None, sleep=time.sleep):
         self.config = config
@@ -137,18 +162,10 @@ class APIs:
         )
 
     def ax(self, method, path, **kwargs):
-        host = self.config.get("ARIZE_API_HOST", "api.arize.com")
-        if self.config.get("ARIZE_REGION"):
-            from arize.regions import Region
-
-            region = Region(self.config["ARIZE_REGION"])
-            host = f"api.{region.value}.arize.com"
-        scheme = self.config.get("ARIZE_API_SCHEME", "https")
-        if scheme != "https":
-            raise MigrationError("AX API requests require HTTPS.")
+        base = sdk_client(self.config).sdk_config.api_url.rstrip("/")
         return self.request(
             method,
-            scheme + "://" + host + "/v2/" + path,
+            base + "/v2/" + path,
             self.config["ARIZE_API_KEY"],
             **kwargs,
         )
@@ -394,22 +411,11 @@ def span_row(span):
 def upload_sdk(config, spans, destination):
     import pandas as pd
     import pyarrow as pa
-    from arize import ArizeClient
+    from arize.exceptions.auth import AuthenticationError
     from arize.exceptions.base import ValidationFailure
-    from arize.regions import Region
+    from arize.exceptions.http import APIError
 
-    logging.getLogger("arize").setLevel(logging.CRITICAL)
-    options = {
-        name: config["ARIZE_" + name.upper()]
-        for name in ("api_host", "api_scheme", "single_host", "base_domain")
-        if config.get("ARIZE_" + name.upper())
-    }
-    for name in ("api_port", "single_port"):
-        if config.get("ARIZE_" + name.upper()):
-            options[name] = int(config["ARIZE_" + name.upper()])
-    if config.get("ARIZE_REGION"):
-        options["region"] = Region(config["ARIZE_REGION"])
-    client = ArizeClient(api_key=config["ARIZE_API_KEY"], **options)
+    client = sdk_client(config)
     frame = pd.DataFrame([span_row(s) for s in spans])
     # Nullable integers avoid Arrow coercion of token counts when non-LLM rows are present.
     for column in frame:
@@ -422,6 +428,19 @@ def upload_sdk(config, spans, destination):
             dataframe=frame,
             timeout=60,
         )
+    except AuthenticationError as exc:
+        raise RejectedUpload(
+            f"AX rejected the upload (HTTP {exc.status_code}); fix credentials or permissions and rerun import with the same manifest."
+        ) from None
+    except APIError as exc:
+        # A timeout/server failure can still be ambiguous after a write.
+        if 400 <= exc.status_code < 500 and exc.status_code != 408:
+            raise RejectedUpload(
+                f"AX rejected the upload (HTTP {exc.status_code}); fix the request and rerun import with the same manifest."
+            ) from None
+        raise MigrationError(
+            "AX upload response was ambiguous; run verify before retrying."
+        ) from None
     except (ValidationFailure, pa.ArrowInvalid, pa.ArrowTypeError):
         raise PreparationError(
             "AX SDK validation or Arrow conversion failed before upload. Check source field types; no payload is included in this error."
@@ -469,7 +488,7 @@ def import_snapshot(api, path, batch_size=500, max_batches=None, upload=upload_s
         save(path, manifest)
         try:
             upload(api.config, rows, destination)
-        except PreparationError:
+        except (PreparationError, RejectedUpload):
             batch["status"] = "pending"
             save(path, manifest)
             raise

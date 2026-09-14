@@ -480,3 +480,104 @@ def test_cli_missing_input_is_machine_readable(monkeypatch, capsys):
     result = json.loads(capsys.readouterr().out)
     assert result["status"] == "needs_input"
     assert "PHOENIX_PROJECT_NAME" in result["missing"]
+
+
+@pytest.mark.parametrize("status", [401, 403, 400, 404, 422, 429])
+def test_definite_sdk_rejection_can_resume(tmp_path, config, span, status):
+    from unittest.mock import patch
+
+    from arize.exceptions.auth import AuthenticationError
+    from arize.exceptions.http import APIError
+
+    api, path = exported(tmp_path, config, [span])
+    exception = AuthenticationError if status in (401, 403) else APIError
+    with patch(
+        "arize.spans.client.post_arrow_table",
+        side_effect=exception(status, "secret server detail"),
+    ):
+        with pytest.raises(migrate.RejectedUpload) as failure:
+            migrate.import_snapshot(api, path)
+    assert "secret server detail" not in str(failure.value)
+    assert migrate.load_manifest(path)["batches"][0]["status"] == "pending"
+    with patch("arize.spans.client.post_arrow_table") as upload:
+        result = migrate.import_snapshot(api, path)
+    assert result["submitted_span_count"] == 1
+    assert upload.call_count == 1
+
+
+@pytest.mark.parametrize("status", [408, 500, 503])
+def test_ambiguous_sdk_response_stops_resume(tmp_path, config, span, status):
+    from unittest.mock import patch
+
+    from arize.exceptions.http import APIError
+
+    api, path = exported(tmp_path, config, [span])
+    with patch(
+        "arize.spans.client.post_arrow_table",
+        side_effect=APIError(status, "secret server detail"),
+    ):
+        with pytest.raises(migrate.MigrationError, match="uncertain"):
+            migrate.import_snapshot(api, path)
+    assert migrate.load_manifest(path)["batches"][0]["status"] == "uncertain"
+    with patch("arize.spans.client.post_arrow_table") as upload:
+        with pytest.raises(migrate.MigrationError, match="uncertain"):
+            migrate.import_snapshot(api, path)
+    upload.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "overrides,expected",
+    [
+        ({}, "https://api.arize.com"),
+        (
+            {"ARIZE_API_HOST": "custom.example", "ARIZE_API_PORT": "8443"},
+            "https://custom.example:8443",
+        ),
+        (
+            {"ARIZE_SINGLE_HOST": "single.example", "ARIZE_SINGLE_PORT": "9443"},
+            "https://single.example:9443",
+        ),
+        (
+            {
+                "ARIZE_SINGLE_HOST": "single.example",
+                "ARIZE_SINGLE_PORT": "9443",
+                "ARIZE_API_PORT": "8443",
+            },
+            "https://single.example:8443",
+        ),
+        ({"ARIZE_BASE_DOMAIN": "private.example"}, "https://api.private.example"),
+        ({"ARIZE_REGION": "eu-west-1a"}, "https://api.eu-west-1a.arize.com"),
+    ],
+)
+def test_rest_and_upload_share_sdk_endpoint(config, span, overrides, expected):
+    from unittest.mock import patch
+
+    config = {**config, **overrides}
+    calls = []
+    api = migrate.APIs(
+        config,
+        httpx.Client(
+            transport=httpx.MockTransport(
+                lambda request: calls.append(request) or httpx.Response(200, json={})
+            )
+        ),
+    )
+    api.ax("GET", "spaces/space-1")
+    with patch("arize.spans.client.post_arrow_table") as upload:
+        migrate.upload_sdk(
+            config, [span], {"space_id": "space-1", "project_name": "test"}
+        )
+    assert str(calls[0].url) == expected + "/v2/spaces/space-1"
+    assert upload.call_args.kwargs["files_url"].startswith(expected + "/")
+
+
+def test_non_https_endpoint_rejected_before_upload(config, span):
+    from unittest.mock import patch
+
+    config = {**config, "ARIZE_API_SCHEME": "http"}
+    with patch("arize.spans.client.post_arrow_table") as upload:
+        with pytest.raises(migrate.MigrationError, match="HTTPS"):
+            migrate.upload_sdk(
+                config, [span], {"space_id": "space-1", "project_name": "test"}
+            )
+    upload.assert_not_called()
