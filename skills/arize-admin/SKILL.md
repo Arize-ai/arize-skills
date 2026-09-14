@@ -4,7 +4,7 @@ description: "Manages Arize users, organizations, spaces, projects, roles, role 
 metadata:
   author: arize
   version: "1.0"
-compatibility: Requires the ax CLI (≥ 0.33.0) and a configured Arize profile with org-admin privileges.
+compatibility: Requires the ax CLI (≥ 0.34.0) and a configured Arize profile with org-admin privileges.
 ---
 
 # Arize Admin Skill
@@ -56,7 +56,7 @@ Ask before running any commands:
 Ask before running any commands:
 - **Name and email** — for each user to invite
 - **Role** — `ADMIN`, `MEMBER`, or `ANNOTATOR` (present as options; account-level user creation has no `READ_ONLY` role)
-- **Invite mode** — `EMAIL_LINK` (default), `TEMPORARY_PASSWORD`, or `NONE`
+- **Invite mode** — `EMAIL_LINK`, `TEMPORARY_PASSWORD`, or `NONE` (required; `ax users create` prompts for it if omitted)
 
 ### Revoking or rotating an API key
 Ask before running any commands:
