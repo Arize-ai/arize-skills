@@ -23,6 +23,17 @@ from harness.skill_router import SkillSelectionResult, SkillSelectionRunner
 
 # Single-skill: clear/specific prompts
 SPECIFIC_PROMPTS = [
+    # arize-phoenix-migration
+    (
+        "Migrate my Phoenix project traces into Arize AX",
+        ["arize-phoenix-migration"],
+        ["specific", "phoenix-migration"],
+    ),
+    (
+        "Copy historical PX traces to AX and verify the imported spans",
+        ["arize-phoenix-migration"],
+        ["specific", "phoenix-migration"],
+    ),
     # arize-trace
     (
         "Export the traces from my project for the last 24 hours",
