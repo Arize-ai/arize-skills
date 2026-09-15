@@ -88,3 +88,11 @@ def test_missing_configuration_names_only_missing_values():
     with pytest.raises(data.DataMigrationError, match="ARIZE_SPACE_ID") as error:
         data.require({"ARIZE_API_KEY": "secret"}, ["ARIZE_API_KEY", "ARIZE_SPACE_ID"])
     assert "secret" not in str(error.value)
+
+
+def test_cli_does_not_include_dependency_error_details(monkeypatch, capsys, tmp_path):
+    monkeypatch.setattr(data, "configuration", lambda _: {})
+    monkeypatch.setattr(data, "export_data", lambda *args: (_ for _ in ()).throw(RuntimeError("secret response body")))
+    monkeypatch.setattr(sys, "argv", ["migrate_data.py", "export", "--manifest", str(tmp_path / "x")])
+    assert data.main() == 1
+    assert "secret response body" not in capsys.readouterr().out

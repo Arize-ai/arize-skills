@@ -447,7 +447,12 @@ def main():
         print(canonical(result))
         return 0 if result["status"] in {"exported", "imported_unverified", "verified"} else 3
     except Exception as error:  # noqa: BLE001 -- CLI converts dependency failures to JSON
-        print(canonical({"status": "error", "error": str(error)}))
+        message = (
+            str(error)
+            if isinstance(error, DataMigrationError)
+            else f"{type(error).__name__} during data migration; check credentials, permissions, endpoint configuration, and destination state."
+        )
+        print(canonical({"status": "error", "error": message}))
         return 1
 
 
