@@ -63,6 +63,12 @@ def load(path):
     return manifest
 
 
+def save_manifest(path, manifest):
+    raw = {k: v for k, v in manifest.items() if k != "checksum"}
+    manifest["checksum"] = checksum(raw)
+    save(path, manifest)
+
+
 def configuration(env_file=None):
     values = dict(dotenv_values(env_file)) if env_file else {}
     values.update(os.environ)
@@ -110,7 +116,14 @@ def export_data(config, path, selected=None):
         if wanted and summary["name"] not in wanted and summary["id"] not in wanted:
             continue
         versions = []
-        for version in reversed(client.datasets.get_dataset_versions(dataset=summary)):
+        source_versions = client.datasets.get_dataset_versions(
+            dataset=summary, limit=100
+        )
+        if len(source_versions) == 100:
+            raise DataMigrationError(
+                f"Dataset {summary['name']} has at least 100 versions; complete pagination is not available through this client."
+            )
+        for version in reversed(source_versions):
             snapshot = client.datasets.get_dataset(
                 dataset=summary["id"], version_id=version["version_id"]
             )
@@ -133,7 +146,9 @@ def export_data(config, path, selected=None):
                     "dataset_version_id": detail.get("dataset_version_id"),
                     "metadata": serializable(detail.get("experiment_metadata") or {}),
                     "task_runs": serializable(detail.get("task_runs") or []),
-                    "evaluation_runs": serializable(detail.get("evaluation_runs") or []),
+                    "evaluation_runs": serializable(
+                        detail.get("evaluation_runs") or []
+                    ),
                 }
             )
         datasets.append(
@@ -149,7 +164,9 @@ def export_data(config, path, selected=None):
         found = {d["name"] for d in datasets} | {d["id"] for d in datasets}
         missing = wanted - found
         if missing:
-            raise DataMigrationError("Phoenix datasets not found: " + ", ".join(sorted(missing)))
+            raise DataMigrationError(
+                "Phoenix datasets not found: " + ", ".join(sorted(missing))
+            )
     manifest = {"schema": 1, "source": "phoenix", "datasets": datasets, "state": {}}
     manifest["checksum"] = checksum(manifest)
     save(path, manifest)
@@ -162,9 +179,7 @@ def export_data(config, path, selected=None):
         ),
         "experiment_count": sum(len(d["experiments"]) for d in datasets),
         "evaluation_count": sum(
-            len(e["evaluation_runs"])
-            for d in datasets
-            for e in d["experiments"]
+            len(e["evaluation_runs"]) for d in datasets for e in d["experiments"]
         ),
     }
 
@@ -198,7 +213,9 @@ def destination_examples(client, dataset_id, version_id=None):
     return {e.additional_properties.get("phoenix_example_id"): e for e in examples}
 
 
-def get_dataset_after_create(client, dataset, space=None, attempts=12, sleep=time.sleep):
+def get_dataset_after_create(
+    client, dataset, space=None, attempts=12, sleep=time.sleep
+):
     last_error = None
     for attempt in range(attempts):
         try:
@@ -212,32 +229,46 @@ def get_dataset_after_create(client, dataset, space=None, attempts=12, sleep=tim
     ) from last_error
 
 
-def replay_versions(client, dataset, source, space):
+def replay_versions(client, dataset, source, space, state, checkpoint):
     versions = source["versions"]
     if not versions or not versions[0]["examples"]:
-        raise DataMigrationError(f"Dataset {source['name']} has an empty initial version.")
+        raise DataMigrationError(
+            f"Dataset {source['name']} has an empty initial version."
+        )
     created = get_dataset_after_create(client, dataset.name, space)
     initial_version_id = created.versions[-1].id
     current = destination_examples(client, dataset.id, initial_version_id)
-    version_map = {versions[0]["id"]: initial_version_id}
+    version_map = state["version_ids"]
+    version_map.setdefault(versions[0]["id"], initial_version_id)
+    checkpoint()
     for index, version in enumerate(versions[1:], 2):
         target = {e["source_global_id"]: e for e in version["examples"]}
+        version_id = version_map.get(version["id"])
+        if version_id is None:
+            version_name = f"phoenix-version-{index}"
+            refreshed = get_dataset_after_create(client, dataset.name, space)
+            matched = [v for v in refreshed.versions if v.name == version_name]
+            if matched:
+                version_id = matched[0].id
+            else:
+                common = sorted(set(current) & set(target))
+                if not common:
+                    raise DataMigrationError(
+                        f"Dataset {source['name']} version {index} has no retained example to fork in AX."
+                    )
+                first = common[0]
+                fork = client.datasets.update_examples(
+                    dataset=dataset.id,
+                    dataset_version_id=next(reversed(version_map.values())),
+                    new_version=version_name,
+                    examples=[{"id": current[first].id, **ax_row(target[first])}],
+                )
+                version_id = fork.dataset_version_id
+            version_map[version["id"]] = version_id
+            checkpoint()
+        current = destination_examples(client, dataset.id, version_id)
         common = sorted(set(current) & set(target))
-        if not common:
-            raise DataMigrationError(
-                f"Dataset {source['name']} version {index} has no retained example to fork in AX."
-            )
-        first = common[0]
-        fork = client.datasets.update_examples(
-            dataset=dataset.id,
-            dataset_version_id=next(reversed(version_map.values())),
-            new_version=f"phoenix-version-{index}",
-            examples=[{"id": current[first].id, **ax_row(target[first])}],
-        )
-        version_id = fork.dataset_version_id
-        updates = [
-            {"id": current[key].id, **ax_row(target[key])} for key in common[1:]
-        ]
+        updates = [{"id": current[key].id, **ax_row(target[key])} for key in common]
         if updates:
             client.datasets.update_examples(
                 dataset=dataset.id, dataset_version_id=version_id, examples=updates
@@ -253,7 +284,11 @@ def replay_versions(client, dataset, source, space):
                 dataset=dataset.id, dataset_version_id=version_id, example_ids=removed
             )
         current = destination_examples(client, dataset.id, version_id)
-        version_map[version["id"]] = version_id
+        if set(current) != set(target):
+            raise DataMigrationError(
+                f"Dataset {source['name']} version {index} did not reconcile after writes."
+            )
+        checkpoint()
     return version_map, current
 
 
@@ -283,8 +318,14 @@ def import_experiment(client, dataset, experiment, examples, prefix):
             "phoenix_end_time": run.get("end_time"),
             "phoenix_experiment_metadata": canonical(experiment.get("metadata") or {}),
         }
+        seen_names = set()
         for result in evaluations[run["id"]]:
             name = result["name"]
+            if name in seen_names:
+                raise DataMigrationError(
+                    f"Experiment {experiment['name']} run {run['id']} has duplicate evaluation name {name}."
+                )
+            seen_names.add(name)
             key = "px_eval_" + hashlib.sha256(name.encode()).hexdigest()[:12]
             value = result.get("result") or {}
             row[key + "_score"] = value.get("score")
@@ -309,9 +350,6 @@ def import_experiment(client, dataset, experiment, examples, prefix):
             )
         rows.append(row)
     name = prefix + experiment["name"]
-    existing = client.experiments.list(dataset=dataset.id).experiments
-    if any(item.name == name for item in existing):
-        raise DataMigrationError(f"Destination experiment already exists: {name}")
     return client.experiments.create(
         name=name,
         dataset=dataset.id,
@@ -327,33 +365,98 @@ def import_data(config, path, prefix):
     manifest = load(path)
     client = ax_client(config)
     state = manifest["state"]
-    if state:
-        raise DataMigrationError("This data manifest has already been imported.")
+
+    def checkpoint():
+        save_manifest(path, manifest)
+
     for source in manifest["datasets"]:
         name = prefix + source["name"]
-        if client.datasets.list(name=name, space=config["ARIZE_SPACE_ID"]).datasets:
+        entry = state.setdefault(
+            source["id"],
+            {
+                "dataset_name": name,
+                "dataset_id": None,
+                "create_started": False,
+                "version_ids": {},
+                "experiments": [],
+            },
+        )
+        # Upgrade manifests written by the first release of this helper. Those
+        # manifests recorded created object IDs but did not include the fields
+        # used by the resumable importer.
+        entry.setdefault("dataset_name", name)
+        entry.setdefault("create_started", bool(entry.get("dataset_id")))
+        entry.setdefault("version_ids", {})
+        entry.setdefault("experiments", [])
+        if entry["dataset_name"] != name:
+            raise DataMigrationError(
+                "The import prefix differs from the manifest's recorded destination."
+            )
+        checkpoint()
+        existing = client.datasets.list(
+            name=name, space=config["ARIZE_SPACE_ID"]
+        ).datasets
+        if entry["dataset_id"]:
+            if not any(item.id == entry["dataset_id"] for item in existing):
+                raise DataMigrationError(
+                    f"Recorded destination dataset is not readable: {name}"
+                )
+            dataset = next(item for item in existing if item.id == entry["dataset_id"])
+        elif len(existing) == 1 and entry["create_started"]:
+            dataset = existing[0]
+            entry["dataset_id"] = dataset.id
+            checkpoint()
+        elif existing:
             raise DataMigrationError(f"Destination dataset already exists: {name}")
-        dataset = client.datasets.create(
-            name=name,
-            space=config["ARIZE_SPACE_ID"],
-            examples=[ax_row(e) for e in source["versions"][0]["examples"]],
-            force_http=True,
-        )
+        else:
+            entry["create_started"] = True
+            checkpoint()
+            dataset = client.datasets.create(
+                name=name,
+                space=config["ARIZE_SPACE_ID"],
+                examples=[ax_row(e) for e in source["versions"][0]["examples"]],
+                force_http=True,
+            )
+            entry["dataset_id"] = dataset.id
+            checkpoint()
         version_map, examples = replay_versions(
-            client, dataset, source, config["ARIZE_SPACE_ID"]
+            client, dataset, source, config["ARIZE_SPACE_ID"], entry, checkpoint
         )
-        imported_experiments = []
+        imported_experiments = entry["experiments"]
         for experiment in source["experiments"]:
-            result = import_experiment(client, dataset, experiment, examples, prefix)
-            imported_experiments.append({"source_id": experiment["id"], "id": result.id})
-        state[source["id"]] = {
-            "dataset_id": dataset.id,
-            "version_ids": version_map,
-            "experiments": imported_experiments,
-        }
-        raw = {k: v for k, v in manifest.items() if k != "checksum"}
-        manifest["checksum"] = checksum(raw)
-        save(path, manifest)
+            mapping = next(
+                (x for x in imported_experiments if x["source_id"] == experiment["id"]),
+                None,
+            )
+            existing_experiments = client.experiments.list(
+                dataset=dataset.id
+            ).experiments
+            destination_name = prefix + experiment["name"]
+            matched = [
+                item for item in existing_experiments if item.name == destination_name
+            ]
+            if mapping:
+                if not any(item.id == mapping["id"] for item in matched):
+                    raise DataMigrationError(
+                        f"Recorded destination experiment is not readable: {destination_name}"
+                    )
+                continue
+            if len(matched) == 1:
+                result = matched[0]
+            elif matched:
+                raise DataMigrationError(
+                    f"Multiple destination experiments match: {destination_name}"
+                )
+            else:
+                result = import_experiment(
+                    client, dataset, experiment, examples, prefix
+                )
+            imported_experiments.append(
+                {"source_id": experiment["id"], "id": result.id}
+            )
+            checkpoint()
+        entry["version_ids"] = version_map
+        checkpoint()
     return {"status": "imported_unverified", "dataset_count": len(state)}
 
 
@@ -362,7 +465,14 @@ def verify_data(config, path):
     manifest = load(path)
     client = ax_client(config)
     differences = []
-    totals = {"datasets": 0, "versions": 0, "examples": 0, "experiments": 0, "runs": 0, "evaluations": 0}
+    totals = {
+        "datasets": 0,
+        "versions": 0,
+        "examples": 0,
+        "experiments": 0,
+        "runs": 0,
+        "evaluations": 0,
+    }
     for source in manifest["datasets"]:
         state = manifest["state"].get(source["id"])
         if not state:
@@ -372,18 +482,26 @@ def verify_data(config, path):
         for version in source["versions"]:
             destination_id = state["version_ids"].get(version["id"])
             if not destination_id:
-                differences.append(f"dataset {source['name']} missing version {version['id']}")
+                differences.append(
+                    f"dataset {source['name']} missing version {version['id']}"
+                )
                 continue
             totals["versions"] += 1
             actual = destination_examples(client, state["dataset_id"], destination_id)
             expected = {e["source_global_id"]: ax_row(e) for e in version["examples"]}
             totals["examples"] += len(expected)
             if set(actual) != set(expected):
-                differences.append(f"dataset {source['name']} version {version['id']} example IDs differ")
+                differences.append(
+                    f"dataset {source['name']} version {version['id']} example IDs differ"
+                )
             for key in set(actual) & set(expected):
                 props = actual[key].additional_properties
-                if any(props.get(field) != value for field, value in expected[key].items()):
-                    differences.append(f"dataset {source['name']} example {key} fields differ")
+                if any(
+                    props.get(field) != value for field, value in expected[key].items()
+                ):
+                    differences.append(
+                        f"dataset {source['name']} example {key} fields differ"
+                    )
         by_source = {e["id"]: e for e in source["experiments"]}
         for mapping in state["experiments"]:
             expected = by_source[mapping["source_id"]]
@@ -398,7 +516,9 @@ def verify_data(config, path):
             expected_runs = {run["id"]: run for run in expected["task_runs"]}
             expected_evals = defaultdict(dict)
             for result in expected["evaluation_runs"]:
-                expected_evals[result["experiment_run_id"]][result["name"]] = result.get("result") or {}
+                expected_evals[result["experiment_run_id"]][result["name"]] = (
+                    result.get("result") or {}
+                )
             for run in actual:
                 props = run.additional_properties
                 source_run = props.get("phoenix_experiment_run_id")
@@ -420,8 +540,15 @@ def verify_data(config, path):
                         != value.get("explanation")
                         or not props.get(f"eval.{name}.metadata.phoenix_migration")
                     ):
-                        differences.append(f"experiment {expected['name']} run {source_run} evaluation {name} differs")
-    return {"status": "verified" if not differences else "different", **totals, "difference_count": len(differences), "differences": differences[:100]}
+                        differences.append(
+                            f"experiment {expected['name']} run {source_run} evaluation {name} differs"
+                        )
+    return {
+        "status": "verified" if not differences else "different",
+        **totals,
+        "difference_count": len(differences),
+        "differences": differences[:100],
+    }
 
 
 def parser():
@@ -445,7 +572,11 @@ def main():
         else:
             result = verify_data(config, args.manifest)
         print(canonical(result))
-        return 0 if result["status"] in {"exported", "imported_unverified", "verified"} else 3
+        return (
+            0
+            if result["status"] in {"exported", "imported_unverified", "verified"}
+            else 3
+        )
     except Exception as error:  # noqa: BLE001 -- CLI converts dependency failures to JSON
         message = (
             str(error)
