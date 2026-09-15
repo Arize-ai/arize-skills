@@ -112,4 +112,4 @@ jobs:
       - name: Install helper test dependencies
         run: pip install pytest -r skills/arize-phoenix-migration/scripts/requirements.txt
       - name: Test helper without live services or agent credentials
-        run: pytest --noconftest -c /dev/null -p no:cacheprovider tests/test_phoenix_migration.py -q
+        run: pytest --noconftest -c /dev/null -p no:cacheprovider tests/test_phoenix_migration.py tests/test_phoenix_data_migration.py -q
