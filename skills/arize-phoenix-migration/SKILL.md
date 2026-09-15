@@ -1,6 +1,6 @@
 ---
 name: arize-phoenix-migration
-description: Migrate existing Phoenix (PX) project traces into Arize AX, preserving historical IDs and timestamps and verifying the imported spans. Use when users ask to move or copy Phoenix traces to AX; not for adding live instrumentation or exporting AX traces alone.
+description: Migrate existing Phoenix (PX) traces, datasets, experiments, and stored evaluation results into Arize AX and verify the imported records. Use when users ask to move or copy historical Phoenix data to AX; not for adding live instrumentation or exporting AX data alone.
 metadata:
   author: arize
   version: "1.0"
@@ -18,7 +18,7 @@ Reuse details from the request and configured environment. Ask only for missing 
 
 - Phoenix host URL and source project name.
 - Phoenix API key if that instance requires authentication.
-- AX API key, destination space ID, and destination project name.
+- AX API key and destination space ID. Ask for a fresh destination project name when traces are selected, and an optional prefix for destination dataset and experiment names.
 
 Explain how to configure missing credentials locally in environment variables or a Git-ignored `.env`. Never echo credentials, place them in command arguments, or copy them to reports. Prefer a user-created existing `.env` and request its path. Never embed literal keys in displayed tool requests or generated shell/Python commands, including heredocs; writing to a file without stdout still exposes command contents. Avoid patch/edit tools that echo secret values. If your available tools cannot write secrets without displaying them, ask the user to configure the local file themselves. Keep the file owner-only (for example, `chmod 600` on Unix). Load an explicitly chosen environment file through the helper; do not print or source its contents. See [configuration and migration details](references/migration.md) for variable names and examples.
 
@@ -36,10 +36,10 @@ Wait for the user's continue before starting. A request to migrate alone does no
 
 Locate this installed skill's root and run its bundled commands by absolute path, so they work from any workspace. Check the chosen interpreter is Python 3.10 or later before creating an isolated environment or installing the [helper dependencies](scripts/requirements.txt). Use an available compatible interpreter if the default is older.
 
-1. Run `scripts/migrate.py preflight` with the user's local configuration and chosen destination. Present a short source/destination summary. Missing configuration returns `needs_input`; ask for those fields. A dry-run or planning request stops here without uploading.
-2. Run `scripts/migrate.py export --manifest <local-path>` to export every page under a fixed snapshot boundary. For selected complete traces, repeat `--trace-id` for each trace ID. Export does not change Phoenix or AX.
-3. Run `scripts/migrate.py import --manifest <local-path>` when the user's request authorizes migration to the resolved destination. It refuses an existing destination on the first import. Keep the original manifest for resuming the same migration.
-4. Run `scripts/migrate.py verify --manifest <local-path>`. For an empty snapshot, report `empty`: no spans were uploaded and no destination was created. For nonempty snapshots, only `verified` establishes success. Otherwise report uploaded-but-unverified with counts, differing field names, and the command for rerunning verification.
+1. Run `scripts/migrate.py preflight` with the user's local configuration and chosen trace destination. Present a short source/destination summary. Missing configuration returns `needs_input`; ask for those fields. A dry-run or planning request stops here without uploading.
+2. For traces, run `scripts/migrate.py export`, `import`, then `verify` with one local trace manifest. It exports every page under a fixed snapshot boundary. For selected complete traces, repeat `--trace-id` for each trace ID.
+3. For datasets and experiment evaluations, run `scripts/migrate_data.py export`, `import`, then `verify` with a separate local data manifest. Repeat `--dataset <name-or-id>` to select datasets; without it, export all datasets. Use `--prefix <value>` during import to avoid destination name collisions.
+4. Only report a nonempty migration complete when both applicable verification commands return `verified`. Keep original manifests for evidence and recovery. Report unsupported or differing records explicitly.
 
 Use `--env-file <path>` on each command when the user has configured a local file. Use `--project <name>` to set the destination without modifying their environment. See the [migration reference](references/migration.md) for resume and troubleshooting.
 
@@ -47,7 +47,9 @@ While running, keep the user informed at stage changes and during long waits. Di
 
 ## Preserve and report
 
-Preserve original span/trace IDs, parents, historical timestamps, span kinds, input/output, sessions, token counts, and attributes. The helper also stores original attributes, events, and timestamp strings in AX metadata for preservation checks. It reports AX REST timestamp readback differences up to 128 ns separately and requires exact original timestamp preservation in metadata. It does not migrate Phoenix datasets, prompts, experiments, evaluations, or annotations.
+Preserve original span/trace IDs, parents, historical timestamps, span kinds, input/output, sessions, token counts, and attributes. The trace helper stores original attributes, events, and timestamp strings in AX metadata for preservation checks.
+
+The data helper preserves each Phoenix dataset revision as an AX dataset version, keeps nested input/output/metadata as canonical JSON rather than flattening it, maps source example IDs to AX-assigned IDs, and imports historical experiment task outputs plus stored evaluation score, label, explanation, and provenance metadata. It does not rerun evaluators or call an LLM. Phoenix evaluator definitions, prompts, dataset/experiment tags, arbitrary attachments, and span/trace/session annotations are not yet migrated. Experiments whose referenced examples are absent from the imported latest dataset stop with an explicit error.
 
 Do not change historical timestamps to make traces appear in a recent-time UI filter. Do not label a successful upload as a verified migration. The helper does not guarantee server-side ingestion idempotency: reconcile uncertain submissions through readback rather than blindly retrying them.
 

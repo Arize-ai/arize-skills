@@ -53,3 +53,22 @@ The verify CLI writes throttled redacted progress JSON to stderr and one final r
 Phoenix project/export and AX destination/readback failures identify the service and stage. A key with read but no ingestion permission fails upload and leaves a definitely rejected batch pending. A key without destination read permission cannot pass preflight or start import, even if it has ingestion permission. If spans were already submitted and verification receives HTTP 401/403 or a missing/inaccessible destination returns 404, report uploaded_unverified with the readback error and keep the manifest for verification after credentials are corrected. Never infer ingestion permission from preflight or verified success from an accepted upload.
 
 An empty snapshot returns empty with zero counts and no API request or destination creation for import/verify. It is a no-upload outcome, not a verified nonempty migration. Local manifests are checksum-validated even in this case.
+## Dataset and experiment evaluation commands
+
+Use a separate manifest for non-trace data:
+
+```bash
+python scripts/migrate_data.py export --env-file /private/path/.env --manifest /private/path/data.json
+python scripts/migrate_data.py import --env-file /private/path/.env --manifest /private/path/data.json --prefix migrated-
+python scripts/migrate_data.py verify --env-file /private/path/.env --manifest /private/path/data.json
+```
+
+Repeat `--dataset <name-or-id>` during export to select datasets. With no selection, all Phoenix datasets are exported. The export walks dataset versions oldest to newest and includes each version's full example snapshot, experiments, task runs, and stored evaluation runs. The manifest is checksummed and owner-only.
+
+AX assigns new dataset example and experiment run IDs. The helper stores Phoenix IDs in destination fields, builds the required ID mapping, and verifies relationships through AX readback. Nested input, output, and metadata remain separate canonical JSON strings to prevent leaf-name collisions. Evaluation results become native `eval.<name>.score`, `label`, and `explanation` fields; Phoenix provenance remains evaluation metadata.
+
+The import requires a nonempty initial dataset version and at least one retained example between successive versions so AX can fork version history. It stops rather than silently flattening data or dropping a revision. Phoenix's client exposes at most 100 dataset versions without a continuation cursor, so the helper stops when that boundary is reached rather than risk an incomplete export. Destination dataset and experiment names must be fresh; use `--prefix` when appropriate.
+
+The helper checkpoints destination IDs and version mappings in the manifest. If a request fails or its response is lost, rerun the same import command with the same manifest and prefix. It reconciles destination objects by their recorded IDs and deterministic migration names, and reads the current version contents before applying only the remaining changes. Do not delete or edit the manifest between attempts.
+
+This workflow does not execute evaluators or incur model costs. It does not currently migrate evaluator definitions, prompts, tags, attachments, or span/trace/session annotations.

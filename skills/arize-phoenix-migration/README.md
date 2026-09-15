@@ -1,6 +1,6 @@
 # Phoenix to AX migration setup
 
-Ask your coding agent to migrate a Phoenix project using the Phoenix migration skill. Supply the Phoenix host/project, AX destination space, and a fresh destination project name. The agent handles setup, export, upload, and verification after explaining the expected wait and asking you to continue.
+Ask your coding agent to migrate Phoenix traces, datasets, experiments, and stored evaluation results using the Phoenix migration skill. Supply the Phoenix host/project, AX destination space, and a fresh destination project name for traces. The agent handles setup, export, upload, and verification after explaining the expected wait and asking you to continue.
 
 ## Local credentials
 
@@ -19,8 +19,10 @@ Fill in your keys and destination space ID privately. Public unauthenticated Pho
 
 ## Example request
 
-> Use the Phoenix migration skill. My configuration is in the local .env. Migrate into a fresh AX project named phoenix-migration-test, preserve the historical traces, and verify the result.
+> Use the Phoenix migration skill. My configuration is in the local .env. Migrate the historical traces into a fresh AX project named phoenix-migration-test. Also migrate all Phoenix datasets, experiments, and stored evaluation results with the prefix migrated-. Verify every imported data type.
 
 Requires Python 3.10 or later and network access to Phoenix and AX. Setup and migration can take several minutes; indexing and verification can take 15 minutes or longer. Historical traces may require a historical date filter in the AX UI.
+
+The skill migrates stored experiment evaluation results without executing evaluators or making model calls. It preserves nested dataset values as JSON and verifies every recreated dataset version, example snapshot, experiment run, and evaluation result. Evaluator definitions, prompts, tags, attachments, and span/trace/session annotations are currently outside its scope.
 
 An existing configured ax CLI can help discover your space via `ax spaces list -o json`; it is optional. For custom deployments, set the appropriate region, API host/port, single host/port, or base domain in local configuration. The helper uses the SDK's resolved configuration for both upload and readback.
