@@ -388,11 +388,18 @@ def import_data(config, path, prefix):
         entry.setdefault("create_started", bool(entry.get("dataset_id")))
         entry.setdefault("version_ids", {})
         entry.setdefault("experiments", [])
-        if entry["dataset_name"] != name:
+        pristine = (
+            not entry["create_started"]
+            and not entry["dataset_id"]
+            and not entry["version_ids"]
+            and not entry["experiments"]
+        )
+        if entry["dataset_name"] != name and pristine:
+            entry["dataset_name"] = name
+        elif entry["dataset_name"] != name:
             raise DataMigrationError(
                 "The import prefix differs from the manifest's recorded destination."
             )
-        checkpoint()
         existing = client.datasets.list(
             name=name, space=config["ARIZE_SPACE_ID"]
         ).datasets
@@ -578,11 +585,18 @@ def main():
             else 3
         )
     except Exception as error:  # noqa: BLE001 -- CLI converts dependency failures to JSON
-        message = (
-            str(error)
-            if isinstance(error, DataMigrationError)
-            else f"{type(error).__name__} during data migration; check credentials, permissions, endpoint configuration, and destination state."
-        )
+        if isinstance(error, DataMigrationError):
+            message = str(error)
+        elif type(error).__name__ in {"AuthenticationError", "UnauthorizedException"}:
+            message = (
+                "AX authentication or permission check failed; check the API key, "
+                "space access, and endpoint configuration."
+            )
+        else:
+            message = (
+                f"{type(error).__name__} during data migration; check credentials, "
+                "permissions, endpoint configuration, and destination state."
+            )
         print(canonical({"status": "error", "error": message}))
         return 1
 

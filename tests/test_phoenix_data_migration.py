@@ -137,6 +137,29 @@ def test_cli_does_not_include_dependency_error_details(monkeypatch, capsys, tmp_
     assert "secret response body" not in capsys.readouterr().out
 
 
+def test_cli_reports_authentication_without_dependency_details(
+    monkeypatch, capsys, tmp_path
+):
+    class UnauthorizedException(Exception):
+        pass
+
+    monkeypatch.setattr(data, "configuration", lambda _: {})
+    monkeypatch.setattr(
+        data,
+        "export_data",
+        lambda *args: (_ for _ in ()).throw(
+            UnauthorizedException("private response body")
+        ),
+    )
+    monkeypatch.setattr(
+        sys, "argv", ["migrate_data.py", "export", "--manifest", str(tmp_path / "x")]
+    )
+    assert data.main() == 1
+    output = capsys.readouterr().out
+    assert "authentication or permission" in output
+    assert "private response body" not in output
+
+
 def write_manifest(path, datasets):
     value = {"schema": 1, "source": "phoenix", "datasets": datasets, "state": {}}
     value["checksum"] = data.checksum(value)
@@ -213,6 +236,26 @@ def test_import_reconciles_create_when_response_is_lost(monkeypatch, tmp_path):
     assert data.load(path)["state"]["px-dataset"]["create_started"] is True
     assert data.import_data(config, path, "m-")["status"] == "imported_unverified"
     assert data.load(path)["state"]["px-dataset"]["dataset_id"] == "ax-dataset"
+
+
+def test_failed_destination_auth_does_not_lock_prefix(monkeypatch, tmp_path):
+    path = tmp_path / "manifest.json"
+    write_manifest(path, [source_dataset()])
+
+    class Datasets:
+        def list(self, **kwargs):
+            raise RuntimeError("authentication failed")
+
+    client = SimpleNamespace(datasets=Datasets())
+    monkeypatch.setattr(data, "ax_client", lambda config: client)
+    config = {"ARIZE_API_KEY": "invalid", "ARIZE_SPACE_ID": "space"}
+    with pytest.raises(RuntimeError, match="authentication failed"):
+        data.import_data(config, path, "first-")
+    assert data.load(path)["state"] == {}
+
+    with pytest.raises(RuntimeError, match="authentication failed"):
+        data.import_data(config, path, "corrected-")
+    assert data.load(path)["state"] == {}
 
 
 def test_import_upgrades_legacy_completed_state(monkeypatch, tmp_path):
