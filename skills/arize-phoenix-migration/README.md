@@ -1,8 +1,8 @@
 # Phoenix to AX migration setup
 
-Ask your coding agent to migrate Phoenix traces, datasets, experiments, and stored evaluation results using the Phoenix migration skill. Supply the Phoenix host/project, AX destination space, and a fresh destination project name for traces. The agent handles setup, export, upload, and verification after explaining the expected wait and asking you to continue.
+Ask your coding agent to migrate Phoenix to AX using the Phoenix migration skill and give it the path to your local configuration. The agent inventories the source, helps you choose the scope and destination names, then handles setup, upload, and verification after you say `go`.
 
-You can request traces, datasets with experiments and stored evaluations, or both in plain English. The agent first reads Phoenix and reports what it finds, including counts for each supported resource. If the scope is ambiguous, it asks which discovered data you want migrated before it accesses AX or uploads anything.
+You can simply provide the local configuration and ask to migrate Phoenix to AX. The agent first reads Phoenix and reports what it finds, including counts for each supported resource. It offers all, trace-only, data-only, and selected-resource choices together with suggested destination names and the expected wait. Reply `go` to accept all supported discovered data and the suggestions, or name a subset and say `go`. The agent then completes and verifies the migration without another confirmation.
 
 ## Local credentials
 
