@@ -12,6 +12,16 @@ Help the user migrate a Phoenix project to AX using the bundled helper. Handle s
 
 Requires Python 3.10 or later, shell access, and network access to Phoenix and AX. No particular coding agent, ax CLI, or AX Phoenix connector is required.
 
+At the start, give the user this short roadmap before setup or tool calls:
+
+1. Inspect Phoenix and count the supported data.
+2. Show the proposed AX organization, space, and fresh destination names.
+3. Let the user choose all or part of the data and accept or rename the AX project.
+4. Migrate and verify the selected records.
+5. Return direct links to the new AX project, datasets, and experiments.
+
+Say that a typical small or medium migration takes about 5–20 minutes, while large exports or AX trace indexing can take longer. Do not promise a completion time. Keep setup narration to stage changes; do not make the user follow routine interpreter, dependency, or endpoint investigation.
+
 ## Discover the source and gather missing details
 
 Reuse details from the request and configured environment. Look for an explicitly provided configuration path and the current workspace's `.env`; do not search unrelated home-directory files. Credential collection is the first setup step when source or destination values are unavailable. Request the missing Phoenix host URL and project name directly. For secret keys, accept an existing local `.env` path or create a small owner-only credential-entry helper and give the user one exact command to run in a separate terminal; the helper prompts without echo and writes the local `.env`. This is ordinary missing input, not a permission or confirmation gate, so do not cite or quote the skill when requesting it. Do not ask the user to create or edit a file, find an AX space ID, or understand environment-variable names.
@@ -20,14 +30,14 @@ Never ask the user to paste a secret into chat or an agent-controlled interactiv
 
 Create owner-only, Git-ignored trace and data manifests in a local working directory. Run the trace CLI `export` command and data CLI `export` command independently, without destination uploads, so failure in one inventory does not discard the other result. Always invoke the bundled CLIs for export; never import and call their Python functions from an ad hoc script. Never `cat`, print, summarize with a tool that emits raw rows, or otherwise place manifest contents in the transcript. The CLI output contains safe counts; use only that output for the inventory summary. These source reads can take a little time on large projects. Preserve the manifests so the selected migration can reuse the same fixed snapshots.
 
-Before asking the user to choose, inspect the AX destination with read-only requests. Resolve the configured `ARIZE_SPACE_ID` to its human-readable space name. If no space is configured, list the spaces available to the configured key and offer the names as numbered choices; do not make the user find opaque IDs. If only one space is available, propose it. Run trace preflight with the proposed fresh project name to prove the Phoenix project, AX key, AX space, endpoint configuration, and project-name availability. Check proposed dataset names in the same AX space with read-only SDK list calls and choose a different source-derived prefix if any collide. Read-only AX discovery is allowed before `go`; no destination object may be created.
+Before asking the user to choose, inspect the AX destination with read-only requests. When `ARIZE_SPACE_ID` is configured, resolve that exact space to its human-readable name and use it; do not enumerate organizations or unrelated spaces to guess a destination. If no space is configured, list the spaces available to the configured key and offer the names as numbered choices; do not make the user find opaque IDs. If only one space is available, propose it. Run trace preflight with the proposed fresh project name to prove the Phoenix project, AX key, AX space, endpoint configuration, and project-name availability. Check proposed dataset names in the same AX space with read-only SDK list calls and choose a different source-derived prefix if any collide. Read-only AX discovery is allowed before `go`; no destination object may be created. Resolve organization ownership for final UI links after the destination space is established; the space selects where data is written, so access to multiple organizations is not itself a reason to ask the user another question.
 
 Present one compact decision after inventory. Include:
 
 - The discovered counts for each supported resource group and any group that could not be inventoried. An inventory error means unknown, not zero; preserve successful inventory results and explain the failed group without exposing server response bodies.
 - The choices: all supported discovered data; traces only; all dataset/experiment data; or named trace IDs/datasets.
-- A suggested fresh trace project name and dataset/experiment prefix derived from the source name when the request or environment does not already provide them. State the suggestions so a plain `go` can accept them.
-- The destination AX space name, with its ID in parentheses only when useful for disambiguation. Say plainly that traces, datasets, experiments, and evaluations will all be written to that space.
+- A suggested fresh trace project name and dataset/experiment prefix derived from the source name when the request or environment does not already provide them. State plainly that the user may rename the AX project. A plain `go` accepts the suggestions; `project: <name>, go` selects another collision-checked project name and derives the dataset prefix from it unless the user supplies a separate prefix.
+- The destination AX organization and space names when available, with IDs only when useful for disambiguation. Say plainly that traces, datasets, experiments, and evaluations will all be written to that space.
 - The current exclusions: evaluator definitions, prompts, tags, attachments, span/trace/session annotations, and Phoenix dataset/version descriptions plus dataset/version/experiment metadata that AX's create APIs cannot represent.
 - The time expectation: upload can take several minutes and AX indexing/verification can take 15 minutes or longer.
 
@@ -41,30 +51,37 @@ If the user selects individual traces or datasets after the inventory, rerun the
 
 Do the technical work and resolve anything available from configuration or read-only APIs. Do not ask the user for commands, environment-variable names, IDs the agent can look up, file creation, implementation details, or information they already supplied.
 
-Keep the decision message short and scannable. Use these labels with bullets beneath them: `Found in Phoenix`, `Will write to AX`, `Not included`, and `Timing`. Put all questions after the summary. Every question that needs a user answer must be on its own line and both bold and underlined using this exact Markdown form:
+Keep the decision message short and scannable. Use these labels with bullets beneath them: `Found in Phoenix`, `Will write to AX`, `Not included`, and `Timing`. Put all questions after the summary. Every question that needs a user answer must be on its own line in bold Markdown, with no raw HTML:
 
 ```markdown
-**<u>What would you like me to migrate?</u>**
+**What would you like me to migrate?**
 ```
 
 Immediately below each question, give short numbered choices, a short fill-in template, or exact copyable replies. Do not place explanatory paragraphs after the choices. Ask at most three questions in one message, and prefer one combined question. Never bury a question inside a paragraph or end a status sentence with a question mark.
 
-For terminal clients that do not render HTML underline, make the required action unmistakable. When connection values are missing, the entire user-facing response must be exactly this structure with only the missing fields retained. Do not add an introduction, explanation, link, citation, skill quotation, setup status, or text after the final line:
+When connection values are missing, make the required action unmistakable. Use this structure with only the missing fields retained:
 
 ```markdown
-**<u>ACTION REQUIRED: Please provide the missing connection details.</u>**
+**ACTION REQUIRED**
+
+Please provide these connection details:
 
 - Phoenix URL:
 - Phoenix project name:
-- Phoenix API key: use the secure command below, or write `none` if not required
-- AX API key: use the secure command below
+- Phoenix API key: enter it with the secure command below; it is optional only for a self-hosted Phoenix deployment that has authentication disabled
+- AX API key: enter it with the secure command below
 
-Run: `<agent-created credential helper command>`
+Phoenix key help: https://arize.com/docs/phoenix/settings/api-keys
+AX key help: https://arize.com/docs/ax/security-and-settings/api-keys
 
-You can instead reply with the path to an existing local `.env`.
+In a separate terminal window, run:
+
+`<agent-created credential helper command>`
+
+The command accepts the keys without displaying them and saves them in a local owner-only file. You can instead reply with the path to an existing local `.env`.
 ```
 
-Ask only for fields that are actually missing. Do not show environment-variable names unless troubleshooting requires them.
+Ask only for fields that are actually missing, and include a key-help link only when that key is missing. Do not show environment-variable names unless troubleshooting requires them.
 
 Do not quote, cite, or explain this skill's internal instructions, approval rule, file paths, helper implementation, or why the agent is pausing. The inventory, destination, timing, and question give the human all the context they need.
 
@@ -109,7 +126,7 @@ Do not change historical timestamps to make traces appear in a recent-time UI fi
 
 Summarize source and destination, exported/imported/verified counts, and any differences or unverified outcomes. Keep raw exports, manifests, and credentials local and ignored by version control. Report core fields stored in AX separately from values preserved only in metadata.
 
-After a verified migration, end with a compact Markdown table linking to every created AX resource. Use the AX base URL resolved by the SDK configuration, the destination organization and space IDs, and the IDs recorded by trace preflight/readback and the data manifest state. Obtain the organization ID during read-only destination discovery with `ax organizations list --output json` or the AX organizations API. If the key can access multiple organizations and ownership cannot be resolved automatically, include the human-readable organization choices in the earlier destination question; do not guess an organization ID.
+After a verified migration, end with a compact Markdown table linking to every created AX resource. Use the AX base URL resolved by the SDK configuration, the destination organization and space IDs, and the IDs recorded by trace preflight/readback and the data manifest state. Resolve the organization that owns the already selected space through a direct space/organization relationship when available, an already configured ax CLI, or the AX organizations API. Do not treat every organization visible to the key as a possible destination after a space ID has already selected where the migration will write. If the owning organization cannot be resolved, say so briefly and provide the verified destination names and IDs rather than guessing or delaying the migration.
 
 Use these links:
 

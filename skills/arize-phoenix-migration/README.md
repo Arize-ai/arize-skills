@@ -1,12 +1,12 @@
 # Phoenix to AX migration setup
 
-Ask your coding agent to migrate Phoenix to AX using the Phoenix migration skill and give it the path to your local configuration. The agent inventories the source, helps you choose the scope and destination names, then handles setup, upload, and verification after you say `go`.
+Ask your coding agent to migrate Phoenix to AX using the Phoenix migration skill and give it the path to your local configuration. The agent first explains the five steps and timing, inventories the source, helps you choose the scope and destination names, then handles setup, upload, and verification after you say `go`. A typical small or medium migration takes about 5–20 minutes; large exports or AX trace indexing can take longer.
 
-You can simply provide the local configuration and ask to migrate Phoenix to AX. The agent reads Phoenix, resolves the configured AX space to its name, and checks proposed destination names without creating anything. It presents a short `Found in Phoenix` and `Will write to AX` summary, followed by one bold, underlined decision question with copyable answers. Reply `go` to accept all supported discovered data and the proposed AX space/project/prefix, or name a subset and say `go`. The agent then completes and verifies the migration without another confirmation.
+You can simply provide the local configuration and ask to migrate Phoenix to AX. The agent reads Phoenix, resolves the configured AX space to its name, and checks proposed destination names without creating anything. It presents a short `Found in Phoenix` and `Will write to AX` summary, followed by one bold decision question with copyable answers. Reply `go` to accept all supported discovered data and the proposed AX space/project/prefix, reply `project: my-name, go` to choose the AX project name, or name a subset and say `go`. The agent then completes and verifies the migration without another confirmation.
 
 ## Local credentials
 
-If credentials are not already configured, the agent asks for the Phoenix URL and project, creates a secure credential-entry helper, and gives you one command to run in a separate terminal. Enter keys there rather than in agent chat because agent-controlled terminal input can be recorded in the transcript. The helper creates and protects the local `.env`; the agent then discovers accessible AX spaces and does the remaining setup. If you already have an `.env`, provide its path instead.
+If credentials are not already configured, the agent asks for the Phoenix URL and project, links to the official [Phoenix API key](https://arize.com/docs/phoenix/settings/api-keys) and [AX API key](https://arize.com/docs/ax/security-and-settings/api-keys) pages, creates a secure credential-entry helper, and gives you one command explicitly labeled for a separate terminal window. Enter keys there rather than in agent chat because agent-controlled terminal input can be recorded in the transcript. The helper creates and protects the local `.env`; the agent then discovers accessible AX spaces and does the remaining setup. If you already have an `.env`, provide its path instead.
 
 ```dotenv
 PHOENIX_BASE_URL=https://app.phoenix.arize.com/s/your-space
@@ -17,7 +17,7 @@ ARIZE_SPACE_ID=
 ARIZE_PROJECT_NAME=your-fresh-destination
 ```
 
-Public unauthenticated Phoenix does not require a Phoenix key. Your AX key needs span ingestion and project/span read permissions. The agent discovers the destination space, so you do not need to find an opaque space ID. No GraphQL connector or button deployment is needed.
+A Phoenix key is optional only for a self-hosted Phoenix deployment with authentication disabled. Phoenix Cloud and authenticated deployments require one. Your AX key needs span ingestion and project/span read permissions. The agent discovers the destination space, so you do not need to find an opaque space ID. No GraphQL connector or button deployment is needed.
 
 ## Example request
 
