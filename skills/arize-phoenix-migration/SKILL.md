@@ -102,3 +102,21 @@ The data helper preserves each Phoenix dataset revision as an AX dataset version
 Do not change historical timestamps to make traces appear in a recent-time UI filter. Do not label a successful upload as a verified migration. The helper does not guarantee server-side ingestion idempotency: reconcile uncertain submissions through readback rather than blindly retrying them.
 
 Summarize source and destination, exported/imported/verified counts, and any differences or unverified outcomes. Keep raw exports, manifests, and credentials local and ignored by version control. Report core fields stored in AX separately from values preserved only in metadata.
+
+After a verified migration, end with a compact Markdown table linking to every created AX resource. Use the AX base URL resolved by the SDK configuration, the destination organization and space IDs, and the IDs recorded by trace preflight/readback and the data manifest state. Obtain the organization ID during read-only destination discovery with `ax organizations list --output json` or the AX organizations API. If the key can access multiple organizations and ownership cannot be resolved automatically, include the human-readable organization choices in the earlier destination question; do not guess an organization ID.
+
+Use these links:
+
+- Trace project: `{base_url}/organizations/{org_id}/spaces/{space_id}/projects/{project_id}`. Add `selectedTab=llmTracing`, `envA=tracing`, `modelType=generative_llm`, and `startA`/`endA` epoch-millisecond query parameters covering the exported historical span range so migrated traces are visible immediately.
+- Dataset examples and versions: `{base_url}/organizations/{org_id}/spaces/{space_id}/datasets/{dataset_id}?selectedTab=examples`.
+- Experiments, runs, and stored evaluation results: `{base_url}/organizations/{org_id}/spaces/{space_id}/datasets/{dataset_id}?selectedTab=experiments`.
+
+Use one row per created trace project and dataset. For a dataset, include separate Examples/versions and Experiments/evaluations rows when both were migrated. Link labels must be human-readable destination names rather than opaque IDs. Include verified counts in the table and name stored evaluations when their names are available from safe CLI output. Do not claim that evaluation definitions were created and do not link to the Evaluators page for stored experiment results.
+
+Example:
+
+| Migrated item | Destination | Verified |
+|---|---|---:|
+| Traces | [project-name](https://app.arize.com/organizations/.../projects/...?selectedTab=llmTracing&...) | 1,107 traces / 4,059 spans |
+| Dataset examples and versions | [dataset-name](https://app.arize.com/organizations/.../datasets/...?selectedTab=examples) | 2 versions / 5 examples |
+| Experiments and evaluations | [dataset-name — Experiments](https://app.arize.com/organizations/.../datasets/...?selectedTab=experiments) | 1 experiment / 3 runs / 3 `exact_match` results |

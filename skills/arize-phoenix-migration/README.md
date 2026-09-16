@@ -27,4 +27,6 @@ Requires Python 3.10 or later and network access to Phoenix and AX. Setup and mi
 
 The skill migrates stored experiment evaluation results without executing evaluators or making model calls. It preserves nested dataset values as JSON and verifies every recreated dataset version, example snapshot, experiment run, and evaluation result. Evaluator definitions, prompts, tags, attachments, and span/trace/session annotations are currently outside its scope.
 
+After verification, the agent prints a compact results table with clickable AX links for each created trace project and dataset. Dataset links open both the Examples view and the Experiments view containing migrated runs and stored evaluation results. Historical trace links include the migrated time range so the imported traces are visible immediately.
+
 An existing configured ax CLI can help discover your space via `ax spaces list -o json`; it is optional. For custom deployments, set the appropriate region, API host/port, single host/port, or base domain in local configuration. The helper uses the SDK's resolved configuration for both upload and readback.
