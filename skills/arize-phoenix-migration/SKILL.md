@@ -49,7 +49,7 @@ Keep the decision message short and scannable. Use these labels with bullets ben
 
 Immediately below each question, give short numbered choices, a short fill-in template, or exact copyable replies. Do not place explanatory paragraphs after the choices. Ask at most three questions in one message, and prefer one combined question. Never bury a question inside a paragraph or end a status sentence with a question mark.
 
-For terminal clients that do not render HTML underline, make the required action unmistakable with this exact structure. Keep the field names human-readable:
+For terminal clients that do not render HTML underline, make the required action unmistakable. When connection values are missing, the entire user-facing response must be exactly this structure with only the missing fields retained. Do not add an introduction, explanation, link, citation, skill quotation, setup status, or text after the final line:
 
 ```markdown
 ━━━━━━━━━━ ACTION REQUIRED ━━━━━━━━━━
