@@ -6,7 +6,7 @@ You can simply provide the local configuration and ask to migrate Phoenix to AX.
 
 ## Local credentials
 
-If credentials are not already configured, the agent asks for the Phoenix URL, Phoenix project name, Phoenix API key when required, and AX API key in one short action block. You may provide the values directly; the agent creates and protects the local `.env`, discovers accessible AX spaces, and does the remaining setup. If you already have an `.env`, you can provide its path instead.
+If credentials are not already configured, the agent asks for the Phoenix URL and project, creates a secure credential-entry helper, and gives you one command to run in a separate terminal. Enter keys there rather than in agent chat because agent-controlled terminal input can be recorded in the transcript. The helper creates and protects the local `.env`; the agent then discovers accessible AX spaces and does the remaining setup. If you already have an `.env`, provide its path instead.
 
 ```dotenv
 PHOENIX_BASE_URL=https://app.phoenix.arize.com/s/your-space

@@ -14,11 +14,11 @@ Requires Python 3.10 or later, shell access, and network access to Phoenix and A
 
 ## Discover the source and gather missing details
 
-Reuse details from the request and configured environment. Look for an explicitly provided configuration path and the current workspace's `.env`; do not search unrelated home-directory files. Credential collection is the first setup step when source or destination values are unavailable. Request all missing connection values in one message: Phoenix host URL, Phoenix project name, Phoenix API key when required, and AX API key. This is ordinary missing input, not a permission or confirmation gate, so do not cite or quote the skill when requesting it. Do not ask the user to create a file, run a command, find an AX space ID, or understand environment-variable names. Tell them they may paste the values directly and that the agent will store them privately and will not repeat them. If they already have a configuration file, accepting its path is an optional alternative.
+Reuse details from the request and configured environment. Look for an explicitly provided configuration path and the current workspace's `.env`; do not search unrelated home-directory files. Credential collection is the first setup step when source or destination values are unavailable. Request the missing Phoenix host URL and project name directly. For secret keys, accept an existing local `.env` path or create a small owner-only credential-entry helper and give the user one exact command to run in a separate terminal; the helper prompts without echo and writes the local `.env`. This is ordinary missing input, not a permission or confirmation gate, so do not cite or quote the skill when requesting it. Do not ask the user to create or edit a file, find an AX space ID, or understand environment-variable names.
 
-After the user supplies values, create an owner-only, Git-ignored local `.env` on their behalf. Never repeat credentials in commentary, confirmations, summaries, or reports. Never put literal keys in displayed command arguments, heredocs, patches, or generated scripts. Use a secret-input or other non-echoing mechanism available in the environment. If the environment truly has no way to persist supplied secrets without displaying them, keep them in process memory for the current run and explain the limitation in one sentence; do not make file creation the user's task.
+Never ask the user to paste a secret into chat or an agent-controlled interactive tool session: those inputs can appear in the conversation transcript even when `getpass` or a hidden prompt is used. If the user pastes a key anyway, do not ask them to enter it again, do not claim it remained private, and advise rotating it after the migration. Never repeat credentials in commentary, confirmations, summaries, or reports, and never put literal keys in displayed command arguments, heredocs, patches, or generated scripts.
 
-Create owner-only, Git-ignored trace and data manifests in a local working directory. Run the trace `export` command and the data `export` command independently, without destination credentials or upload commands, so failure in one inventory does not discard the other result. These source reads are the inventory and can take a little time on large projects. Report the discovered counts for traces, spans, datasets, versions, example snapshots, experiments, and stored evaluation results. Preserve these manifests so the selected migration can reuse the same fixed snapshots.
+Create owner-only, Git-ignored trace and data manifests in a local working directory. Run the trace CLI `export` command and data CLI `export` command independently, without destination uploads, so failure in one inventory does not discard the other result. Always invoke the bundled CLIs for export; never import and call their Python functions from an ad hoc script. Never `cat`, print, summarize with a tool that emits raw rows, or otherwise place manifest contents in the transcript. The CLI output contains safe counts; use only that output for the inventory summary. These source reads can take a little time on large projects. Preserve the manifests so the selected migration can reuse the same fixed snapshots.
 
 Before asking the user to choose, inspect the AX destination with read-only requests. Resolve the configured `ARIZE_SPACE_ID` to its human-readable space name. If no space is configured, list the spaces available to the configured key and offer the names as numbered choices; do not make the user find opaque IDs. If only one space is available, propose it. Run trace preflight with the proposed fresh project name to prove the Phoenix project, AX key, AX space, endpoint configuration, and project-name availability. Check proposed dataset names in the same AX space with read-only SDK list calls and choose a different source-derived prefix if any collide. Read-only AX discovery is allowed before `go`; no destination object may be created.
 
@@ -33,7 +33,7 @@ Present one compact decision after inventory. Include:
 
 End with one question, such as: "Would you like all supported data, traces only, dataset/experiment data only, or a selection? Reply `go` to migrate everything listed above using the suggested destinations, or name what you want and say `go`."
 
-If the original request already names the resources, present those as the selected scope and ask the user to say `go` or correct it. After this inventory message, treat `go`, `migrate all`, or equivalent unqualified approval as authorization to migrate all supported discovered data using the stated destination suggestions. Treat a qualified response such as `datasets only, go` as both the selection and authorization. Do not ask a second confirmation when the response includes approval. Ask only for destination credentials or choices that are still missing and cannot be safely suggested.
+If the original request already names the resources, present those as the selected scope and ask the user to say `go` or correct it. The original migration request already authorizes the work once its scope and destination are known; this question collects that missing selection rather than requesting permission. Treat `go`, `migrate all`, or an equivalent unqualified selection as all supported discovered data using the stated destinations. Treat a qualified response such as `datasets only, go` as the selection of that group. Once the user selects, proceed without another confirmation. Ask only for destination credentials or choices that are still missing and cannot be safely suggested.
 
 If the user selects individual traces or datasets after the inventory, rerun the applicable export with repeated `--trace-id` or `--dataset` arguments into a new manifest. Do not edit the all-source manifest by hand.
 
@@ -56,10 +56,12 @@ For terminal clients that do not render HTML underline, make the required action
 
 - Phoenix URL:
 - Phoenix project name:
-- Phoenix API key: (write `none` if not required)
-- AX API key:
+- Phoenix API key: use the secure command below, or write `none` if not required
+- AX API key: use the secure command below
 
-You can also reply with the path to an existing local `.env`. I will keep credentials private and will not repeat them.
+Run: `<agent-created credential helper command>`
+
+You can instead reply with the path to an existing local `.env`.
 ```
 
 Ask only for fields that are actually missing. Do not show environment-variable names unless troubleshooting requires them.
@@ -70,13 +72,13 @@ Load the agent-created or explicitly chosen environment file through the helper;
 
 If the user only supplies a space name, optionally use an already configured ax CLI for discovery: `ax spaces list -o json` or `ax spaces get "<space-name>" -o json`. Run `ax spaces --help` if command syntax differs. Reuse the user's configured CLI authentication; never put keys in CLI arguments. Without the CLI, resolve the name through AX APIs. Ask the user to choose if multiple spaces match. Use a fresh destination project; suggest a source-derived name when none is specified and establish that destination with the user. Do not ask about the separate AX button, feature flags, or browser tokens.
 
-## Wait for the migration decision
+## Get the migration selection
 
 Include the time expectation in the inventory-and-scope question above, before creating destinations or uploading data. Verification may wait up to 15 minutes for indexing, and readback or larger projects can take longer; do not promise a fixed completion time.
 
 For example: "I found 1,107 traces and one dataset with two versions, one experiment, and three stored evaluations. Upload can take several minutes, and AX indexing and verification can take 15 minutes or longer. Reply `go` to migrate all supported data using project `source-ax-migration` and prefix `source-ax-`, or tell me which listed resources to migrate and say `go`."
 
-Wait for the user's decision and approval before creating objects in AX or starting import commands. Local dependency setup plus read-only Phoenix and AX discovery are allowed before this approval because they are needed to present the choice and destination. The initial request to migrate authorizes discovery but does not authorize destination writes. Once the user says `go` as described above, proceed through import and verification without another confirmation. A read-only planning request stops after discovery.
+Do not create objects in AX until the user selects the scope and destination. Local dependency setup plus read-only Phoenix and AX discovery provide the choices. The initial request authorizes the migration once this missing selection is supplied. After the user selects as described above, proceed through import and verification without another confirmation. A read-only planning request stops after discovery.
 
 ## Run the migration
 
