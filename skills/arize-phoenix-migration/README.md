@@ -2,7 +2,7 @@
 
 Ask your coding agent to migrate Phoenix traces, datasets, experiments, and stored evaluation results using the Phoenix migration skill. Supply the Phoenix host/project, AX destination space, and a fresh destination project name for traces. The agent handles setup, export, upload, and verification after explaining the expected wait and asking you to continue.
 
-You can request traces, datasets with experiments and stored evaluations, or both in plain English. If the scope is ambiguous, the agent asks which supported data you want migrated before it starts.
+You can request traces, datasets with experiments and stored evaluations, or both in plain English. The agent first reads Phoenix and reports what it finds, including counts for each supported resource. If the scope is ambiguous, it asks which discovered data you want migrated before it accesses AX or uploads anything.
 
 ## Local credentials
 
