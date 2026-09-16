@@ -83,6 +83,76 @@ def require(config, names):
         raise DataMigrationError("Missing configuration: " + ", ".join(missing))
 
 
+def unique_index(rows, identity, label):
+    indexed = {}
+    for row in rows:
+        key = identity(row)
+        if not key:
+            raise DataMigrationError(f"{label} has a missing source identity.")
+        if key in indexed:
+            raise DataMigrationError(f"{label} has duplicate source identity {key}.")
+        indexed[key] = row
+    return indexed
+
+
+def evaluation_provenance(result):
+    return canonical(
+        {
+            "phoenix_evaluation_id": result.get("id"),
+            "phoenix_annotator_kind": result.get("annotator_kind"),
+            "phoenix_trace_id": result.get("trace_id"),
+            "phoenix_metadata": result.get("metadata") or {},
+            "phoenix_error": result.get("error"),
+            "phoenix_start_time": result.get("start_time"),
+            "phoenix_end_time": result.get("end_time"),
+        }
+    )
+
+
+def validate_source_dataset(source):
+    versions = source["versions"]
+    version_ids = unique_index(
+        versions, lambda version: version.get("id"), f"Dataset {source['name']} versions"
+    )
+    for version in versions:
+        unique_index(
+            version["examples"],
+            lambda example: example.get("source_global_id"),
+            f"Dataset {source['name']} version {version['id']} examples",
+        )
+    experiments = unique_index(
+        source["experiments"],
+        lambda experiment: experiment.get("id"),
+        f"Dataset {source['name']} experiments",
+    )
+    latest_version_id = versions[-1]["id"] if versions else None
+    for experiment in experiments.values():
+        version_id = experiment.get("dataset_version_id")
+        if version_id not in version_ids:
+            raise DataMigrationError(
+                f"Experiment {experiment['name']} references unknown dataset version {version_id}."
+            )
+        if version_id != latest_version_id:
+            raise DataMigrationError(
+                f"Experiment {experiment['name']} references older dataset version {version_id}; AX import cannot preserve that relationship."
+            )
+        task_runs = unique_index(
+            experiment["task_runs"],
+            lambda run: run.get("id"),
+            f"Experiment {experiment['name']} task runs",
+        )
+        evaluations = unique_index(
+            experiment["evaluation_runs"],
+            lambda result: (result.get("experiment_run_id"), result.get("name")),
+            f"Experiment {experiment['name']} evaluations",
+        )
+        for run_id, _ in evaluations:
+            if run_id not in task_runs:
+                raise DataMigrationError(
+                    f"Experiment {experiment['name']} evaluation references unknown task run {run_id}."
+                )
+
+
 def phoenix_client(config):
     from phoenix.client import Client
 
@@ -210,7 +280,11 @@ def destination_examples(client, dataset_id, version_id=None):
         cursor = response.pagination.next_cursor
         if not cursor:
             raise DataMigrationError("AX dataset pagination omitted its next cursor.")
-    return {e.additional_properties.get("phoenix_example_id"): e for e in examples}
+    return unique_index(
+        examples,
+        lambda example: example.additional_properties.get("phoenix_example_id"),
+        f"AX dataset version {version_id or 'latest'} examples",
+    )
 
 
 def get_dataset_after_create(
@@ -242,7 +316,11 @@ def replay_versions(client, dataset, source, space, state, checkpoint):
     version_map.setdefault(versions[0]["id"], initial_version_id)
     checkpoint()
     for index, version in enumerate(versions[1:], 2):
-        target = {e["source_global_id"]: e for e in version["examples"]}
+        target = unique_index(
+            version["examples"],
+            lambda example: example.get("source_global_id"),
+            f"Dataset {source['name']} version {version['id']} examples",
+        )
         version_id = version_map.get(version["id"])
         if version_id is None:
             version_name = f"phoenix-version-{index}"
@@ -331,17 +409,7 @@ def import_experiment(client, dataset, experiment, examples, prefix):
             row[key + "_score"] = value.get("score")
             row[key + "_label"] = value.get("label")
             row[key + "_explanation"] = value.get("explanation")
-            row[key + "_metadata"] = canonical(
-                {
-                    "phoenix_evaluation_id": result.get("id"),
-                    "phoenix_annotator_kind": result.get("annotator_kind"),
-                    "phoenix_trace_id": result.get("trace_id"),
-                    "phoenix_metadata": result.get("metadata") or {},
-                    "phoenix_error": result.get("error"),
-                    "phoenix_start_time": result.get("start_time"),
-                    "phoenix_end_time": result.get("end_time"),
-                }
-            )
+            row[key + "_metadata"] = evaluation_provenance(result)
             columns[name] = EvaluationResultFieldNames(
                 score=key + "_score",
                 label=key + "_label",
@@ -370,6 +438,7 @@ def import_data(config, path, prefix):
         save_manifest(path, manifest)
 
     for source in manifest["datasets"]:
+        validate_source_dataset(source)
         name = prefix + source["name"]
         entry = state.setdefault(
             source["id"],
@@ -481,6 +550,7 @@ def verify_data(config, path):
         "evaluations": 0,
     }
     for source in manifest["datasets"]:
+        validate_source_dataset(source)
         state = manifest["state"].get(source["id"])
         if not state:
             differences.append(f"dataset {source['name']} was not imported")
@@ -495,7 +565,12 @@ def verify_data(config, path):
                 continue
             totals["versions"] += 1
             actual = destination_examples(client, state["dataset_id"], destination_id)
-            expected = {e["source_global_id"]: ax_row(e) for e in version["examples"]}
+            expected_examples = unique_index(
+                version["examples"],
+                lambda example: example.get("source_global_id"),
+                f"Dataset {source['name']} version {version['id']} examples",
+            )
+            expected = {key: ax_row(value) for key, value in expected_examples.items()}
             totals["examples"] += len(expected)
             if set(actual) != set(expected):
                 differences.append(
@@ -509,26 +584,55 @@ def verify_data(config, path):
                     differences.append(
                         f"dataset {source['name']} example {key} fields differ"
                     )
-        by_source = {e["id"]: e for e in source["experiments"]}
+        by_source = unique_index(
+            source["experiments"],
+            lambda experiment: experiment.get("id"),
+            f"Dataset {source['name']} experiments",
+        )
+        mapped = unique_index(
+            state["experiments"],
+            lambda mapping: mapping.get("source_id"),
+            f"Dataset {source['name']} experiment mappings",
+        )
+        missing_mappings = sorted(set(by_source) - set(mapped))
+        extra_mappings = sorted(set(mapped) - set(by_source))
+        for source_id in missing_mappings:
+            differences.append(
+                f"dataset {source['name']} missing experiment mapping {source_id}"
+            )
+        for source_id in extra_mappings:
+            differences.append(
+                f"dataset {source['name']} has unexpected experiment mapping {source_id}"
+            )
         for mapping in state["experiments"]:
-            expected = by_source[mapping["source_id"]]
+            expected = by_source.get(mapping["source_id"])
+            if expected is None:
+                continue
             actual = client.experiments.list_runs(
                 experiment=mapping["id"], dataset=state["dataset_id"], all=True
             ).experiment_runs
             totals["experiments"] += 1
             totals["runs"] += len(expected["task_runs"])
             totals["evaluations"] += len(expected["evaluation_runs"])
-            if len(actual) != len(expected["task_runs"]):
-                differences.append(f"experiment {expected['name']} run count differs")
-            expected_runs = {run["id"]: run for run in expected["task_runs"]}
+            expected_runs = unique_index(
+                expected["task_runs"],
+                lambda run: run.get("id"),
+                f"Experiment {expected['name']} task runs",
+            )
+            actual_runs = unique_index(
+                actual,
+                lambda run: run.additional_properties.get(
+                    "phoenix_experiment_run_id"
+                ),
+                f"Experiment {expected['name']} AX runs",
+            )
+            if set(actual_runs) != set(expected_runs):
+                differences.append(f"experiment {expected['name']} run IDs differ")
             expected_evals = defaultdict(dict)
             for result in expected["evaluation_runs"]:
-                expected_evals[result["experiment_run_id"]][result["name"]] = (
-                    result.get("result") or {}
-                )
-            for run in actual:
+                expected_evals[result["experiment_run_id"]][result["name"]] = result
+            for source_run, run in actual_runs.items():
                 props = run.additional_properties
-                source_run = props.get("phoenix_experiment_run_id")
                 task_run = expected_runs.get(source_run)
                 if task_run is None:
                     differences.append(
@@ -539,13 +643,15 @@ def verify_data(config, path):
                     differences.append(
                         f"experiment {expected['name']} run {source_run} output differs"
                     )
-                for name, value in expected_evals[source_run].items():
+                for name, result in expected_evals[source_run].items():
+                    value = result.get("result") or {}
                     if (
                         props.get(f"eval.{name}.score") != value.get("score")
                         or props.get(f"eval.{name}.label") != value.get("label")
                         or props.get(f"eval.{name}.explanation")
                         != value.get("explanation")
-                        or not props.get(f"eval.{name}.metadata.phoenix_migration")
+                        or props.get(f"eval.{name}.metadata.phoenix_migration")
+                        != evaluation_provenance(result)
                     ):
                         differences.append(
                             f"experiment {expected['name']} run {source_run} evaluation {name} differs"

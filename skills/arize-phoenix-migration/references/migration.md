@@ -69,6 +69,8 @@ AX assigns new dataset example and experiment run IDs. The helper stores Phoenix
 
 The import requires a nonempty initial dataset version and at least one retained example between successive versions so AX can fork version history. It stops rather than silently flattening data or dropping a revision. Phoenix's client exposes at most 100 dataset versions without a continuation cursor, so the helper stops when that boundary is reached rather than risk an incomplete export. Destination dataset and experiment names must be fresh; use `--prefix` when appropriate.
 
+AX experiment creation does not accept a dataset-version ID. An experiment linked to any Phoenix revision other than the imported latest version therefore stops before destination writes rather than being attached to the wrong version. The helper rejects duplicate source or destination example/run identities, verifies the complete source-to-destination experiment mapping set, and compares evaluation provenance metadata exactly.
+
 The helper checkpoints destination IDs and version mappings in the manifest. If a request fails or its response is lost, rerun the same import command with the same manifest and prefix. It reconciles destination objects by their recorded IDs and deterministic migration names, and reads the current version contents before applying only the remaining changes. Do not delete or edit the manifest between attempts.
 
 This workflow does not execute evaluators or incur model costs. It does not currently migrate evaluator definitions, prompts, tags, attachments, or span/trace/session annotations.

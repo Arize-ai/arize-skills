@@ -315,3 +315,172 @@ def test_duplicate_evaluation_names_stop_before_write():
         data.import_experiment(
             client, SimpleNamespace(id="dataset"), experiment, examples, ""
         )
+
+
+def source_with_experiment():
+    source = source_dataset()
+    source["experiments"] = [
+        {
+            "id": "px-experiment",
+            "name": "experiment",
+            "dataset_version_id": "px-version",
+            "metadata": {},
+            "task_runs": [
+                {
+                    "id": "px-run",
+                    "dataset_example_id": "global",
+                    "output": {"answer": "two"},
+                }
+            ],
+            "evaluation_runs": [
+                {
+                    "id": "px-evaluation",
+                    "experiment_run_id": "px-run",
+                    "name": "exact_match",
+                    "annotator_kind": "CODE",
+                    "metadata": {"fixture": True},
+                    "result": {
+                        "score": 1,
+                        "label": "correct",
+                        "explanation": "matched",
+                    },
+                }
+            ],
+        }
+    ]
+    return source
+
+
+def verification_client(run_properties=None):
+    example = SimpleNamespace(
+        id="ax-example",
+        additional_properties={
+            "phoenix_example_id": "global",
+            "phoenix_custom_id": "custom",
+            "input_json": '{"q":"one"}',
+            "output_json": '{"a":"two"}',
+            "metadata_json": "{}",
+        },
+    )
+    run = SimpleNamespace(
+        output='{"answer":"two"}', additional_properties=run_properties or {}
+    )
+    return SimpleNamespace(
+        datasets=SimpleNamespace(
+            list_examples=lambda **kwargs: SimpleNamespace(
+                examples=[example],
+                pagination=SimpleNamespace(has_more=False, next_cursor=None),
+            )
+        ),
+        experiments=SimpleNamespace(
+            list_runs=lambda **kwargs: SimpleNamespace(experiment_runs=[run])
+        ),
+    )
+
+
+def imported_manifest(path, source, experiments=None):
+    write_manifest(path, [source])
+    manifest = data.load(path)
+    manifest["state"] = {
+        source["id"]: {
+            "dataset_id": "ax-dataset",
+            "version_ids": {"px-version": "ax-version"},
+            "experiments": experiments or [],
+        }
+    }
+    data.save_manifest(path, manifest)
+
+
+def test_older_experiment_dataset_version_stops_before_destination_write(
+    monkeypatch, tmp_path
+):
+    source = source_with_experiment()
+    source["versions"].append(
+        {"id": "latest", "examples": source["versions"][0]["examples"]}
+    )
+    path = tmp_path / "manifest.json"
+    write_manifest(path, [source])
+    monkeypatch.setattr(data, "ax_client", lambda config: SimpleNamespace())
+    with pytest.raises(data.DataMigrationError, match="older dataset version"):
+        data.import_data(
+            {"ARIZE_API_KEY": "secret", "ARIZE_SPACE_ID": "space"}, path, "m-"
+        )
+    assert data.load(path)["state"] == {}
+
+
+def test_destination_examples_rejects_duplicate_source_identity():
+    duplicate = SimpleNamespace(
+        additional_properties={"phoenix_example_id": "same"}
+    )
+    client = SimpleNamespace(
+        datasets=SimpleNamespace(
+            list_examples=lambda **kwargs: SimpleNamespace(
+                examples=[duplicate, duplicate],
+                pagination=SimpleNamespace(has_more=False, next_cursor=None),
+            )
+        )
+    )
+    with pytest.raises(data.DataMigrationError, match="duplicate source identity"):
+        data.destination_examples(client, "dataset", "version")
+
+
+def test_verify_reports_missing_experiment_mapping(monkeypatch, tmp_path):
+    source = source_with_experiment()
+    path = tmp_path / "manifest.json"
+    imported_manifest(path, source)
+    monkeypatch.setattr(
+        data, "ax_client", lambda config: verification_client()
+    )
+    result = data.verify_data(
+        {"ARIZE_API_KEY": "secret", "ARIZE_SPACE_ID": "space"}, path
+    )
+    assert result["status"] == "different"
+    assert result["differences"] == [
+        "dataset source missing experiment mapping px-experiment"
+    ]
+
+
+def test_verify_compares_exact_evaluation_provenance(monkeypatch, tmp_path):
+    source = source_with_experiment()
+    path = tmp_path / "manifest.json"
+    imported_manifest(
+        path,
+        source,
+        experiments=[{"source_id": "px-experiment", "id": "ax-experiment"}],
+    )
+    properties = {
+        "phoenix_experiment_run_id": "px-run",
+        "eval.exact_match.score": 1,
+        "eval.exact_match.label": "correct",
+        "eval.exact_match.explanation": "matched",
+        "eval.exact_match.metadata.phoenix_migration": "wrong-but-nonempty",
+    }
+    monkeypatch.setattr(
+        data, "ax_client", lambda config: verification_client(properties)
+    )
+    result = data.verify_data(
+        {"ARIZE_API_KEY": "secret", "ARIZE_SPACE_ID": "space"}, path
+    )
+    assert result["status"] == "different"
+    assert result["difference_count"] == 1
+    assert "evaluation exact_match differs" in result["differences"][0]
+
+
+def test_verify_rejects_duplicate_destination_run_identity(monkeypatch, tmp_path):
+    source = source_with_experiment()
+    path = tmp_path / "manifest.json"
+    imported_manifest(
+        path,
+        source,
+        experiments=[{"source_id": "px-experiment", "id": "ax-experiment"}],
+    )
+    client = verification_client({"phoenix_experiment_run_id": "px-run"})
+    duplicate = client.experiments.list_runs().experiment_runs[0]
+    client.experiments.list_runs = lambda **kwargs: SimpleNamespace(
+        experiment_runs=[duplicate, duplicate]
+    )
+    monkeypatch.setattr(data, "ax_client", lambda config: client)
+    with pytest.raises(data.DataMigrationError, match="duplicate source identity"):
+        data.verify_data(
+            {"ARIZE_API_KEY": "secret", "ARIZE_SPACE_ID": "space"}, path
+        )
