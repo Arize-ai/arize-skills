@@ -16,6 +16,7 @@ Requires Python 3.10 or later, shell access, and network access to Phoenix and A
 
 Reuse details from the request and configured environment. Ask only for missing information:
 
+- What to migrate: traces; datasets with their experiments and stored evaluation results; or both. If the request already names the resources, use that scope without asking again. If the user asks to migrate the whole Phoenix project, confirm that "everything" means both supported groups and state the unsupported resources listed below.
 - Phoenix host URL and source project name.
 - Phoenix API key if that instance requires authentication.
 - AX API key and destination space ID. Ask for a fresh destination project name when traces are selected, and an optional prefix for destination dataset and experiment names.

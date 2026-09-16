@@ -2,6 +2,8 @@
 
 Ask your coding agent to migrate Phoenix traces, datasets, experiments, and stored evaluation results using the Phoenix migration skill. Supply the Phoenix host/project, AX destination space, and a fresh destination project name for traces. The agent handles setup, export, upload, and verification after explaining the expected wait and asking you to continue.
 
+You can request traces, datasets with experiments and stored evaluations, or both in plain English. If the scope is ambiguous, the agent asks which supported data you want migrated before it starts.
+
 ## Local credentials
 
 Create a Git-ignored `.env` yourself using your local editor, and provide its path to the agent. Keep keys out of chat, command arguments, scripts, and displayed tool requests. Use owner-only permissions, such as `chmod 600 .env` on Unix.
