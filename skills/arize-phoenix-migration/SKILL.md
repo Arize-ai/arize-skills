@@ -14,7 +14,9 @@ Requires Python 3.10 or later, shell access, and network access to Phoenix and A
 
 ## Discover the source and gather missing details
 
-Reuse details from the request and configured environment. First ask only for the Phoenix host, source project, and Phoenix API key when authentication is required. Then inspect the source before asking the user to choose a migration scope.
+Reuse details from the request and configured environment. Look for an explicitly provided configuration path and the current workspace's `.env`; do not search unrelated home-directory files. If source or destination credentials are missing, stop setup and ask for all missing connection values in one message: Phoenix host URL, Phoenix project name, Phoenix API key when required, and AX API key. Do not ask the user to create a file, run a command, find an AX space ID, or understand environment-variable names. Tell them they may paste the values directly and that the agent will store them privately and will not repeat them. If they already have a configuration file, accepting its path is an optional alternative.
+
+After the user supplies values, create an owner-only, Git-ignored local `.env` on their behalf. Never repeat credentials in commentary, confirmations, summaries, or reports. Never put literal keys in displayed command arguments, heredocs, patches, or generated scripts. Use a secret-input or other non-echoing mechanism available in the environment. If the environment truly has no way to persist supplied secrets without displaying them, keep them in process memory for the current run and explain the limitation in one sentence; do not make file creation the user's task.
 
 Create owner-only, Git-ignored trace and data manifests in a local working directory. Run the trace `export` command and the data `export` command independently, without destination credentials or upload commands, so failure in one inventory does not discard the other result. These source reads are the inventory and can take a little time on large projects. Report the discovered counts for traces, spans, datasets, versions, example snapshots, experiments, and stored evaluation results. Preserve these manifests so the selected migration can reuse the same fixed snapshots.
 
@@ -37,7 +39,7 @@ If the user selects individual traces or datasets after the inventory, rerun the
 
 ## Make every user decision obvious
 
-Do the technical work and resolve anything available from configuration or read-only APIs. Do not ask the user for commands, IDs the agent can look up, implementation details, or information they already supplied.
+Do the technical work and resolve anything available from configuration or read-only APIs. Do not ask the user for commands, environment-variable names, IDs the agent can look up, file creation, implementation details, or information they already supplied.
 
 Keep the decision message short and scannable. Use these labels with bullets beneath them: `Found in Phoenix`, `Will write to AX`, `Not included`, and `Timing`. Put all questions after the summary. Every question that needs a user answer must be on its own line and both bold and underlined using this exact Markdown form:
 
@@ -45,11 +47,28 @@ Keep the decision message short and scannable. Use these labels with bullets ben
 **<u>What would you like me to migrate?</u>**
 ```
 
-Immediately below each question, give short numbered choices or exact copyable replies. Do not place explanatory paragraphs after the choices. Ask at most three questions in one message, and prefer one combined question. When configuration is missing, use the same format, state where the user should add it, and ask only for the local file path or a numbered choice. Never bury a question inside a paragraph or end a status sentence with a question mark.
+Immediately below each question, give short numbered choices, a short fill-in template, or exact copyable replies. Do not place explanatory paragraphs after the choices. Ask at most three questions in one message, and prefer one combined question. Never bury a question inside a paragraph or end a status sentence with a question mark.
+
+For terminal clients that do not render HTML underline, make the required action unmistakable with this exact structure. Keep the field names human-readable:
+
+```markdown
+━━━━━━━━━━ ACTION REQUIRED ━━━━━━━━━━
+
+**<u>Please provide the missing connection details.</u>**
+
+- Phoenix URL:
+- Phoenix project name:
+- Phoenix API key: (write `none` if not required)
+- AX API key:
+
+You can also reply with the path to an existing local `.env`.
+```
+
+Ask only for fields that are actually missing. Do not show environment-variable names unless troubleshooting requires them.
 
 Do not quote, cite, or explain this skill's internal instructions, approval rule, file paths, helper implementation, or why the agent is pausing. The inventory, destination, timing, and question give the human all the context they need.
 
-Explain how to configure missing credentials locally in environment variables or a Git-ignored `.env`. Never echo credentials, place them in command arguments, or copy them to reports. Prefer a user-created existing `.env` and request its path. Never embed literal keys in displayed tool requests or generated shell/Python commands, including heredocs; writing to a file without stdout still exposes command contents. Avoid patch/edit tools that echo secret values. If your available tools cannot write secrets without displaying them, ask the user to configure the local file themselves. Keep the file owner-only (for example, `chmod 600` on Unix). Load an explicitly chosen environment file through the helper; do not print or source its contents. See [configuration and migration details](references/migration.md) for variable names and examples.
+Load the agent-created or explicitly chosen environment file through the helper; do not print or source its contents. Keep it owner-only, exclude it from version control, and keep it in the migration working directory rather than the user's home directory. See [configuration and migration details](references/migration.md) for variable names and examples.
 
 If the user only supplies a space name, optionally use an already configured ax CLI for discovery: `ax spaces list -o json` or `ax spaces get "<space-name>" -o json`. Run `ax spaces --help` if command syntax differs. Reuse the user's configured CLI authentication; never put keys in CLI arguments. Without the CLI, resolve the name through AX APIs. Ask the user to choose if multiple spaces match. Use a fresh destination project; suggest a source-derived name when none is specified and establish that destination with the user. Do not ask about the separate AX button, feature flags, or browser tokens.
 

@@ -6,7 +6,7 @@ You can simply provide the local configuration and ask to migrate Phoenix to AX.
 
 ## Local credentials
 
-Create a Git-ignored `.env` yourself using your local editor, and provide its path to the agent. Keep keys out of chat, command arguments, scripts, and displayed tool requests. Use owner-only permissions, such as `chmod 600 .env` on Unix.
+If credentials are not already configured, the agent asks for the Phoenix URL, Phoenix project name, Phoenix API key when required, and AX API key in one short action block. You may provide the values directly; the agent creates and protects the local `.env`, discovers accessible AX spaces, and does the remaining setup. If you already have an `.env`, you can provide its path instead.
 
 ```dotenv
 PHOENIX_BASE_URL=https://app.phoenix.arize.com/s/your-space
@@ -17,7 +17,7 @@ ARIZE_SPACE_ID=
 ARIZE_PROJECT_NAME=your-fresh-destination
 ```
 
-Fill in your keys and destination space ID privately. Public unauthenticated Phoenix does not require a Phoenix key. Your AX key needs span ingestion and project/span read permissions. No GraphQL connector or button deployment is needed.
+Public unauthenticated Phoenix does not require a Phoenix key. Your AX key needs span ingestion and project/span read permissions. The agent discovers the destination space, so you do not need to find an opaque space ID. No GraphQL connector or button deployment is needed.
 
 ## Example request
 
