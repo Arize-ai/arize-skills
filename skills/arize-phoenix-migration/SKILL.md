@@ -14,7 +14,7 @@ Requires Python 3.10 or later, shell access, and network access to Phoenix and A
 
 ## Discover the source and gather missing details
 
-Reuse details from the request and configured environment. Look for an explicitly provided configuration path and the current workspace's `.env`; do not search unrelated home-directory files. If source or destination credentials are missing, stop setup and ask for all missing connection values in one message: Phoenix host URL, Phoenix project name, Phoenix API key when required, and AX API key. Do not ask the user to create a file, run a command, find an AX space ID, or understand environment-variable names. Tell them they may paste the values directly and that the agent will store them privately and will not repeat them. If they already have a configuration file, accepting its path is an optional alternative.
+Reuse details from the request and configured environment. Look for an explicitly provided configuration path and the current workspace's `.env`; do not search unrelated home-directory files. Credential collection is the first setup step when source or destination values are unavailable. Request all missing connection values in one message: Phoenix host URL, Phoenix project name, Phoenix API key when required, and AX API key. This is ordinary missing input, not a permission or confirmation gate, so do not cite or quote the skill when requesting it. Do not ask the user to create a file, run a command, find an AX space ID, or understand environment-variable names. Tell them they may paste the values directly and that the agent will store them privately and will not repeat them. If they already have a configuration file, accepting its path is an optional alternative.
 
 After the user supplies values, create an owner-only, Git-ignored local `.env` on their behalf. Never repeat credentials in commentary, confirmations, summaries, or reports. Never put literal keys in displayed command arguments, heredocs, patches, or generated scripts. Use a secret-input or other non-echoing mechanism available in the environment. If the environment truly has no way to persist supplied secrets without displaying them, keep them in process memory for the current run and explain the limitation in one sentence; do not make file creation the user's task.
 
@@ -52,16 +52,14 @@ Immediately below each question, give short numbered choices, a short fill-in te
 For terminal clients that do not render HTML underline, make the required action unmistakable. When connection values are missing, the entire user-facing response must be exactly this structure with only the missing fields retained. Do not add an introduction, explanation, link, citation, skill quotation, setup status, or text after the final line:
 
 ```markdown
-━━━━━━━━━━ ACTION REQUIRED ━━━━━━━━━━
-
-**<u>Please provide the missing connection details.</u>**
+**<u>ACTION REQUIRED: Please provide the missing connection details.</u>**
 
 - Phoenix URL:
 - Phoenix project name:
 - Phoenix API key: (write `none` if not required)
 - AX API key:
 
-You can also reply with the path to an existing local `.env`.
+You can also reply with the path to an existing local `.env`. I will keep credentials private and will not repeat them.
 ```
 
 Ask only for fields that are actually missing. Do not show environment-variable names unless troubleshooting requires them.
