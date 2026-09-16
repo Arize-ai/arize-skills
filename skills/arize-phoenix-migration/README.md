@@ -25,7 +25,7 @@ Public unauthenticated Phoenix does not require a Phoenix key. Your AX key needs
 
 Requires Python 3.10 or later and network access to Phoenix and AX. Setup and migration can take several minutes; indexing and verification can take 15 minutes or longer. Historical traces may require a historical date filter in the AX UI.
 
-The skill migrates stored experiment evaluation results without executing evaluators or making model calls. It preserves nested dataset values as JSON and verifies every recreated dataset version, example snapshot, experiment run, and evaluation result. Evaluator definitions, prompts, tags, attachments, and span/trace/session annotations are currently outside its scope.
+The skill migrates stored experiment evaluation results without executing evaluators or making model calls. It preserves nested example values as JSON and verifies every recreated dataset version, example snapshot, experiment run, and evaluation result. Evaluator definitions, prompts, tags, attachments, span/trace/session annotations, dataset/version descriptions, and dataset/version/experiment metadata are currently outside its scope because the applicable AX create APIs do not represent them.
 
 After verification, the agent prints a compact results table with clickable AX links for each created trace project and dataset. Dataset links open both the Examples view and the Experiments view containing migrated runs and stored evaluation results. Historical trace links include the migrated time range so the imported traces are visible immediately.
 

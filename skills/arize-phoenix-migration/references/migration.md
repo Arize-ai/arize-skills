@@ -73,4 +73,4 @@ AX experiment creation does not accept a dataset-version ID. An experiment linke
 
 The helper checkpoints destination IDs and version mappings in the manifest. If a request fails or its response is lost, rerun the same import command with the same manifest and prefix. It reconciles destination objects by their recorded IDs and deterministic migration names, and reads the current version contents before applying only the remaining changes. Do not delete or edit the manifest between attempts.
 
-This workflow does not execute evaluators or incur model costs. It does not currently migrate evaluator definitions, prompts, tags, attachments, or span/trace/session annotations.
+This workflow does not execute evaluators or incur model costs. It does not currently migrate evaluator definitions, prompts, tags, attachments, span/trace/session annotations, dataset/version descriptions, or dataset/version/experiment metadata because the applicable AX create APIs do not represent them.

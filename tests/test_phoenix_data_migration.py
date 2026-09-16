@@ -363,7 +363,9 @@ def verification_client(run_properties=None):
         },
     )
     run = SimpleNamespace(
-        output='{"answer":"two"}', additional_properties=run_properties or {}
+        example_id="ax-example",
+        output='{"answer":"two"}',
+        additional_properties=run_properties or {},
     )
     return SimpleNamespace(
         datasets=SimpleNamespace(
@@ -450,6 +452,12 @@ def test_verify_compares_exact_evaluation_provenance(monkeypatch, tmp_path):
     )
     properties = {
         "phoenix_experiment_run_id": "px-run",
+        "phoenix_trace_id": None,
+        "phoenix_repetition_number": None,
+        "phoenix_error": None,
+        "phoenix_start_time": None,
+        "phoenix_end_time": None,
+        "phoenix_experiment_metadata": "{}",
         "eval.exact_match.score": 1,
         "eval.exact_match.label": "correct",
         "eval.exact_match.explanation": "matched",
@@ -484,3 +492,121 @@ def test_verify_rejects_duplicate_destination_run_identity(monkeypatch, tmp_path
         data.verify_data(
             {"ARIZE_API_KEY": "secret", "ARIZE_SPACE_ID": "space"}, path
         )
+
+
+def test_import_validates_every_dataset_before_any_destination_write(
+    monkeypatch, tmp_path
+):
+    valid = source_dataset()
+    invalid = source_with_experiment()
+    invalid["id"] = "second"
+    invalid["name"] = "second"
+    invalid["versions"].append(
+        {"id": "latest", "examples": invalid["versions"][0]["examples"]}
+    )
+    path = tmp_path / "manifest.json"
+    write_manifest(path, [valid, invalid])
+    called = False
+
+    def client(_):
+        nonlocal called
+        called = True
+        return SimpleNamespace()
+
+    monkeypatch.setattr(data, "ax_client", client)
+    with pytest.raises(data.DataMigrationError, match="older dataset version"):
+        data.import_data(
+            {"ARIZE_API_KEY": "secret", "ARIZE_SPACE_ID": "space"}, path, "m-"
+        )
+    assert called is False
+    assert data.load(path)["state"] == {}
+
+
+def test_source_rejects_duplicate_experiment_names():
+    source = source_with_experiment()
+    duplicate = dict(source["experiments"][0])
+    duplicate["id"] = "second-experiment"
+    source["experiments"].append(duplicate)
+    with pytest.raises(data.DataMigrationError, match="experiment names"):
+        data.validate_source_dataset(source)
+
+
+def test_verify_reports_extra_and_duplicate_version_mappings(monkeypatch, tmp_path):
+    source = source_dataset()
+    path = tmp_path / "manifest.json"
+    imported_manifest(path, source)
+    manifest = data.load(path)
+    state = manifest["state"][source["id"]]
+    state["version_ids"]["unexpected"] = "ax-version"
+    data.save_manifest(path, manifest)
+    monkeypatch.setattr(data, "ax_client", lambda config: verification_client())
+    result = data.verify_data(
+        {"ARIZE_API_KEY": "secret", "ARIZE_SPACE_ID": "space"}, path
+    )
+    assert "dataset source version mapping IDs differ" in result["differences"]
+    assert (
+        "dataset source has duplicate destination version mappings"
+        in result["differences"]
+    )
+
+
+def test_verify_compares_experiment_run_provenance(monkeypatch, tmp_path):
+    source = source_with_experiment()
+    path = tmp_path / "manifest.json"
+    imported_manifest(
+        path,
+        source,
+        experiments=[{"source_id": "px-experiment", "id": "ax-experiment"}],
+    )
+    properties = {
+        **data.experiment_run_provenance(
+            source["experiments"][0], source["experiments"][0]["task_runs"][0]
+        ),
+        "phoenix_trace_id": "wrong",
+        "eval.exact_match.score": 1,
+        "eval.exact_match.label": "correct",
+        "eval.exact_match.explanation": "matched",
+        "eval.exact_match.metadata.phoenix_migration": data.evaluation_provenance(
+            source["experiments"][0]["evaluation_runs"][0]
+        ),
+    }
+    monkeypatch.setattr(
+        data, "ax_client", lambda config: verification_client(properties)
+    )
+    result = data.verify_data(
+        {"ARIZE_API_KEY": "secret", "ARIZE_SPACE_ID": "space"}, path
+    )
+    assert result["status"] == "different"
+    assert any("run px-run provenance differs" in item for item in result["differences"])
+
+
+def test_verify_compares_experiment_example_relationship(monkeypatch, tmp_path):
+    source = source_with_experiment()
+    path = tmp_path / "manifest.json"
+    imported_manifest(
+        path,
+        source,
+        experiments=[{"source_id": "px-experiment", "id": "ax-experiment"}],
+    )
+    evaluation = source["experiments"][0]["evaluation_runs"][0]
+    task_run = source["experiments"][0]["task_runs"][0]
+    properties = {
+        **data.experiment_run_provenance(source["experiments"][0], task_run),
+        "eval.exact_match.score": 1,
+        "eval.exact_match.label": "correct",
+        "eval.exact_match.explanation": "matched",
+        "eval.exact_match.metadata.phoenix_migration": data.evaluation_provenance(
+            evaluation
+        ),
+    }
+    client = verification_client(properties)
+    run = client.experiments.list_runs().experiment_runs[0]
+    run.example_id = "wrong-example"
+    client.experiments.list_runs = lambda **kwargs: SimpleNamespace(
+        experiment_runs=[run]
+    )
+    monkeypatch.setattr(data, "ax_client", lambda config: client)
+    result = data.verify_data(
+        {"ARIZE_API_KEY": "secret", "ARIZE_SPACE_ID": "space"}, path
+    )
+    assert any("example relationship differs" in item for item in result["differences"])

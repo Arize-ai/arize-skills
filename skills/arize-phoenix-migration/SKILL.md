@@ -28,7 +28,7 @@ Present one compact decision after inventory. Include:
 - The choices: all supported discovered data; traces only; all dataset/experiment data; or named trace IDs/datasets.
 - A suggested fresh trace project name and dataset/experiment prefix derived from the source name when the request or environment does not already provide them. State the suggestions so a plain `go` can accept them.
 - The destination AX space name, with its ID in parentheses only when useful for disambiguation. Say plainly that traces, datasets, experiments, and evaluations will all be written to that space.
-- The current exclusions: evaluator definitions, prompts, tags, attachments, and span/trace/session annotations.
+- The current exclusions: evaluator definitions, prompts, tags, attachments, span/trace/session annotations, and Phoenix dataset/version descriptions plus dataset/version/experiment metadata that AX's create APIs cannot represent.
 - The time expectation: upload can take several minutes and AX indexing/verification can take 15 minutes or longer.
 
 End with one question, such as: "Would you like all supported data, traces only, dataset/experiment data only, or a selection? Reply `go` to migrate everything listed above using the suggested destinations, or name what you want and say `go`."
@@ -97,7 +97,7 @@ While running, keep the user informed at stage changes and during long waits. Di
 
 Preserve original span/trace IDs, parents, historical timestamps, span kinds, input/output, sessions, token counts, and attributes. The trace helper stores original attributes, events, and timestamp strings in AX metadata for preservation checks.
 
-The data helper preserves each Phoenix dataset revision as an AX dataset version, keeps nested input/output/metadata as canonical JSON rather than flattening it, maps source example IDs to AX-assigned IDs, and imports historical experiment task outputs plus stored evaluation score, label, explanation, and provenance metadata. It does not rerun evaluators or call an LLM. Phoenix evaluator definitions, prompts, dataset/experiment tags, arbitrary attachments, and span/trace/session annotations are not yet migrated. AX experiment creation does not accept a dataset-version ID, so an experiment linked to any Phoenix revision other than the imported latest version stops before destination writes rather than being attached to the wrong revision.
+The data helper preserves each Phoenix dataset revision as an AX dataset version, keeps nested example input/output/metadata as canonical JSON rather than flattening it, maps source example IDs to AX-assigned IDs, and imports historical experiment task outputs plus stored evaluation score, label, explanation, and provenance metadata. It does not rerun evaluators or call an LLM. Phoenix evaluator definitions, prompts, dataset/experiment tags, arbitrary attachments, span/trace/session annotations, dataset/version descriptions, and dataset/version/experiment metadata are not yet migrated because the applicable AX create APIs do not represent them. AX experiment creation does not accept a dataset-version ID, so an experiment linked to any Phoenix revision other than the imported latest version stops before destination writes rather than being attached to the wrong revision.
 
 Do not change historical timestamps to make traces appear in a recent-time UI filter. Do not label a successful upload as a verified migration. The helper does not guarantee server-side ingestion idempotency: reconcile uncertain submissions through readback rather than blindly retrying them.
 

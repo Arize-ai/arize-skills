@@ -125,6 +125,11 @@ def validate_source_dataset(source):
         lambda experiment: experiment.get("id"),
         f"Dataset {source['name']} experiments",
     )
+    unique_index(
+        source["experiments"],
+        lambda experiment: experiment.get("name"),
+        f"Dataset {source['name']} experiment names",
+    )
     latest_version_id = versions[-1]["id"] if versions else None
     for experiment in experiments.values():
         version_id = experiment.get("dataset_version_id")
@@ -141,6 +146,11 @@ def validate_source_dataset(source):
             lambda run: run.get("id"),
             f"Experiment {experiment['name']} task runs",
         )
+        for result in experiment["evaluation_runs"]:
+            if not result.get("experiment_run_id") or not result.get("name"):
+                raise DataMigrationError(
+                    f"Experiment {experiment['name']} evaluation has a missing run ID or name."
+                )
         evaluations = unique_index(
             experiment["evaluation_runs"],
             lambda result: (result.get("experiment_run_id"), result.get("name")),
@@ -151,6 +161,32 @@ def validate_source_dataset(source):
                 raise DataMigrationError(
                     f"Experiment {experiment['name']} evaluation references unknown task run {run_id}."
                 )
+
+
+def validate_manifest_sources(manifest):
+    datasets = unique_index(
+        manifest["datasets"],
+        lambda dataset: dataset.get("id"),
+        "Phoenix datasets",
+    )
+    unique_index(
+        manifest["datasets"],
+        lambda dataset: dataset.get("name"),
+        "Phoenix dataset names",
+    )
+    for source in datasets.values():
+        validate_source_dataset(source)
+
+
+def experiment_run_provenance(_experiment, run):
+    return {
+        "phoenix_experiment_run_id": run["id"],
+        "phoenix_trace_id": run.get("trace_id"),
+        "phoenix_repetition_number": run.get("repetition_number"),
+        "phoenix_error": run.get("error"),
+        "phoenix_start_time": run.get("start_time"),
+        "phoenix_end_time": run.get("end_time"),
+    }
 
 
 def phoenix_client(config):
@@ -335,9 +371,10 @@ def replay_versions(client, dataset, source, space, state, checkpoint):
                         f"Dataset {source['name']} version {index} has no retained example to fork in AX."
                     )
                 first = common[0]
+                previous_version_id = version_map[versions[index - 2]["id"]]
                 fork = client.datasets.update_examples(
                     dataset=dataset.id,
-                    dataset_version_id=next(reversed(version_map.values())),
+                    dataset_version_id=previous_version_id,
                     new_version=version_name,
                     examples=[{"id": current[first].id, **ax_row(target[first])}],
                 )
@@ -388,13 +425,7 @@ def import_experiment(client, dataset, experiment, examples, prefix):
         row = {
             "example_id": examples[source_example_id].id,
             "output": canonical(run.get("output")),
-            "phoenix_experiment_run_id": run["id"],
-            "phoenix_trace_id": run.get("trace_id"),
-            "phoenix_repetition_number": run.get("repetition_number"),
-            "phoenix_error": run.get("error"),
-            "phoenix_start_time": run.get("start_time"),
-            "phoenix_end_time": run.get("end_time"),
-            "phoenix_experiment_metadata": canonical(experiment.get("metadata") or {}),
+            **experiment_run_provenance(experiment, run),
         }
         seen_names = set()
         for result in evaluations[run["id"]]:
@@ -431,6 +462,7 @@ def import_experiment(client, dataset, experiment, examples, prefix):
 def import_data(config, path, prefix):
     require(config, ["ARIZE_API_KEY", "ARIZE_SPACE_ID"])
     manifest = load(path)
+    validate_manifest_sources(manifest)
     client = ax_client(config)
     state = manifest["state"]
 
@@ -438,7 +470,6 @@ def import_data(config, path, prefix):
         save_manifest(path, manifest)
 
     for source in manifest["datasets"]:
-        validate_source_dataset(source)
         name = prefix + source["name"]
         entry = state.setdefault(
             source["id"],
@@ -512,9 +543,9 @@ def import_data(config, path, prefix):
                 item for item in existing_experiments if item.name == destination_name
             ]
             if mapping:
-                if not any(item.id == mapping["id"] for item in matched):
+                if len(matched) != 1 or matched[0].id != mapping["id"]:
                     raise DataMigrationError(
-                        f"Recorded destination experiment is not readable: {destination_name}"
+                        f"Recorded destination experiment is missing or ambiguous: {destination_name}"
                     )
                 continue
             if len(matched) == 1:
@@ -539,6 +570,7 @@ def import_data(config, path, prefix):
 def verify_data(config, path):
     require(config, ["ARIZE_API_KEY", "ARIZE_SPACE_ID"])
     manifest = load(path)
+    validate_manifest_sources(manifest)
     client = ax_client(config)
     differences = []
     totals = {
@@ -549,13 +581,37 @@ def verify_data(config, path):
         "runs": 0,
         "evaluations": 0,
     }
+    source_dataset_ids = {source["id"] for source in manifest["datasets"]}
+    state_dataset_ids = set(manifest["state"])
+    for source_id in sorted(source_dataset_ids - state_dataset_ids):
+        differences.append(f"manifest missing dataset mapping {source_id}")
+    for source_id in sorted(state_dataset_ids - source_dataset_ids):
+        differences.append(f"manifest has unexpected dataset mapping {source_id}")
+    destination_dataset_ids = [
+        state.get("dataset_id")
+        for state in manifest["state"].values()
+        if state.get("dataset_id")
+    ]
+    if len(destination_dataset_ids) != len(set(destination_dataset_ids)):
+        differences.append("manifest has duplicate destination dataset mappings")
     for source in manifest["datasets"]:
-        validate_source_dataset(source)
         state = manifest["state"].get(source["id"])
         if not state:
             differences.append(f"dataset {source['name']} was not imported")
             continue
         totals["datasets"] += 1
+        latest_destination_examples = None
+        source_version_ids = {version["id"] for version in source["versions"]}
+        mapped_version_ids = set(state["version_ids"])
+        if source_version_ids != mapped_version_ids:
+            differences.append(
+                f"dataset {source['name']} version mapping IDs differ"
+            )
+        destination_version_ids = list(state["version_ids"].values())
+        if len(destination_version_ids) != len(set(destination_version_ids)):
+            differences.append(
+                f"dataset {source['name']} has duplicate destination version mappings"
+            )
         for version in source["versions"]:
             destination_id = state["version_ids"].get(version["id"])
             if not destination_id:
@@ -565,6 +621,8 @@ def verify_data(config, path):
                 continue
             totals["versions"] += 1
             actual = destination_examples(client, state["dataset_id"], destination_id)
+            if version["id"] == source["versions"][-1]["id"]:
+                latest_destination_examples = actual
             expected_examples = unique_index(
                 version["examples"],
                 lambda example: example.get("source_global_id"),
@@ -594,6 +652,17 @@ def verify_data(config, path):
             lambda mapping: mapping.get("source_id"),
             f"Dataset {source['name']} experiment mappings",
         )
+        destination_experiment_ids = [
+            mapping.get("id") for mapping in state["experiments"]
+        ]
+        if any(not value for value in destination_experiment_ids):
+            raise DataMigrationError(
+                f"Dataset {source['name']} experiment mapping has a missing destination identity."
+            )
+        if len(destination_experiment_ids) != len(set(destination_experiment_ids)):
+            differences.append(
+                f"dataset {source['name']} has duplicate destination experiment mappings"
+            )
         missing_mappings = sorted(set(by_source) - set(mapped))
         extra_mappings = sorted(set(mapped) - set(by_source))
         for source_id in missing_mappings:
@@ -643,6 +712,22 @@ def verify_data(config, path):
                     differences.append(
                         f"experiment {expected['name']} run {source_run} output differs"
                     )
+                source_example_id = task_run.get("dataset_example_id")
+                destination_example = (latest_destination_examples or {}).get(
+                    source_example_id
+                )
+                if (
+                    destination_example is None
+                    or run.example_id != destination_example.id
+                ):
+                    differences.append(
+                        f"experiment {expected['name']} run {source_run} example relationship differs"
+                    )
+                provenance = experiment_run_provenance(expected, task_run)
+                if any(props.get(field) != value for field, value in provenance.items()):
+                    differences.append(
+                        f"experiment {expected['name']} run {source_run} provenance differs"
+                    )
                 for name, result in expected_evals[source_run].items():
                     value = result.get("result") or {}
                     if (
@@ -656,6 +741,23 @@ def verify_data(config, path):
                         differences.append(
                             f"experiment {expected['name']} run {source_run} evaluation {name} differs"
                         )
+                expected_eval_fields = {
+                    f"eval.{name}.{field}"
+                    for name in expected_evals[source_run]
+                    for field in (
+                        "score",
+                        "label",
+                        "explanation",
+                        "metadata.phoenix_migration",
+                    )
+                }
+                actual_eval_fields = {
+                    field for field in props if field.startswith("eval.")
+                }
+                if actual_eval_fields != expected_eval_fields:
+                    differences.append(
+                        f"experiment {expected['name']} run {source_run} evaluation fields differ"
+                    )
     return {
         "status": "verified" if not differences else "different",
         **totals,
