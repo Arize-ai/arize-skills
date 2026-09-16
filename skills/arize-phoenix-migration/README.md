@@ -2,7 +2,7 @@
 
 Ask your coding agent to migrate Phoenix to AX using the Phoenix migration skill and give it the path to your local configuration. The agent inventories the source, helps you choose the scope and destination names, then handles setup, upload, and verification after you say `go`.
 
-You can simply provide the local configuration and ask to migrate Phoenix to AX. The agent first reads Phoenix and reports what it finds, including counts for each supported resource. It offers all, trace-only, data-only, and selected-resource choices together with suggested destination names and the expected wait. Reply `go` to accept all supported discovered data and the suggestions, or name a subset and say `go`. The agent then completes and verifies the migration without another confirmation.
+You can simply provide the local configuration and ask to migrate Phoenix to AX. The agent reads Phoenix, resolves the configured AX space to its name, and checks proposed destination names without creating anything. It presents a short `Found in Phoenix` and `Will write to AX` summary, followed by one bold, underlined decision question with copyable answers. Reply `go` to accept all supported discovered data and the proposed AX space/project/prefix, or name a subset and say `go`. The agent then completes and verifies the migration without another confirmation.
 
 ## Local credentials
 

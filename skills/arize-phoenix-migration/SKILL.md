@@ -18,11 +18,14 @@ Reuse details from the request and configured environment. First ask only for th
 
 Create owner-only, Git-ignored trace and data manifests in a local working directory. Run the trace `export` command and the data `export` command independently, without destination credentials or upload commands, so failure in one inventory does not discard the other result. These source reads are the inventory and can take a little time on large projects. Report the discovered counts for traces, spans, datasets, versions, example snapshots, experiments, and stored evaluation results. Preserve these manifests so the selected migration can reuse the same fixed snapshots.
 
+Before asking the user to choose, inspect the AX destination with read-only requests. Resolve the configured `ARIZE_SPACE_ID` to its human-readable space name. If no space is configured, list the spaces available to the configured key and offer the names as numbered choices; do not make the user find opaque IDs. If only one space is available, propose it. Run trace preflight with the proposed fresh project name to prove the Phoenix project, AX key, AX space, endpoint configuration, and project-name availability. Check proposed dataset names in the same AX space with read-only SDK list calls and choose a different source-derived prefix if any collide. Read-only AX discovery is allowed before `go`; no destination object may be created.
+
 Present one compact decision after inventory. Include:
 
 - The discovered counts for each supported resource group and any group that could not be inventoried. An inventory error means unknown, not zero; preserve successful inventory results and explain the failed group without exposing server response bodies.
 - The choices: all supported discovered data; traces only; all dataset/experiment data; or named trace IDs/datasets.
 - A suggested fresh trace project name and dataset/experiment prefix derived from the source name when the request or environment does not already provide them. State the suggestions so a plain `go` can accept them.
+- The destination AX space name, with its ID in parentheses only when useful for disambiguation. Say plainly that traces, datasets, experiments, and evaluations will all be written to that space.
 - The current exclusions: evaluator definitions, prompts, tags, attachments, and span/trace/session annotations.
 - The time expectation: upload can take several minutes and AX indexing/verification can take 15 minutes or longer.
 
@@ -32,23 +35,35 @@ If the original request already names the resources, present those as the select
 
 If the user selects individual traces or datasets after the inventory, rerun the applicable export with repeated `--trace-id` or `--dataset` arguments into a new manifest. Do not edit the all-source manifest by hand.
 
+## Make every user decision obvious
+
+Do the technical work and resolve anything available from configuration or read-only APIs. Do not ask the user for commands, IDs the agent can look up, implementation details, or information they already supplied.
+
+Keep the decision message short and scannable. Use these labels with bullets beneath them: `Found in Phoenix`, `Will write to AX`, `Not included`, and `Timing`. Put all questions after the summary. Every question that needs a user answer must be on its own line and both bold and underlined using this exact Markdown form:
+
+```markdown
+**<u>What would you like me to migrate?</u>**
+```
+
+Immediately below each question, give short numbered choices or exact copyable replies. Do not place explanatory paragraphs after the choices. Ask at most three questions in one message, and prefer one combined question. When configuration is missing, use the same format, state where the user should add it, and ask only for the local file path or a numbered choice. Never bury a question inside a paragraph or end a status sentence with a question mark.
+
 Explain how to configure missing credentials locally in environment variables or a Git-ignored `.env`. Never echo credentials, place them in command arguments, or copy them to reports. Prefer a user-created existing `.env` and request its path. Never embed literal keys in displayed tool requests or generated shell/Python commands, including heredocs; writing to a file without stdout still exposes command contents. Avoid patch/edit tools that echo secret values. If your available tools cannot write secrets without displaying them, ask the user to configure the local file themselves. Keep the file owner-only (for example, `chmod 600` on Unix). Load an explicitly chosen environment file through the helper; do not print or source its contents. See [configuration and migration details](references/migration.md) for variable names and examples.
 
 If the user only supplies a space name, optionally use an already configured ax CLI for discovery: `ax spaces list -o json` or `ax spaces get "<space-name>" -o json`. Run `ax spaces --help` if command syntax differs. Reuse the user's configured CLI authentication; never put keys in CLI arguments. Without the CLI, resolve the name through AX APIs. Ask the user to choose if multiple spaces match. Use a fresh destination project; suggest a source-derived name when none is specified and establish that destination with the user. Do not ask about the separate AX button, feature flags, or browser tokens.
 
 ## Wait for the migration decision
 
-Include the time expectation in the inventory-and-scope question above, before running any destination preflight or upload command. Verification may wait up to 15 minutes for indexing, and readback or larger projects can take longer; do not promise a fixed completion time.
+Include the time expectation in the inventory-and-scope question above, before creating destinations or uploading data. Verification may wait up to 15 minutes for indexing, and readback or larger projects can take longer; do not promise a fixed completion time.
 
 For example: "I found 1,107 traces and one dataset with two versions, one experiment, and three stored evaluations. Upload can take several minutes, and AX indexing and verification can take 15 minutes or longer. Reply `go` to migrate all supported data using project `source-ax-migration` and prefix `source-ax-`, or tell me which listed resources to migrate and say `go`."
 
-Wait for the user's decision and approval before accessing AX or starting import commands. Local dependency setup and read-only Phoenix inventory are allowed before this approval because they are needed to present the choice. The initial request to migrate authorizes the inventory but does not authorize destination writes. Once the user says `go` as described above, proceed through preflight, import, and verification without another confirmation. A read-only planning request stops after inventory.
+Wait for the user's decision and approval before creating objects in AX or starting import commands. Local dependency setup plus read-only Phoenix and AX discovery are allowed before this approval because they are needed to present the choice and destination. The initial request to migrate authorizes discovery but does not authorize destination writes. Once the user says `go` as described above, proceed through import and verification without another confirmation. A read-only planning request stops after discovery.
 
 ## Run the migration
 
 Locate this installed skill's root and run its bundled commands by absolute path, so they work from any workspace. Check the chosen interpreter is Python 3.10 or later before creating an isolated environment or installing the [helper dependencies](scripts/requirements.txt). Use an available compatible interpreter if the default is older.
 
-1. Run `scripts/migrate.py preflight` with the user's local configuration and chosen trace destination. Present a short source/destination summary. Missing configuration returns `needs_input`; ask for those fields. A dry-run or planning request has already stopped after source inventory and does not access AX.
+1. Reuse the successful `scripts/migrate.py preflight` result from destination discovery. If the user changed the space or project name, rerun preflight and present the corrected destination briefly. Missing configuration returns `needs_input`; ask for those fields using the question format above. A dry-run or planning request has already stopped after read-only discovery.
 2. For traces, reuse the applicable inventory manifest and run `scripts/migrate.py import`, then `verify`. The export captured every page under a fixed snapshot boundary. For selected complete traces, use the newly filtered manifest created with repeated `--trace-id` arguments.
 3. For datasets and experiment evaluations, reuse the applicable inventory manifest and run `scripts/migrate_data.py import`, then `verify`. Use the newly filtered manifest created with repeated `--dataset <name-or-id>` arguments when the user selected datasets. Use `--prefix <value>` during import to avoid destination name collisions.
 4. Only report a nonempty migration complete when both applicable verification commands return `verified`. Keep original manifests for evidence and recovery. Report unsupported or differing records explicitly.
