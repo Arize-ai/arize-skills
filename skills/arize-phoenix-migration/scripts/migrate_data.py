@@ -12,6 +12,7 @@ import time
 from collections import defaultdict
 from dataclasses import asdict, is_dataclass
 from datetime import date, datetime
+from itertools import pairwise
 from pathlib import Path
 
 from dotenv import dotenv_values
@@ -111,15 +112,30 @@ def evaluation_provenance(result):
 
 def validate_source_dataset(source):
     versions = source["versions"]
+    if not versions:
+        raise DataMigrationError(f"Dataset {source['name']} has no versions.")
     version_ids = unique_index(
         versions, lambda version: version.get("id"), f"Dataset {source['name']} versions"
     )
+    version_example_ids = []
     for version in versions:
-        unique_index(
+        examples = unique_index(
             version["examples"],
             lambda example: example.get("source_global_id"),
             f"Dataset {source['name']} version {version['id']} examples",
         )
+        version_example_ids.append(set(examples))
+    if not version_example_ids[0]:
+        raise DataMigrationError(
+            f"Dataset {source['name']} has an empty initial version."
+        )
+    for index, (previous, current) in enumerate(
+        pairwise(version_example_ids), 2
+    ):
+        if not previous & current:
+            raise DataMigrationError(
+                f"Dataset {source['name']} version {index} has no retained example to fork in AX."
+            )
     experiments = unique_index(
         source["experiments"],
         lambda experiment: experiment.get("id"),
@@ -201,6 +217,40 @@ def ax_client(config):
     from migrate import sdk_client
 
     return sdk_client(config)
+
+
+def list_all(method, field, **kwargs):
+    rows = []
+    cursor = None
+    seen = set()
+    while True:
+        response = method(cursor=cursor, **kwargs)
+        rows.extend(getattr(response, field))
+        pagination = getattr(response, "pagination", None)
+        if not pagination or not pagination.has_more:
+            return rows
+        cursor = pagination.next_cursor
+        if not cursor or cursor in seen:
+            raise DataMigrationError(f"AX {field} pagination did not advance.")
+        seen.add(cursor)
+
+
+def exact_datasets(client, name, space):
+    return [
+        item
+        for item in list_all(client.datasets.list, "datasets", name=name, space=space)
+        if item.name == name
+    ]
+
+
+def exact_experiments(client, dataset_id, name):
+    return [
+        item
+        for item in list_all(
+            client.experiments.list, "experiments", dataset=dataset_id
+        )
+        if item.name == name
+    ]
 
 
 def example_record(example):
@@ -500,9 +550,7 @@ def import_data(config, path, prefix):
             raise DataMigrationError(
                 "The import prefix differs from the manifest's recorded destination."
             )
-        existing = client.datasets.list(
-            name=name, space=config["ARIZE_SPACE_ID"]
-        ).datasets
+        existing = exact_datasets(client, name, config["ARIZE_SPACE_ID"])
         if entry["dataset_id"]:
             if not any(item.id == entry["dataset_id"] for item in existing):
                 raise DataMigrationError(
@@ -513,6 +561,10 @@ def import_data(config, path, prefix):
             dataset = existing[0]
             entry["dataset_id"] = dataset.id
             checkpoint()
+        elif entry["create_started"]:
+            raise DataMigrationError(
+                f"Destination dataset create response could not be reconciled: {name}"
+            )
         elif existing:
             raise DataMigrationError(f"Destination dataset already exists: {name}")
         else:
@@ -535,19 +587,15 @@ def import_data(config, path, prefix):
                 (x for x in imported_experiments if x["source_id"] == experiment["id"]),
                 None,
             )
-            existing_experiments = client.experiments.list(
-                dataset=dataset.id
-            ).experiments
             destination_name = prefix + experiment["name"]
-            matched = [
-                item for item in existing_experiments if item.name == destination_name
-            ]
             if mapping:
-                if len(matched) != 1 or matched[0].id != mapping["id"]:
+                recorded = client.experiments.get(experiment=mapping["id"])
+                if recorded.name != destination_name:
                     raise DataMigrationError(
                         f"Recorded destination experiment is missing or ambiguous: {destination_name}"
                     )
                 continue
+            matched = exact_experiments(client, dataset.id, destination_name)
             if len(matched) == 1:
                 result = matched[0]
             elif matched:

@@ -238,6 +238,54 @@ def test_import_reconciles_create_when_response_is_lost(monkeypatch, tmp_path):
     assert data.load(path)["state"]["px-dataset"]["dataset_id"] == "ax-dataset"
 
 
+def test_import_recovery_ignores_substring_dataset_matches(monkeypatch, tmp_path):
+    path = tmp_path / "manifest.json"
+    write_manifest(path, [source_dataset()])
+    manifest = data.load(path)
+    manifest["state"] = {
+        "px-dataset": {
+            "dataset_name": "m-source",
+            "dataset_id": None,
+            "create_started": True,
+            "version_ids": {},
+            "experiments": [],
+        }
+    }
+    data.save_manifest(path, manifest)
+    wrong = SimpleNamespace(id="wrong", name="m-source-copy")
+
+    client = SimpleNamespace(
+        datasets=SimpleNamespace(
+            list=lambda **kwargs: SimpleNamespace(datasets=[wrong]),
+        )
+    )
+    monkeypatch.setattr(data, "ax_client", lambda config: client)
+    with pytest.raises(data.DataMigrationError, match="response could not be reconciled"):
+        data.import_data(
+            {"ARIZE_API_KEY": "secret", "ARIZE_SPACE_ID": "space"}, path, "m-"
+        )
+    assert data.load(path)["state"]["px-dataset"]["dataset_id"] is None
+
+
+def test_exact_dataset_lookup_paginates_and_filters_exact_name():
+    wrong = SimpleNamespace(id="wrong", name="m-source-copy")
+    correct = SimpleNamespace(id="right", name="m-source")
+
+    def list_datasets(cursor=None, **kwargs):
+        if cursor is None:
+            return SimpleNamespace(
+                datasets=[wrong],
+                pagination=SimpleNamespace(has_more=True, next_cursor="second"),
+            )
+        return SimpleNamespace(
+            datasets=[correct],
+            pagination=SimpleNamespace(has_more=False, next_cursor=None),
+        )
+
+    client = SimpleNamespace(datasets=SimpleNamespace(list=list_datasets))
+    assert data.exact_datasets(client, "m-source", "space") == [correct]
+
+
 def test_failed_destination_auth_does_not_lock_prefix(monkeypatch, tmp_path):
     path = tmp_path / "manifest.json"
     write_manifest(path, [source_dataset()])
@@ -520,6 +568,132 @@ def test_import_validates_every_dataset_before_any_destination_write(
         )
     assert called is False
     assert data.load(path)["state"] == {}
+
+
+@pytest.mark.parametrize(
+    ("versions", "message"),
+    [
+        ([], "has no versions"),
+        ([{"id": "empty", "examples": []}], "empty initial version"),
+        (
+            [
+                {"id": "first", "examples": source_dataset()["versions"][0]["examples"]},
+                {
+                    "id": "second",
+                    "examples": [
+                        {
+                            "source_id": "other",
+                            "source_global_id": "other-global",
+                            "input": {},
+                            "output": {},
+                            "metadata": {},
+                        }
+                    ],
+                },
+            ],
+            "no retained example",
+        ),
+    ],
+)
+def test_replay_constraints_stop_before_destination_client(
+    monkeypatch, tmp_path, versions, message
+):
+    source = source_dataset()
+    source["versions"] = versions
+    path = tmp_path / "manifest.json"
+    write_manifest(path, [source])
+    called = False
+
+    def client(_):
+        nonlocal called
+        called = True
+        return SimpleNamespace()
+
+    monkeypatch.setattr(data, "ax_client", client)
+    with pytest.raises(data.DataMigrationError, match=message):
+        data.import_data(
+            {"ARIZE_API_KEY": "secret", "ARIZE_SPACE_ID": "space"}, path, "m-"
+        )
+    assert called is False
+    assert data.load(path)["state"] == {}
+
+
+def test_recorded_experiment_uses_get_instead_of_first_list_page(
+    monkeypatch, tmp_path
+):
+    source = source_with_experiment()
+    path = tmp_path / "manifest.json"
+    write_manifest(path, [source])
+    manifest = data.load(path)
+    manifest["state"] = {
+        source["id"]: {
+            "dataset_name": "m-source",
+            "dataset_id": "ax-dataset",
+            "create_started": True,
+            "version_ids": {"px-version": "ax-version"},
+            "experiments": [
+                {"source_id": "px-experiment", "id": "ax-experiment-51"}
+            ],
+        }
+    }
+    data.save_manifest(path, manifest)
+    dataset = SimpleNamespace(id="ax-dataset", name="m-source")
+    version = SimpleNamespace(id="ax-version", name="initial")
+    example = SimpleNamespace(
+        id="ax-example",
+        additional_properties={"phoenix_example_id": "global"},
+    )
+    calls = []
+
+    experiments = SimpleNamespace(
+        get=lambda **kwargs: calls.append(kwargs)
+        or SimpleNamespace(id="ax-experiment-51", name="m-experiment"),
+        list=lambda **kwargs: (_ for _ in ()).throw(
+            AssertionError("recorded experiments must not use list")
+        ),
+    )
+    client = SimpleNamespace(
+        datasets=SimpleNamespace(
+            list=lambda **kwargs: SimpleNamespace(datasets=[dataset]),
+            get=lambda **kwargs: SimpleNamespace(versions=[version]),
+            list_examples=lambda **kwargs: SimpleNamespace(
+                examples=[example],
+                pagination=SimpleNamespace(has_more=False, next_cursor=None),
+            ),
+        ),
+        experiments=experiments,
+    )
+    monkeypatch.setattr(data, "ax_client", lambda config: client)
+    assert (
+        data.import_data(
+            {"ARIZE_API_KEY": "secret", "ARIZE_SPACE_ID": "space"}, path, "m-"
+        )["status"]
+        == "imported_unverified"
+    )
+    assert calls == [{"experiment": "ax-experiment-51"}]
+
+
+def test_lost_experiment_create_search_paginates_for_exact_name():
+    wrong = SimpleNamespace(id="wrong", name="m-experiment-copy")
+    correct = SimpleNamespace(id="right", name="m-experiment")
+
+    def list_experiments(cursor=None, **kwargs):
+        if cursor is None:
+            return SimpleNamespace(
+                experiments=[wrong],
+                pagination=SimpleNamespace(has_more=True, next_cursor="second"),
+            )
+        return SimpleNamespace(
+            experiments=[correct],
+            pagination=SimpleNamespace(has_more=False, next_cursor=None),
+        )
+
+    client = SimpleNamespace(
+        experiments=SimpleNamespace(list=list_experiments)
+    )
+    assert data.exact_experiments(client, "ax-dataset", "m-experiment") == [
+        correct
+    ]
 
 
 def test_source_rejects_duplicate_experiment_names():
