@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.3.0](https://github.com/Arize-ai/arize-skills/compare/v1.2.0...v1.3.0) (2026-09-17)
+
+
+### Features
+
+* add project URLs to arize-link skill ([#131](https://github.com/Arize-ai/arize-skills/issues/131)) ([5dfbe64](https://github.com/Arize-ai/arize-skills/commit/5dfbe64e47475949bfa9c385e4b707d4682830d0))
+* **arize-instrumentation-health:** health-audit skill, manual-span recipes, Python preflight ([#94](https://github.com/Arize-ai/arize-skills/issues/94)) ([c97ebea](https://github.com/Arize-ai/arize-skills/commit/c97ebeaafd6b2c2a52410a3cd41f9ce03cb6b951))
+* migrate Phoenix datasets and evaluations into AX ([#138](https://github.com/Arize-ai/arize-skills/issues/138)) ([8ced205](https://github.com/Arize-ai/arize-skills/commit/8ced205d8ae20dc757edf44a59ff3e285de298bb))
+* migrate Phoenix traces into Arize AX ([#134](https://github.com/Arize-ai/arize-skills/issues/134)) ([92722c8](https://github.com/Arize-ai/arize-skills/commit/92722c850c56542354ccbb499c83391240bfb948))
+
 ## [1.2.0](https://github.com/Arize-ai/arize-skills/compare/v1.1.0...v1.2.0) (2026-07-29)
 
 
