@@ -53,3 +53,49 @@ The verify CLI writes throttled redacted progress JSON to stderr and one final r
 Phoenix project/export and AX destination/readback failures identify the service and stage. A key with read but no ingestion permission fails upload and leaves a definitely rejected batch pending. A key without destination read permission cannot pass preflight or start import, even if it has ingestion permission. If spans were already submitted and verification receives HTTP 401/403 or a missing/inaccessible destination returns 404, report uploaded_unverified with the readback error and keep the manifest for verification after credentials are corrected. Never infer ingestion permission from preflight or verified success from an accepted upload.
 
 An empty snapshot returns empty with zero counts and no API request or destination creation for import/verify. It is a no-upload outcome, not a verified nonempty migration. Local manifests are checksum-validated even in this case.
+
+## Investigating unexpected behavior
+
+Use this fallback when the observed API, SDK, endpoint, permission, or schema behavior is not covered above:
+
+1. Stop destination mutations. Keep the environment file and original manifests unchanged, record which stage failed, and determine whether the last request was read-only, definitely rejected, or ambiguously accepted.
+2. Remove keys, tokens, payload values, private hostnames, and resource IDs from the error. Search the sanitized error together with the operation and installed package version.
+3. Prefer current primary sources: [Phoenix documentation](https://arize.com/docs/phoenix), [AX documentation](https://arize.com/docs/ax), and source or release information in the official [`Arize-ai/phoenix`](https://github.com/Arize-ai/phoenix), [`Arize-ai/arize`](https://github.com/Arize-ai/arize), and [`Arize-ai/arize-skills`](https://github.com/Arize-ai/arize-skills) repositories. Do not rely on search-result snippets, third-party tutorials, or generated answers for migration behavior.
+4. Compare the documentation with the installed dependency version and inspect the installed client's public signatures when necessary. A newer documentation page does not establish that an older installed SDK supports the same argument or response shape.
+5. For a documented configuration correction, rerun the read-only preflight. Before resuming a write, repeat destination ownership and collision checks and follow the existing manifest state. Never delete the manifest or blindly replay an uncertain request.
+6. Report the diagnosis, the official source link, what remains unchanged, and the next safe action. If official sources do not resolve the issue, stop with the recovery state intact and ask the user one concise question for the specific missing fact or permission.
+
+Common cases:
+
+| Symptom | Safe next step |
+|---|---|
+| `401` or `403` | Check the documented credential type, scope, region, and required read or ingestion permission. Do not retry unchanged credentials. |
+| `404` or an invisible destination | Confirm the documented API host/region and the selected organization, space, project, or dataset through read-only discovery. Do not assume the object is absent. |
+| `409` or a name collision | Inventory the destination again and establish a fresh name. Do not attach the migration to an unrelated existing object. |
+| `408`, `429`, `5xx`, disconnect, or timeout | Classify whether the request was read-only or a write. Reconcile a write through readback before retrying; retain bounded retries only for read-only requests. |
+| SDK argument, response, or import mismatch | Compare the pinned installed version with its official documentation and public local signature. Do not guess fields or silently drop them. |
+| Unsupported relationship or schema | Stop before writes rather than flattening, coercing, or associating records incorrectly. Report the unsupported resource. |
+| Slow or partial trace readback | Continue bounded verification against the historical window. Do not re-upload while indexing is incomplete. |
+| Pagination, version-limit, or duplicate-identity guard | Preserve the manifest and investigate the documented API boundary. Do not claim a complete export or verification. |
+
+## Dataset and experiment evaluation commands
+
+Use a separate manifest for non-trace data:
+
+```bash
+python scripts/migrate_data.py export --env-file /private/path/.env --manifest /private/path/data.json
+python scripts/migrate_data.py import --env-file /private/path/.env --manifest /private/path/data.json --prefix migrated-
+python scripts/migrate_data.py verify --env-file /private/path/.env --manifest /private/path/data.json
+```
+
+Repeat `--dataset <name-or-id>` during export to select datasets. With no selection, all Phoenix datasets are exported. The export walks dataset versions oldest to newest and includes each version's full example snapshot, experiments, task runs, and stored evaluation runs. The manifest is checksummed and owner-only.
+
+AX assigns new dataset example and experiment run IDs. The helper stores Phoenix IDs in destination fields, builds the required ID mapping, and verifies relationships through AX readback. Nested input, output, and metadata remain separate canonical JSON strings to prevent leaf-name collisions. Evaluation results become native `eval.<name>.score`, `label`, and `explanation` fields; Phoenix provenance remains evaluation metadata.
+
+The import requires a nonempty initial dataset version and at least one retained example between successive versions so AX can fork version history. It stops rather than silently flattening data or dropping a revision. Phoenix's client exposes at most 100 dataset versions without a continuation cursor, so the helper stops when that boundary is reached rather than risk an incomplete export. Destination dataset and experiment names must be fresh; use `--prefix` when appropriate.
+
+AX experiment creation does not accept a dataset-version ID. An experiment linked to any Phoenix revision other than the imported latest version therefore stops before destination writes rather than being attached to the wrong version. The helper rejects duplicate source or destination example/run identities, verifies the complete source-to-destination experiment mapping set, and compares evaluation provenance metadata exactly.
+
+The helper checkpoints destination IDs and version mappings in the manifest. If a request fails or its response is lost, rerun the same import command with the same manifest and prefix. It reconciles destination objects by their recorded IDs and deterministic migration names, and reads the current version contents before applying only the remaining changes. Do not delete or edit the manifest between attempts.
+
+This workflow does not execute evaluators or incur model costs. It does not currently migrate evaluator definitions, prompts, tags, attachments, span/trace/session annotations, dataset/version descriptions, or dataset/version/experiment metadata because the applicable AX create APIs do not represent them.

@@ -34,6 +34,11 @@ SPECIFIC_PROMPTS = [
         ["arize-phoenix-migration"],
         ["specific", "phoenix-migration"],
     ),
+    (
+        "Move my Phoenix datasets, experiments, and saved evaluation results to AX",
+        ["arize-phoenix-migration"],
+        ["specific", "phoenix-migration"],
+    ),
     # arize-trace
     (
         "Export the traces from my project for the last 24 hours",
