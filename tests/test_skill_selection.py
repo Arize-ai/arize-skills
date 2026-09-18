@@ -178,6 +178,22 @@ SPECIFIC_PROMPTS = [
         ["arize-link"],
         ["specific", "link"],
     ),
+    # arize-dashboard
+    (
+        "Build me an LLM observability dashboard for my support-agent project",
+        ["arize-dashboard"],
+        ["specific", "dashboard"],
+    ),
+    (
+        "Create a dashboard showing my eval scores over time",
+        ["arize-dashboard"],
+        ["specific", "dashboard"],
+    ),
+    (
+        "List the dashboards in my space",
+        ["arize-dashboard"],
+        ["specific", "dashboard"],
+    ),
     # arize-evaluator
     (
         "Create an LLM-as-judge evaluator for hallucination detection",
