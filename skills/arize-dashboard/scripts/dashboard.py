@@ -299,20 +299,22 @@ def widget_mutation(widget, dashboard_id, project_id):
     if kind == "statistic":
         payload["aggregation"] = widget.get("aggregation", "count")
         return CREATE_STATISTIC_WIDGET, {"input": payload}
-
-    plot = {
-        "modelId": project_id,
-        "modelVersionIds": [],
-        "modelEnvironmentName": payload["modelEnvironmentName"],
-        "dimension": widget["dimension"],
-        "dimensionCategory": widget["dimensionCategory"],
-        "metric": widget.get("metric", "count"),
-        "title": widget["title"],
-        "position": 0,
-        "filters": [],
-    }
-    line = {k: payload[k] for k in ("dashboardId", "title", "creationStatus", "timeSeriesMetricType")}
-    if grid:
-        line["gridPosition"] = grid
-    line["plots"] = [plot]
-    return CREATE_LINE_CHART_WIDGET, {"input": line}
+    elif kind == "lineChart":
+        plot = {
+            "modelId": project_id,
+            "modelVersionIds": [],
+            "modelEnvironmentName": payload["modelEnvironmentName"],
+            "dimension": widget["dimension"],
+            "dimensionCategory": widget["dimensionCategory"],
+            "metric": widget.get("metric", "count"),
+            "title": widget["title"],
+            "position": 0,
+            "filters": [],
+        }
+        line = {k: payload[k] for k in ("dashboardId", "title", "creationStatus", "timeSeriesMetricType")}
+        if grid:
+            line["gridPosition"] = grid
+        line["plots"] = [plot]
+        return CREATE_LINE_CHART_WIDGET, {"input": line}
+    else:
+        raise SpecError(f"Widget '{widget.get('title', '<untitled>')}' has unsupported type '{kind}'. Supported: {', '.join(WIDGET_TYPES)}.")

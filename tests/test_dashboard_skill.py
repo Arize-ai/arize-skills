@@ -320,3 +320,46 @@ def test_unplaced_widget_omits_grid_position():
          "dimension": {"id": "d", "name": "n", "dataType": "STRING"}, "dimensionCategory": "spanProperty"},
         "dash-1", "proj-1")
     assert "gridPosition" not in variables["input"]
+
+
+def test_line_chart_widget_mutation_nests_plot_fields():
+    widget = {
+        "type": "lineChart", "title": "Accuracy Over Time", "metric": "count",
+        "dimension": {"id": "d", "name": "timestamp", "dataType": "TIMESTAMP"},
+        "dimensionCategory": "spanProperty",
+        "row": 1, "col": 1, "width": 6, "height": 4,
+    }
+    query, variables = dashboard.widget_mutation(widget, "dash-1", "proj-1")
+    assert "createLineChartWidget" in query
+    payload = variables["input"]
+    assert len(payload["plots"]) == 1
+    plot = payload["plots"][0]
+    assert plot["modelId"] == "proj-1"
+    assert plot["dimension"]["name"] == "timestamp"
+    assert plot["dimensionCategory"] == "spanProperty"
+    assert plot["metric"] == "count"
+    # Critical: these must NOT be at top level
+    assert "modelId" not in payload
+    assert "dimension" not in payload
+    assert "dimensionCategory" not in payload
+    assert payload["creationStatus"] == "published"
+
+
+def test_unplaced_line_chart_omits_grid_position():
+    widget = {
+        "type": "lineChart", "title": "auto", "metric": "count",
+        "dimension": {"id": "d", "name": "n", "dataType": "TIMESTAMP"},
+        "dimensionCategory": "spanProperty",
+    }
+    query, variables = dashboard.widget_mutation(widget, "dash-1", "proj-1")
+    assert "gridPosition" not in variables["input"]
+
+
+def test_widget_mutation_rejects_unsupported_type():
+    widget = {
+        "type": "barChart", "title": "Chart", "metric": "count",
+        "dimension": {"id": "d", "name": "n", "dataType": "STRING"},
+        "dimensionCategory": "spanProperty",
+    }
+    with pytest.raises(dashboard.SpecError, match="barChart"):
+        dashboard.widget_mutation(widget, "dash-1", "proj-1")
