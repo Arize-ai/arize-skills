@@ -96,23 +96,42 @@ def test_terminal_default_falls_back_to_config_toml(tmp_path):
     assert cfg["api_key"] == "config-key"
 
 
-def test_explicit_profile_missing_raises_error(tmp_path):
-    """Explicit --profile argument to missing file raises ConfigError with profile name."""
+def test_explicit_profile_missing_does_not_silently_load_config_toml(tmp_path):
+    """Regression test: explicit --profile must not fall back to config.toml.
+
+    This test guards against deletion of the _profile_name_is_explicit gate.
+    A populated config.toml with distinguishable credentials exists, but
+    profiles/staging.toml does not. The explicit profile request must error,
+    not silently load the config.toml's credentials.
+    """
+    (tmp_path / "config.toml").write_text('[profile]\nname = "default"\n\n[auth]\napi_key = "config-toml-key"\n\n[routing]\napi_host = "api.arize.com"\napp_scheme = "https"\n')
     with pytest.raises(dashboard.ConfigError) as excinfo:
         dashboard.load_profile(tmp_path, profile="staging", environ={})
+    # The key assertion: an error was raised. We do not check for config-toml-key
+    # in the loaded config because the file should never be read.
     assert "staging" in str(excinfo.value)
 
 
-def test_marker_file_missing_profile_raises_error(tmp_path):
-    """Marker file pointing to missing profile raises ConfigError."""
+def test_marker_file_missing_profile_does_not_silently_load_config_toml(tmp_path):
+    """Regression test: .active_profile marker must not fall back to config.toml.
+
+    A populated config.toml exists but the profile it points to does not.
+    Must raise ConfigError, not silently load config.toml.
+    """
+    (tmp_path / "config.toml").write_text('[profile]\nname = "default"\n\n[auth]\napi_key = "config-toml-key"\n\n[routing]\napi_host = "api.arize.com"\napp_scheme = "https"\n')
     (tmp_path / ".active_profile").write_text("nonexistent")
     with pytest.raises(dashboard.ConfigError) as excinfo:
         dashboard.load_profile(tmp_path, profile=None, environ={})
     assert "nonexistent" in str(excinfo.value)
 
 
-def test_env_var_missing_profile_raises_error(tmp_path):
-    """ARIZE_PROFILE env var pointing to missing profile raises ConfigError."""
+def test_env_var_missing_profile_does_not_silently_load_config_toml(tmp_path):
+    """Regression test: ARIZE_PROFILE env var must not fall back to config.toml.
+
+    A populated config.toml exists but the profile it points to does not.
+    Must raise ConfigError, not silently load config.toml.
+    """
+    (tmp_path / "config.toml").write_text('[profile]\nname = "default"\n\n[auth]\napi_key = "config-toml-key"\n\n[routing]\napi_host = "api.arize.com"\napp_scheme = "https"\n')
     with pytest.raises(dashboard.ConfigError) as excinfo:
         dashboard.load_profile(tmp_path, profile=None, environ={"ARIZE_PROFILE": "staging"})
     assert "staging" in str(excinfo.value)
