@@ -53,13 +53,15 @@ Every widget needs `type` and `title`. `type` must be one of `text`, `statistic`
 ```json
 {
   "type": "lineChart",
-  "title": "Accuracy Over Time",
-  "metric": "count",
-  "dimension": { "id": "d", "name": "timestamp", "dataType": "TIMESTAMP" },
-  "dimensionCategory": "spanProperty",
+  "title": "Correctness Over Time",
+  "metric": "avg",
+  "dimension": { "id": "ev__correctness", "name": "correctness", "dataType": "STRING" },
+  "dimensionCategory": "llmEval",
   "row": 1, "col": 1, "width": 6, "height": 4
 }
 ```
+
+(Time is always the chart's x-axis — a `lineChart` widget doesn't need a separate time dimension; `dimension`/`dimensionCategory`/`metric` say *what* is plotted over time, here the `correctness` eval's average score.)
 
 Same `dimension`/`dimensionCategory` contract as `statistic`. `metric` defaults to `"count"` if omitted; see [graphql.md](graphql.md) for the `Metric` enum. Unlike `statistic`, this shape stays flat in the spec — `dashboard.py` nests `dimension`/`dimensionCategory`/`metric` into the mutation's `plots` array for you; you never write `plots` by hand. Placement is optional, same as `statistic`.
 

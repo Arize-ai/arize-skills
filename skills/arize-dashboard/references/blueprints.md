@@ -8,7 +8,7 @@ A blueprint is this skill's opinion about which widgets a spec should contain fo
 
 **Base:** `createDashboardFromTemplate` with `template: generativeLlmModelV2` — Arize's own "Tracing Project Overview" template. This gives the dashboard the standard set of tracing panels (volume, latency, span counts, etc.) without the skill having to reconstruct them from discovery.
 
-**Augmentation:** Add one `statistic` widget per eval in `discover`'s `llmEvals`, using each eval's `aggregation` (default `avg`, since eval scores are usually judged on an average) so the user sees eval performance alongside the template's tracing panels.
+**Augmentation:** Add one `statistic` widget per eval in `discover`'s `llmEvals`, setting `aggregation: "avg"` explicitly (the script's `aggregation` default is `"count"` — see [spec-format.md](spec-format.md) — which would silently ship a *count* widget mislabeled as an eval score if you omit it) so the user sees eval performance alongside the template's tracing panels.
 
 **Placement:** Because a template-created dashboard's own widget layout isn't fully known to this skill (see the template-widget-IDs note in [graphql.md](graphql.md)), omit `row`/`col`/`width`/`height` on the augmenting statistics so the backend auto-places them instead of risking a collision with the template's widgets.
 
@@ -18,9 +18,9 @@ A blueprint is this skill's opinion about which widgets a spec should contain fo
 
 **Base:** `createDashboardFromTemplate` with `template: generativeLlmModel` — Arize's "Token Tracking and Latency" template, which already covers token counts and latency distributions.
 
-**Augmentation:** Same pattern as `overview` — add a `statistic` per relevant discovered eval or custom metric that bears on cost/latency (e.g. a `customMetrics` entry named for cost-per-call), again with no `row`/`col`/`width`/`height` so it auto-places.
+**Augmentation:** Add a `statistic` widget (`aggregation: "avg"`, explicit — see the `overview` note above on why the default is wrong here) per relevant discovered eval from `llmEvals`, again with no `row`/`col`/`width`/`height` so it auto-places. **Do not augment from `customMetrics`** — despite a metric's name suggesting "cost per call," a `customMetrics` entry is not usable as a widget `dimension`, and `dashboard.py` does not wire the separate field custom metrics actually require. See the "Custom metrics are not widget dimensions" limitation in [graphql.md](graphql.md) before reaching for one. If the user specifically wants a cost metric surfaced and it isn't already on the `generativeLlmModel` template, tell them this script can't build that panel yet rather than guessing at a spec that will fail on `apply`.
 
-**Why augment at all:** The template covers the generic case; the augmentation is what makes the dashboard specific to *this* project's actual evals and metrics rather than a stock page.
+**Why augment at all:** The template covers the generic case; the augmentation is what makes the dashboard specific to *this* project's actual evals rather than a stock page.
 
 ## `eval-health`
 
@@ -43,4 +43,4 @@ A blueprint is this skill's opinion about which widgets a spec should contain fo
 
 **Base:** None by default — compose from `createDashboard` (plain, unNamed-template dashboard) unless the user's goal maps cleanly onto one of Arize's other templates (e.g. `regression`, `ranking`, `multiclass` — out of scope for this skill's other blueprints, but reachable here if you pass that template name explicitly in `dashboard.template`).
 
-**Composition:** Take the user's stated goal, map it onto the dimensions `discover` actually returned (`spanProperties`, `llmEvals`, `annotations`, `customMetrics`), and build only the widgets that goal calls for. Confirm the resulting widget list with the user before applying if the goal was ambiguous — do not pad it out with panels they didn't ask for.
+**Composition:** Take the user's stated goal, map it onto the dimensions `discover` actually returned (`spanProperties`, `llmEvals`, `annotations`), and build only the widgets that goal calls for. `customMetrics` entries are informational only — `discover` returns them so you and the user can see what exists, but `dashboard.py` cannot build a widget from one directly (see [graphql.md](graphql.md)); if the goal needs a custom metric surfaced, say so and stop rather than guessing a spec that will fail on `apply`. Confirm the resulting widget list with the user before applying if the goal was ambiguous — do not pad it out with panels they didn't ask for.

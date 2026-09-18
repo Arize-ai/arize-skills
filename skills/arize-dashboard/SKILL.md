@@ -53,7 +53,7 @@ Before building anything, make sure the user knows these two things — they are
    ```bash
    python3 skills/arize-dashboard/scripts/dashboard.py discover --project PROJECT_ID
    ```
-   This returns `spanProperties`, `llmEvals`, `annotations`, and `customMetrics`, each already shaped for reuse as a widget `dimension`. Default lookback is 30 days; pass `--days N` to widen or narrow it.
+   This returns `spanProperties`, `llmEvals`, and `annotations`, each already shaped for reuse as a widget `dimension` — and `customMetrics`, which is informational only: `{id, name}` pairs you can show the user, but **not** something a `statistic`/`lineChart` widget's `dimension` field can be built from (see the custom-metrics limitation in [references/graphql.md](references/graphql.md)). Default lookback is 30 days; pass `--days N` to widen or narrow it.
 3. **Pick a blueprint** from the table below and read its full definition in [references/blueprints.md](references/blueprints.md).
 4. **Write a spec** following [references/spec-format.md](references/spec-format.md), using only dimensions that `discover` actually returned.
 5. **Dry-run it:**

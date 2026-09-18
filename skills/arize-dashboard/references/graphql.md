@@ -44,7 +44,7 @@ Arize supports six widget types with full CRUD. **This skill's script wires thre
 `dashboard.py discover` queries a project (a `Model` node) directly:
 
 - `Model.tracingSchema(startTime, endTime)` → `spanProperties(first: 200)`, `llmEvals(first: 100)`, `annotations(first: 100)`, each a connection of nodes carrying a `dimension`.
-- `Model.customMetrics(first: 50)` → `{ id, name }` pairs, no `dimension` wrapper.
+- `Model.customMetrics(first: 50)` → `{ id, name }` pairs, no `dimension` wrapper — informational only; see **Known limitation: custom metrics are not widget dimensions** below before treating one as buildable.
 
 Each `dimension` carries `id`, `name`, `dataType`, and `category`. These four fields map directly onto GraphQL's `DimensionInput` (minus `category`, which becomes the widget's separate `dimensionCategory` field — see [spec-format.md](spec-format.md)). Discovery defaults to a 30-day window (`discover --days N` to change it); a project with no traffic in that window will legitimately return empty lists, not an error.
 
@@ -66,6 +66,14 @@ A `lineChart` widget's create input has **no top-level `modelId`, `dimension`, o
 1. **No dashboard-level time mutation.** There is no mutation to set a dashboard's default time range; a newly created dashboard opens on Arize's default window and the user adjusts it with the UI time picker. *However*, individual `lineChart` widgets accept `overwriteGlobalTime` plus `startTime`/`endTime`/`timeRangeKey`/`timeSeriesDataGranularity` on their plot, so a single chart *can* pin its own range independent of the dashboard. `dashboard.py` does not currently set these fields.
 2. **No hard delete.** There is no `deleteDashboard` mutation in the schema. `dashboard.py delete` calls `updateDashboardStatus` with `status: "deleted"`, gated behind `--confirm`. There is no undo through this API once that mutation runs.
 3. **`gridPosition` is never hand-written.** See the `gridPosition` section above and [spec-format.md](spec-format.md) — specs use `row`/`col`/`width`/`height`; the script converts.
+
+## Known limitation: custom metrics are not widget dimensions
+
+This is confirmed against Arize's schema, not a guess — unlike the two items below.
+
+A custom metric does **not** attach to a widget through `dimension`/`dimensionCategory` the way a span property, eval, or annotation does. `CreateStatisticWidgetMutationInput` has a **separate** `customMetric: CustomMetricInput` field for this, and `CustomMetricInput` requires `id`, `name`, **`metric`** (the metric expression string, e.g. `'AVG(predictionScore)'`), and **`requiresPositiveClass`** — none of which `discover` fetches (`Model.customMetrics` returns only `{id, name}`, per the Discovery section above) and none of which `widget_mutation()` wires up.
+
+**Practical consequence:** treat `discover`'s `customMetrics` list as informational — something to show the user ("this project also has a `cost_per_call` custom metric") — never as a source for a widget's `dimension` field. Putting a `customMetrics` entry's `id`/`name` into a `dimension` object passes `validate_spec` (which only checks the fields are truthy) and `--dry-run`, then fails with a `GraphQLError` on the real `apply`, because the resulting mutation references a dimension that doesn't exist. Wiring `customMetric` support into `dashboard.py` is a follow-up, not something to work around by hand today.
 
 ## Unverified assumptions — confirm against a live app
 
