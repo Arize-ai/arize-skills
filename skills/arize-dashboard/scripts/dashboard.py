@@ -318,3 +318,87 @@ def widget_mutation(widget, dashboard_id, project_id):
         return CREATE_LINE_CHART_WIDGET, {"input": line}
     else:
         raise SpecError(f"Widget '{widget.get('title', '<untitled>')}' has unsupported type '{kind}'. Supported: {', '.join(WIDGET_TYPES)}.")
+
+
+CREATE_DASHBOARD = """
+mutation CreateDashboard($input: CreateDashboardMutationInput!) {
+  createDashboard(input: $input) { dashboard { id name } }
+}
+"""
+
+CREATE_DASHBOARD_FROM_TEMPLATE = """
+mutation CreateDashboardFromTemplate($input: CreateDashboardFromTemplateMutationInput!) {
+  createDashboardFromTemplate(input: $input) { dashboard { id name } }
+}
+"""
+
+VERIFY_QUERY = """
+query VerifyDashboard($id: ID!) {
+  node(id: $id) {
+    ... on Dashboard {
+      id
+      name
+      statisticWidgets(first: 100) { edges { node { title } } }
+      textWidgets(first: 100)      { edges { node { title } } }
+      lineChartWidgets(first: 100) { edges { node { title } } }
+    }
+  }
+}
+"""
+
+
+def dashboard_url(cfg, org_id, space_id, dashboard_id):
+    # NOTE: This URL path is unverified against a live Arize app and flagged as a follow-up.
+    return (
+        f"{cfg['app_scheme']}://{cfg['app_host']}"
+        f"/organizations/{org_id}/spaces/{space_id}/dashboards/{dashboard_id}"
+    )
+
+
+def apply(client, spec, dry_run=False):
+    validate_spec(spec)
+    meta = spec["dashboard"]
+    widgets = spec.get("widgets") or []
+    if dry_run:
+        return {
+            "dashboardId": None,
+            "created": [w["title"] for w in widgets],
+            "skipped": spec.get("skipped", []),
+            "dryRun": True,
+        }
+    if meta.get("template"):
+        query, variables = CREATE_DASHBOARD_FROM_TEMPLATE, {
+            "input": {"name": meta["name"], "modelId": meta["projectId"], "template": meta["template"]}
+        }
+        key = "createDashboardFromTemplate"
+    else:
+        query, variables = CREATE_DASHBOARD, {
+            "input": {"name": meta["name"], "spaceId": meta["spaceId"]}
+        }
+        key = "createDashboard"
+    data = client.execute(query, variables, context="Dashboard creation")
+    dashboard_id = data[key]["dashboard"]["id"]
+
+    created = []
+    for widget in widgets:
+        wq, wv = widget_mutation(widget, dashboard_id, meta["projectId"])
+        client.execute(wq, wv, context=f"Creating widget '{widget['title']}'")
+        created.append(widget["title"])
+    return {
+        "dashboardId": dashboard_id,
+        "created": created,
+        "skipped": spec.get("skipped", []),
+        "dryRun": False,
+    }
+
+
+def verify(client, dashboard_id):
+    data = client.execute(VERIFY_QUERY, {"id": dashboard_id}, context="Dashboard verification")
+    node = data.get("node")
+    if not node:
+        raise DashboardError(f"Dashboard '{dashboard_id}' not found.")
+    titles = []
+    for field in ("statisticWidgets", "textWidgets", "lineChartWidgets"):
+        for edge in (node.get(field) or {}).get("edges") or []:
+            titles.append(edge["node"]["title"])
+    return {"id": node["id"], "name": node.get("name"), "widgetTitles": titles}

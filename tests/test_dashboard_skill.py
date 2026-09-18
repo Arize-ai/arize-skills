@@ -363,3 +363,64 @@ def test_widget_mutation_rejects_unsupported_type():
     }
     with pytest.raises(dashboard.SpecError, match="barChart"):
         dashboard.widget_mutation(widget, "dash-1", "proj-1")
+
+
+def test_dashboard_url_uses_profile_host():
+    cfg = {"app_host": "arize-app.iqhub.co", "app_scheme": "https"}
+    url = dashboard.dashboard_url(cfg, "org-1", "space-1", "dash-1")
+    assert url == "https://arize-app.iqhub.co/organizations/org-1/spaces/space-1/dashboards/dash-1"
+
+
+def _scripted_client(responses, captured):
+    queue = list(responses)
+
+    def handler(request):
+        captured.append(json.loads(request.content))
+        return httpx.Response(200, json={"data": queue.pop(0)})
+
+    return dashboard.Client("https://app.arize.com/graphql", "k",
+                            http=httpx.Client(transport=httpx.MockTransport(handler)))
+
+
+def test_apply_creates_dashboard_then_widgets_in_order():
+    captured = []
+    client = _scripted_client([
+        {"createDashboard": {"dashboard": {"id": "dash-1", "name": "Eval Health"}}},
+        {"createTextWidget": {"textWidget": {"id": "w1", "title": "Header"}}},
+        {"createStatisticWidget": {"statisticWidget": {"id": "w2", "title": "Hallucination"}}},
+    ], captured)
+    result = dashboard.apply(client, _valid_spec())
+    assert result["dashboardId"] == "dash-1"
+    assert result["created"] == ["Header", "Hallucination"]
+    assert "createDashboard" in captured[0]["query"]
+    assert "createTextWidget" in captured[1]["query"]
+
+
+def test_apply_dry_run_writes_nothing():
+    captured = []
+    client = _scripted_client([], captured)
+    result = dashboard.apply(client, _valid_spec(), dry_run=True)
+    assert result["dryRun"] is True
+    assert captured == []
+    assert result["created"] == ["Header", "Hallucination"]
+
+
+def test_apply_validates_before_any_write():
+    captured = []
+    client = _scripted_client([], captured)
+    spec = _valid_spec()
+    spec["widgets"][0]["type"] = "pieChart"
+    with pytest.raises(dashboard.SpecError):
+        dashboard.apply(client, spec)
+    assert captured == []
+
+
+def test_verify_returns_widget_titles():
+    payload = {"node": {"id": "dash-1", "name": "Eval Health",
+                        "statisticWidgets": {"edges": [{"node": {"title": "Hallucination"}}]},
+                        "textWidgets": {"edges": [{"node": {"title": "Header"}}]},
+                        "lineChartWidgets": {"edges": []}}}
+    captured = []
+    client = _scripted_client([payload], captured)
+    result = dashboard.verify(client, "dash-1")
+    assert sorted(result["widgetTitles"]) == ["Hallucination", "Header"]
