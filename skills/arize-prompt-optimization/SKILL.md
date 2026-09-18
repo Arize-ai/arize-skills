@@ -184,12 +184,12 @@ jq -s '
   {
     input: $example,
     output: $run.output,
-    evaluations: $run.evaluations
+    annotations: $run.annotations
   }
 ' dataset_*/examples.json experiment_*/runs.json
 
 # Find failed examples (where eval score < threshold)
-jq '[.[] | select(.evaluations.correctness.score < 0.5)]' experiment_*/runs.json
+jq '[.[] | select((.annotations[]? | select(.name=="correctness") | .score) < 0.5)]' experiment_*/runs.json
 ```
 
 ### Identify what to optimize
@@ -197,7 +197,7 @@ jq '[.[] | select(.evaluations.correctness.score < 0.5)]' experiment_*/runs.json
 Look for patterns across failures:
 
 1. **Compare outputs to ground truth**: Where does the LLM output differ from expected?
-2. **Read eval explanations**: `eval.*.explanation` tells you WHY something failed
+2. **Read eval notes**: each `annotations[]` entry's `text` field tells you WHY something failed
 3. **Check annotation text**: Human feedback describes specific issues
 4. **Look for verbosity mismatches**: If outputs are too long/short vs ground truth
 5. **Check format compliance**: Are outputs in the expected format?
@@ -222,9 +222,9 @@ jq -s '
       input: $ex.input,
       expected: $ex.expected_output,
       actual_output: $run.output,
-      eval_score: $run.evaluations.correctness.score,
-      eval_label: $run.evaluations.correctness.label,
-      eval_explanation: $run.evaluations.correctness.explanation
+      eval_score: ($run.annotations[]? | select(.name=="correctness") | .score),
+      eval_label: ($run.annotations[]? | select(.name=="correctness") | .label),
+      eval_explanation: ($run.annotations[]? | select(.name=="correctness") | .text)
     }
   ]
 ' dataset_*/examples.json experiment_*/runs.json
@@ -266,15 +266,15 @@ After the LLM returns the revised messages array:
 ```bash
 # Compare scores across experiments
 # Experiment A (baseline)
-jq '[.[] | .evaluations.correctness.score] | add / length' experiment_a/runs.json
+jq '[.[] | .annotations[] | select(.name=="correctness") | .score] | add / length' experiment_a/runs.json
 
 # Experiment B (optimized)
-jq '[.[] | .evaluations.correctness.score] | add / length' experiment_b/runs.json
+jq '[.[] | .annotations[] | select(.name=="correctness") | .score] | add / length' experiment_b/runs.json
 
 # Find examples that flipped from fail to pass
 jq -s '
-  [.[0][] | select(.evaluations.correctness.label == "incorrect")] as $fails |
-  [.[1][] | select(.evaluations.correctness.label == "correct") |
+  [.[0][] | select(.annotations[]? | select(.name=="correctness") | .label == "incorrect")] as $fails |
+  [.[1][] | select(.annotations[]? | select(.name=="correctness") | .label == "correct") |
     select(.example_id as $id | $fails | any(.example_id == $id))
   ] | length
 ' experiment_a/runs.json experiment_b/runs.json
