@@ -7,6 +7,7 @@ import json
 import os
 import sys
 import tomllib
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import httpx
@@ -163,3 +164,61 @@ def validate_layout(widgets):
         for title_b, r3, c3, r4, c4 in boxes[i + 1:]:
             if r1 < r4 and r3 < r2 and c1 < c4 and c3 < c2:
                 raise LayoutError(f"Widgets '{title_a}' and '{title_b}' overlap on the grid.")
+
+
+DISCOVER_QUERY = """
+query Discover($projectId: ID!, $start: DateTime, $end: DateTime) {
+  node(id: $projectId) {
+    ... on Model {
+      id
+      name
+      tracingSchema(startTime: $start, endTime: $end) {
+        spanProperties(first: 200) { edges { node { dimension { id name dataType category } } } }
+        llmEvals(first: 100)       { edges { node { dimension { id name dataType category } } } }
+        annotations(first: 100)    { edges { node { dimension { id name dataType category } } } }
+      }
+      customMetrics(first: 50) { edges { node { id name } } }
+    }
+  }
+}
+"""
+
+
+def _dimensions(connection):
+    if not connection:
+        return []
+    out = []
+    for edge in connection.get("edges") or []:
+        dim = ((edge or {}).get("node") or {}).get("dimension")
+        if dim:
+            out.append({k: dim.get(k) for k in ("id", "name", "dataType", "category")})
+    return out
+
+
+def discover(client, project_id, days=30, now=None):
+    end = now or datetime.now(timezone.utc)
+    start = end - timedelta(days=days)
+    data = client.execute(
+        DISCOVER_QUERY,
+        {"projectId": project_id, "start": start.isoformat(), "end": end.isoformat()},
+        context="Project discovery",
+    )
+    node = data.get("node")
+    if not node:
+        raise DashboardError(
+            f"ID '{project_id}' is not a project, or is not visible with this API key. "
+            "Project IDs are base64 — copy it from the Arize URL."
+        )
+    schema = node.get("tracingSchema") or {}
+    metrics = node.get("customMetrics") or {}
+    return {
+        "project": {"id": node.get("id"), "name": node.get("name")},
+        "spanProperties": _dimensions(schema.get("spanProperties")),
+        "llmEvals": _dimensions(schema.get("llmEvals")),
+        "annotations": _dimensions(schema.get("annotations")),
+        "customMetrics": [
+            {"id": e["node"]["id"], "name": e["node"]["name"]}
+            for e in (metrics.get("edges") or [])
+            if e and e.get("node")
+        ],
+    }

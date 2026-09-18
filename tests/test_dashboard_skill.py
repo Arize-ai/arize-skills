@@ -1,6 +1,7 @@
 """Behavioral tests for the bundled Arize dashboard helper; no live services."""
 
 import importlib.util
+import json
 from pathlib import Path
 
 import httpx
@@ -185,3 +186,62 @@ def test_non_positive_dimensions_are_rejected():
 
 def test_widgets_without_coordinates_are_left_to_auto_placement():
     dashboard.validate_layout([{"title": "auto"}])
+
+
+def _schema_payload():
+    def entry(dim_id, name, data_type, category):
+        return {"node": {"dimension": {"id": dim_id, "name": name, "dataType": data_type, "category": category}}}
+
+    return {
+        "node": {
+            "id": "proj-1",
+            "name": "support-agent",
+            "tracingSchema": {
+                "spanProperties": {"edges": [entry("sp__status_code", "status_code", "STRING", "spanProperty")]},
+                "llmEvals": {"edges": [entry("ev__hallucination", "hallucination", "STRING", "llmEval")]},
+                "annotations": {"edges": []},
+            },
+            "customMetrics": {"edges": [{"node": {"id": "cm-1", "name": "cost_per_call"}}]},
+        }
+    }
+
+
+def _client_returning(payload, captured=None):
+    def handler(request):
+        if captured is not None:
+            captured.append(json.loads(request.content))
+        return httpx.Response(200, json={"data": payload})
+
+    return dashboard.Client("https://app.arize.com/graphql", "secret-key",
+                            http=httpx.Client(transport=httpx.MockTransport(handler)))
+
+
+def test_discover_flattens_the_three_buckets():
+    result = dashboard.discover(_client_returning(_schema_payload()), "proj-1")
+    assert result["project"]["name"] == "support-agent"
+    assert result["llmEvals"] == [
+        {"id": "ev__hallucination", "name": "hallucination", "dataType": "STRING", "category": "llmEval"}
+    ]
+    assert result["spanProperties"][0]["name"] == "status_code"
+    assert result["annotations"] == []
+    assert result["customMetrics"] == [{"id": "cm-1", "name": "cost_per_call"}]
+
+
+def test_discover_sends_a_time_window():
+    captured = []
+    dashboard.discover(_client_returning(_schema_payload(), captured), "proj-1", days=7)
+    variables = captured[0]["variables"]
+    assert variables["projectId"] == "proj-1"
+    assert variables["start"] < variables["end"]
+
+
+def test_discover_tolerates_missing_buckets():
+    payload = {"node": {"id": "p", "name": "quiet", "tracingSchema": None, "customMetrics": None}}
+    result = dashboard.discover(_client_returning(payload), "p")
+    assert result["llmEvals"] == []
+    assert result["customMetrics"] == []
+
+
+def test_discover_rejects_an_unknown_project():
+    with pytest.raises(dashboard.DashboardError, match="not a project"):
+        dashboard.discover(_client_returning({"node": None}), "missing")
