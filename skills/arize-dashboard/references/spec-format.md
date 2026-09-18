@@ -176,6 +176,7 @@ which prints each widget's resolved `gridPosition` (or `<auto>` for an unplaced 
 | `verified` | `true` only if a read-back of the dashboard found every title in `created` |
 | `missingTitles` | Titles that did not come back from that read-back — widgets that were accepted but did not land |
 | `dashboardWidgetTitles` | Every title the dashboard has, including a template's own widgets |
+| `verification` | Which of the three outcomes happened: `verified` (every title landed), `missingWidgets` (one didn't), or `notCompleted` (the read-back itself failed — including a network error — so the dashboard exists but nothing is known about its widgets) |
 | `verifyError` | Present only if the read-back itself failed; the dashboard still exists, the check didn't run |
 | `url` | The deep link, but only when `apply --org ORG_ID` was passed. Otherwise `null` |
 | `urlHint` | Present when `url` is `null` — the script never guesses an organization id |

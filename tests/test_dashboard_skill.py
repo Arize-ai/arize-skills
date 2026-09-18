@@ -803,3 +803,30 @@ def test_cli_accepts_app_host_before_and_after_the_subcommand(tmp_path, capsys):
         dashboard.main(["list", "--space", "s", "--app-host", "b.example.com", "--home", str(tmp_path)])
         assert seen["app_host"] == "b.example.com"
     capsys.readouterr()
+
+
+def test_apply_survives_a_transport_failure_on_the_read_back():
+    """The read-back is the only call that happens AFTER a write.
+
+    A transport error there must not escape: there is no deleteDashboard in
+    this API, so a dashboard whose id the user never saw is an orphan they
+    cannot find or remove. Created-but-unverified is an acceptable outcome;
+    a lost handle is not.
+    """
+    def handler(request):
+        body = json.loads(request.content)
+        if "VerifyDashboard" in body["query"]:
+            raise httpx.ConnectError("network down")
+        if "createDashboard" in body["query"]:
+            return httpx.Response(200, json={"data": {
+                "createDashboard": {"dashboard": {"id": "dash-1", "name": "Eval Health"}}}})
+        return httpx.Response(200, json={"data": {"createTextWidget": {"textWidget": {"id": "w", "title": "t"}}}})
+
+    client = dashboard.Client("https://app.arize.com/graphql", "k",
+                              http=httpx.Client(transport=httpx.MockTransport(handler)))
+    result = dashboard.apply(client, _valid_spec())
+    assert result["dashboardId"] == "dash-1"
+    assert result["verification"] == "notCompleted"
+    assert result["verified"] is False
+    assert "network down" in result["verifyError"]
+    assert result["url"] is None and "arize-link" in result["urlHint"]

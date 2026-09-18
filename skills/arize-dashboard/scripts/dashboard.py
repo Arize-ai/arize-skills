@@ -458,17 +458,35 @@ def _title_diff(expected, actual):
 def _verification(client, dashboard_id, expected_titles):
     """Read the dashboard back and report which spec titles did not land.
 
+    Three outcomes, reported in `verification`: "verified" (every spec title is
+    on the dashboard), "missingWidgets" (a mutation was accepted but produced
+    nothing), "notCompleted" (the read-back itself failed, so nothing is known
+    either way).
+
     Extra titles are expected and not an error: a templated dashboard carries
-    the template's own widgets too. Only missing titles mean a widget mutation
-    was accepted but produced nothing the dashboard shows.
+    the template's own widgets too.
+
+    This is the one call in the script that happens AFTER a write, so it also
+    catches httpx.HTTPError — transport failures (ConnectError, ReadTimeout)
+    are not DashboardError and would otherwise escape apply() with the new
+    dashboard's id still unprinted. There is no deleteDashboard mutation in
+    this API, so a dashboard whose id the user never saw is an orphan they
+    cannot find or remove. A failed read-back degrades to "created but
+    unverified"; it never costs the handle.
     """
     try:
         seen = verify(client, dashboard_id)
-    except DashboardError as error:
-        return {"verified": False, "verifyError": str(error), "missingTitles": None}
+    except (DashboardError, httpx.HTTPError) as error:
+        return {
+            "verified": False,
+            "verification": "notCompleted",
+            "verifyError": f"{type(error).__name__}: {error}" if isinstance(error, httpx.HTTPError) else str(error),
+            "missingTitles": None,
+        }
     missing = _title_diff(expected_titles, seen["widgetTitles"])
     return {
         "verified": not missing,
+        "verification": "missingWidgets" if missing else "verified",
         "missingTitles": missing,
         "dashboardWidgetTitles": seen["widgetTitles"],
     }
