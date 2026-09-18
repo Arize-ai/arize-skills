@@ -1,6 +1,6 @@
 ---
 name: arize-dashboard
-description: "Builds populated Arize dashboards for a project — discovers the project's span properties, evals, and annotations, then creates widgets backed by that data. Use when the user mentions create dashboard, build a dashboard, dashboard for my project, LLM observability dashboard, eval dashboard, token/cost dashboard, add a widget, or list/delete dashboards. For links to existing Arize resources use arize-link; for checking whether traces are instrumented use arize-instrumentation-health."
+description: "Builds populated Arize dashboards for a project — discovers the project's span properties, evals, and annotations, then creates widgets backed by that data. Use when the user mentions create dashboard, build a dashboard, dashboard for my project, LLM observability dashboard, eval dashboard, token/cost dashboard, add a widget, or list/delete dashboards. For links to existing Arize resources use arize-link; for why a dashboard shows zero or n/a use arize-instrumentation-health."
 metadata:
   author: arize
   version: "1.0"

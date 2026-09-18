@@ -194,6 +194,11 @@ SPECIFIC_PROMPTS = [
         ["arize-dashboard"],
         ["specific", "dashboard"],
     ),
+    (
+        "Build a dashboard tracking token cost for my project",
+        ["arize-dashboard"],
+        ["specific", "dashboard"],
+    ),
     # arize-evaluator
     (
         "Create an LLM-as-judge evaluator for hallucination detection",
