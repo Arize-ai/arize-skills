@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import argparse
 import json
 import os
 import sys
@@ -402,3 +403,118 @@ def verify(client, dashboard_id):
         for edge in (node.get(field) or {}).get("edges") or []:
             titles.append(edge["node"]["title"])
     return {"id": node["id"], "name": node.get("name"), "widgetTitles": titles}
+
+
+LIST_QUERY = """
+query ListDashboards($id: ID!, $first: Int!) {
+  node(id: $id) {
+    ... on Space {
+      dashboards(first: $first) { edges { node { id name status } } }
+    }
+  }
+}
+"""
+
+UPDATE_STATUS = """
+mutation UpdateDashboardStatus($input: UpdateDashboardStatusMutationInput!) {
+  updateDashboardStatus(input: $input) { dashboard { id status } }
+}
+"""
+
+
+def list_dashboards(client, space_id, first=50):
+    data = client.execute(LIST_QUERY, {"id": space_id, "first": first}, context="Listing dashboards")
+    node = data.get("node")
+    if not node:
+        raise DashboardError(f"ID '{space_id}' is not a space, or is not visible with this API key.")
+    return [e["node"] for e in (node.get("dashboards") or {}).get("edges") or []]
+
+
+def delete_dashboard(client, dashboard_id):
+    # There is no deleteDashboard mutation; removal is a status change.
+    return client.execute(
+        UPDATE_STATUS,
+        {"input": {"dashboardId": dashboard_id, "status": "deleted"}},
+        context="Deleting dashboard",
+    )
+
+
+def _client_for(args):
+    cfg = load_profile(Path(args.home).expanduser(), profile=args.profile)
+    return cfg, Client(graphql_endpoint(cfg), cfg["api_key"])
+
+
+def main(argv=None):
+    # --home/--profile live on a parent parser so they are accepted both before
+    # and after the subcommand ("dashboard.py discover --profile x" works).
+    # SUPPRESS keeps the subparser's copy from clobbering a value given before
+    # the subcommand; defaults are applied after parsing instead.
+    common = argparse.ArgumentParser(add_help=False)
+    common.add_argument("--home", default=argparse.SUPPRESS, help="Arize config directory")
+    common.add_argument("--profile", default=argparse.SUPPRESS,
+                        help="ax profile name (default: the active profile)")
+
+    parser = argparse.ArgumentParser(
+        description="Build Arize dashboards from a declarative spec.", parents=[common]
+    )
+    sub = parser.add_subparsers(dest="command", required=True)
+
+    p_discover = sub.add_parser("discover", parents=[common],
+                                help="List a project's span properties, evals, and annotations")
+    p_discover.add_argument("--project", required=True)
+    p_discover.add_argument("--days", type=int, default=30)
+
+    p_apply = sub.add_parser("apply", parents=[common], help="Create a dashboard from a spec file")
+    p_apply.add_argument("--spec", required=True)
+    p_apply.add_argument("--dry-run", action="store_true")
+
+    p_verify = sub.add_parser("verify", parents=[common], help="Read back a dashboard's widgets")
+    p_verify.add_argument("--dashboard", required=True)
+
+    p_list = sub.add_parser("list", parents=[common], help="List dashboards in a space")
+    p_list.add_argument("--space", required=True)
+
+    p_delete = sub.add_parser("delete", parents=[common], help="Soft-delete a dashboard")
+    p_delete.add_argument("--dashboard", required=True)
+    p_delete.add_argument("--confirm", action="store_true")
+
+    args = parser.parse_args(argv)
+    args.home = getattr(args, "home", "~/.arize")
+    args.profile = getattr(args, "profile", None)
+    try:
+        if args.command == "delete" and not args.confirm:
+            print("Refusing to delete without --confirm. This sets the dashboard's "
+                  "status to 'deleted' and there is no undo via this API.", file=sys.stderr)
+            return 2
+        if args.command == "apply":
+            spec = json.loads(Path(args.spec).read_text())
+            if args.dry_run:
+                validate_spec(spec)
+                for widget in spec.get("widgets") or []:
+                    grid = _grid(widget)
+                    print(f"{widget['title']}: gridPosition={grid or '<auto>'}")
+                print(json.dumps(apply(None, spec, dry_run=True), indent=2))
+                return 0
+
+        cfg, client = _client_for(args)
+
+        if args.command == "discover":
+            print(json.dumps(discover(client, args.project, days=args.days), indent=2))
+        elif args.command == "apply":
+            result = apply(client, spec)
+            print(json.dumps(result, indent=2))
+        elif args.command == "verify":
+            print(json.dumps(verify(client, args.dashboard), indent=2))
+        elif args.command == "list":
+            print(json.dumps(list_dashboards(client, args.space), indent=2))
+        elif args.command == "delete":
+            delete_dashboard(client, args.dashboard)
+            print(f"Dashboard {args.dashboard} marked deleted.")
+        return 0
+    except DashboardError as error:
+        print(str(error), file=sys.stderr)
+        return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

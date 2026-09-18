@@ -424,3 +424,46 @@ def test_verify_returns_widget_titles():
     client = _scripted_client([payload], captured)
     result = dashboard.verify(client, "dash-1")
     assert sorted(result["widgetTitles"]) == ["Hallucination", "Header"]
+
+
+def test_list_dashboards_returns_names_and_ids():
+    payload = {"node": {"dashboards": {"edges": [
+        {"node": {"id": "d1", "name": "Overview", "status": "active"}},
+        {"node": {"id": "d2", "name": "Evals", "status": "active"}},
+    ]}}}
+    captured = []
+    result = dashboard.list_dashboards(_scripted_client([payload], captured), "space-1")
+    assert [d["name"] for d in result] == ["Overview", "Evals"]
+
+
+def test_delete_uses_status_mutation_not_a_delete_mutation():
+    captured = []
+    client = _scripted_client([{"updateDashboardStatus": {"dashboard": {"id": "d1", "status": "deleted"}}}], captured)
+    dashboard.delete_dashboard(client, "d1")
+    sent = captured[0]
+    assert "updateDashboardStatus" in sent["query"]
+    assert sent["variables"]["input"]["status"] == "deleted"
+
+
+def test_cli_delete_requires_confirm(capsys):
+    code = dashboard.main(["delete", "--dashboard", "d1"])
+    assert code != 0
+    assert "--confirm" in capsys.readouterr().err
+
+
+def test_cli_reports_errors_without_a_traceback(capsys, tmp_path):
+    code = dashboard.main(["discover", "--project", "p", "--profile", "nope", "--home", str(tmp_path)])
+    assert code != 0
+    err = capsys.readouterr().err
+    assert "Traceback" not in err
+
+
+def test_apply_dry_run_accepts_none_client():
+    """Regression test: apply(None, spec, dry_run=True) must not fail.
+
+    This verifies that the CLI's dry-run path works without credentials,
+    since it never touches the client object on that path.
+    """
+    result = dashboard.apply(None, _valid_spec(), dry_run=True)
+    assert result["dryRun"] is True
+    assert result["dashboardId"] is None
