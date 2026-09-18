@@ -8,6 +8,7 @@ import json
 import os
 import sys
 import tomllib
+from collections import Counter
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -61,7 +62,13 @@ def _profile_name_is_explicit(home, profile, environ):
     return False
 
 
-def load_profile(home, profile=None, environ=None):
+def load_profile(home, profile=None, environ=None, app_host=None):
+    """Resolve credentials and the app endpoint.
+
+    app_host precedence: the --app-host flag, then ARIZE_APP_HOST, then the
+    profile's routing.app_host, then the SaaS default (only when api_host is
+    the SaaS host).
+    """
     environ = os.environ if environ is None else environ
     home = Path(home)
     name = active_profile_name(home, profile, environ)
@@ -82,7 +89,7 @@ def load_profile(home, profile=None, environ=None):
     data = tomllib.loads(path.read_text())
     routing = data.get("routing", {})
     api_host = routing.get("api_host", "")
-    app_host = environ.get("ARIZE_APP_HOST") or routing.get("app_host")
+    app_host = app_host or environ.get("ARIZE_APP_HOST") or routing.get("app_host")
     if not app_host:
         if api_host == SAAS_API_HOST:
             app_host = SAAS_APP_HOST
@@ -160,11 +167,36 @@ def validate_layout(widgets):
             raise LayoutError(
                 f"Widget '{title}' exceeds the {GRID_COLUMNS}-column grid: col={col} + width={width} > {GRID_COLUMNS + 1}."
             )
-        boxes.append((title, row, col, row + height, col + width))
+        _, _, row_end, col_end = to_grid_position(row, col, width, height)
+        boxes.append((title, row, col, row_end, col_end))
     for i, (title_a, r1, c1, r2, c2) in enumerate(boxes):
         for title_b, r3, c3, r4, c4 in boxes[i + 1:]:
             if r1 < r4 and r3 < r2 and c1 < c4 and c3 < c2:
                 raise LayoutError(f"Widgets '{title_a}' and '{title_b}' overlap on the grid.")
+
+
+TEXT_FALLBACK = {"row": 1, "col": 1, "width": GRID_COLUMNS, "height": 2}
+
+PLACEMENT_FIELDS = ("row", "col", "width", "height")
+
+
+def has_placement(widget):
+    """True if the widget carries any explicit placement field."""
+    return any(widget.get(k) is not None for k in PLACEMENT_FIELDS)
+
+
+def resolve_text_placement(widgets):
+    """Materialize the text-widget placement fallback *before* layout validation.
+
+    createTextWidget requires gridPosition, so an unplaced text widget is never
+    auto-placed by the backend: widget_mutation pins it to the full-width band
+    at row 1. Writing that fallback onto the widget here means the box takes
+    part in overlap detection and shows up in --dry-run output, instead of
+    silently landing on top of whatever else already claims row 1.
+    """
+    for widget in widgets:
+        if widget.get("type") == "text" and not _placed(widget):
+            widget.update(TEXT_FALLBACK)
 
 
 DISCOVER_QUERY = """
@@ -250,12 +282,39 @@ class SpecError(DashboardError):
     pass
 
 
+def _reject_unsafe_placement_on_template(widget, title, kind, template):
+    """Refuse the two ways a widget can silently overlap a template's own widgets.
+
+    Whether createDashboardFromTemplate reports the positions of the widgets it
+    creates is an unverified assumption (see references/graphql.md), so this
+    script cannot route around the template layout. Until that is confirmed
+    against a live app, the only safe augmentation is a statistic or lineChart
+    with no placement at all, which the backend places in the next free slot.
+    """
+    if kind == "text":
+        raise SpecError(
+            f"Widget '{title}' is a text widget on a dashboard created from template "
+            f"'{template}'. createTextWidget requires a gridPosition, so the backend cannot "
+            "auto-place it and it would be pinned over the template's own top-row widgets. "
+            "Add text widgets only to a dashboard built without a template."
+        )
+    if has_placement(widget):
+        raise SpecError(
+            f"Widget '{title}' sets explicit placement (row/col/width/height) on a dashboard "
+            f"created from template '{template}'. This script cannot see where the template's "
+            "own widgets sit, so explicit placement here can silently overlap them. Omit "
+            "row/col/width/height on every widget added to a templated dashboard and the "
+            "backend auto-places them in free slots."
+        )
+
+
 def validate_spec(spec):
     meta = spec.get("dashboard") or {}
     for field in ("name", "projectId", "spaceId"):
         if not meta.get(field):
             raise SpecError(f"spec.dashboard.{field} is required.")
     widgets = spec.get("widgets") or []
+    template = meta.get("template")
     for widget in widgets:
         title = widget.get("title", "<untitled>")
         kind = widget.get("type")
@@ -270,6 +329,9 @@ def validate_spec(spec):
                 raise SpecError(f"Widget '{title}' requires a dimension from discovery output.")
             if not widget.get("dimensionCategory"):
                 raise SpecError(f"Widget '{title}' requires a dimensionCategory.")
+        if template:
+            _reject_unsafe_placement_on_template(widget, title, kind, template)
+    resolve_text_placement(widgets)
     validate_layout(widgets)
 
 
@@ -284,7 +346,9 @@ def widget_mutation(widget, dashboard_id, project_id):
     grid = _grid(widget)
     payload = {"dashboardId": dashboard_id, "title": widget["title"], "creationStatus": "published"}
     if kind == "text":
-        # createTextWidget requires gridPosition; fall back to a full-width band.
+        # createTextWidget requires gridPosition. validate_spec() normally writes
+        # this fallback onto the widget first (resolve_text_placement) so it is
+        # visible to the layout check; this keeps direct callers safe too.
         payload["content"] = widget["content"]
         payload["gridPosition"] = grid or to_grid_position(1, 1, GRID_COLUMNS, 2)
         return CREATE_TEXT_WIDGET, {"input": payload}
@@ -319,6 +383,29 @@ def widget_mutation(widget, dashboard_id, project_id):
         return CREATE_LINE_CHART_WIDGET, {"input": line}
     else:
         raise SpecError(f"Widget '{widget.get('title', '<untitled>')}' has unsupported type '{kind}'. Supported: {', '.join(WIDGET_TYPES)}.")
+
+
+def load_spec(path):
+    """Read and parse a spec file, turning I/O and JSON failures into SpecError.
+
+    main() only catches DashboardError, so a bare read/parse here would print a
+    traceback for the most common first mistake: a mistyped --spec path.
+    """
+    spec_path = Path(path).expanduser()
+    try:
+        raw = spec_path.read_text()
+    except OSError as error:
+        raise SpecError(f"Cannot read spec file '{spec_path}': {error.strerror}.") from error
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError as error:
+        raise SpecError(
+            f"Spec file '{spec_path}' is not valid JSON: {error.msg} "
+            f"(line {error.lineno}, column {error.colno})."
+        ) from error
+    if not isinstance(parsed, dict):
+        raise SpecError(f"Spec file '{spec_path}' must contain a JSON object with 'dashboard' and 'widgets'.")
+    return parsed
 
 
 CREATE_DASHBOARD = """
@@ -356,7 +443,50 @@ def dashboard_url(cfg, org_id, space_id, dashboard_id):
     )
 
 
-def apply(client, spec, dry_run=False):
+def _title_diff(expected, actual):
+    """Spec titles that did not come back from the dashboard read (multiset-aware)."""
+    remaining = Counter(actual)
+    missing = []
+    for title in expected:
+        if remaining.get(title, 0) > 0:
+            remaining[title] -= 1
+        else:
+            missing.append(title)
+    return missing
+
+
+def _verification(client, dashboard_id, expected_titles):
+    """Read the dashboard back and report which spec titles did not land.
+
+    Extra titles are expected and not an error: a templated dashboard carries
+    the template's own widgets too. Only missing titles mean a widget mutation
+    was accepted but produced nothing the dashboard shows.
+    """
+    try:
+        seen = verify(client, dashboard_id)
+    except DashboardError as error:
+        return {"verified": False, "verifyError": str(error), "missingTitles": None}
+    missing = _title_diff(expected_titles, seen["widgetTitles"])
+    return {
+        "verified": not missing,
+        "missingTitles": missing,
+        "dashboardWidgetTitles": seen["widgetTitles"],
+    }
+
+
+LINK_HINT = (
+    "Pass --org ORG_ID (the organization's base64 id) to print a deep link, or hand the "
+    "dashboard id to the arize-link skill. This script never guesses an organization id."
+)
+
+
+def _link(cfg, org_id, space_id, dashboard_id):
+    if cfg and org_id and space_id:
+        return {"url": dashboard_url(cfg, org_id, space_id, dashboard_id)}
+    return {"url": None, "urlHint": LINK_HINT}
+
+
+def apply(client, spec, dry_run=False, cfg=None, org_id=None):
     validate_spec(spec)
     meta = spec["dashboard"]
     widgets = spec.get("widgets") or []
@@ -368,8 +498,16 @@ def apply(client, spec, dry_run=False):
             "dryRun": True,
         }
     if meta.get("template"):
+        # modelEnvironmentName must be sent explicitly: older server builds fall
+        # through to "production" when it is omitted, which would leave every
+        # template panel querying an environment that has no tracing data.
         query, variables = CREATE_DASHBOARD_FROM_TEMPLATE, {
-            "input": {"name": meta["name"], "modelId": meta["projectId"], "template": meta["template"]}
+            "input": {
+                "name": meta["name"],
+                "modelId": meta["projectId"],
+                "template": meta["template"],
+                "modelEnvironmentName": meta.get("modelEnvironmentName", "tracing"),
+            }
         }
         key = "createDashboardFromTemplate"
     else:
@@ -385,12 +523,15 @@ def apply(client, spec, dry_run=False):
         wq, wv = widget_mutation(widget, dashboard_id, meta["projectId"])
         client.execute(wq, wv, context=f"Creating widget '{widget['title']}'")
         created.append(widget["title"])
-    return {
+    result = {
         "dashboardId": dashboard_id,
         "created": created,
         "skipped": spec.get("skipped", []),
         "dryRun": False,
     }
+    result.update(_verification(client, dashboard_id, created))
+    result.update(_link(cfg, org_id, meta.get("spaceId"), dashboard_id))
+    return result
 
 
 def verify(client, dashboard_id):
@@ -440,7 +581,7 @@ def delete_dashboard(client, dashboard_id):
 
 
 def _client_for(args):
-    cfg = load_profile(Path(args.home).expanduser(), profile=args.profile)
+    cfg = load_profile(Path(args.home).expanduser(), profile=args.profile, app_host=args.app_host)
     return cfg, Client(graphql_endpoint(cfg), cfg["api_key"])
 
 
@@ -453,6 +594,9 @@ def main(argv=None):
     common.add_argument("--home", default=argparse.SUPPRESS, help="Arize config directory")
     common.add_argument("--profile", default=argparse.SUPPRESS,
                         help="ax profile name (default: the active profile)")
+    common.add_argument("--app-host", default=argparse.SUPPRESS,
+                        help="Override the app host (e.g. arize-app.example.com) for on-prem "
+                             "deployments whose profile has no routing.app_host")
 
     parser = argparse.ArgumentParser(
         description="Build Arize dashboards from a declarative spec.", parents=[common]
@@ -467,9 +611,12 @@ def main(argv=None):
     p_apply = sub.add_parser("apply", parents=[common], help="Create a dashboard from a spec file")
     p_apply.add_argument("--spec", required=True)
     p_apply.add_argument("--dry-run", action="store_true")
+    p_apply.add_argument("--org", help="Organization base64 id; when given, print the dashboard deep link")
 
     p_verify = sub.add_parser("verify", parents=[common], help="Read back a dashboard's widgets")
     p_verify.add_argument("--dashboard", required=True)
+    p_verify.add_argument("--org", help="Organization base64 id; with --space, print the dashboard deep link")
+    p_verify.add_argument("--space", help="Space base64 id; needed alongside --org to build a link")
 
     p_list = sub.add_parser("list", parents=[common], help="List dashboards in a space")
     p_list.add_argument("--space", required=True)
@@ -481,13 +628,14 @@ def main(argv=None):
     args = parser.parse_args(argv)
     args.home = getattr(args, "home", "~/.arize")
     args.profile = getattr(args, "profile", None)
+    args.app_host = getattr(args, "app_host", None)
     try:
         if args.command == "delete" and not args.confirm:
             print("Refusing to delete without --confirm. This sets the dashboard's "
                   "status to 'deleted' and there is no undo via this API.", file=sys.stderr)
             return 2
         if args.command == "apply":
-            spec = json.loads(Path(args.spec).read_text())
+            spec = load_spec(args.spec)
             if args.dry_run:
                 validate_spec(spec)
                 for widget in spec.get("widgets") or []:
@@ -501,10 +649,27 @@ def main(argv=None):
         if args.command == "discover":
             print(json.dumps(discover(client, args.project, days=args.days), indent=2))
         elif args.command == "apply":
-            result = apply(client, spec)
+            result = apply(client, spec, cfg=cfg, org_id=args.org)
             print(json.dumps(result, indent=2))
+            if result.get("verifyError"):
+                print("Could not verify the dashboard after creating it: "
+                      f"{result['verifyError']}", file=sys.stderr)
+                return 1
+            if result.get("missingTitles"):
+                print("These widgets are not on the dashboard after apply: "
+                      + ", ".join(result["missingTitles"])
+                      + ". The dashboard was created but is incomplete.", file=sys.stderr)
+                return 1
         elif args.command == "verify":
-            print(json.dumps(verify(client, args.dashboard), indent=2))
+            if args.org and not args.space:
+                raise DashboardError(
+                    "--org needs --space to build a dashboard link; the path is "
+                    "/organizations/<org>/spaces/<space>/dashboards/<id>. Pass --space SPACE_ID, "
+                    "or drop --org and use the arize-link skill."
+                )
+            result = verify(client, args.dashboard)
+            result.update(_link(cfg, args.org, args.space, args.dashboard))
+            print(json.dumps(result, indent=2))
         elif args.command == "list":
             print(json.dumps(list_dashboards(client, args.space), indent=2))
         elif args.command == "delete":

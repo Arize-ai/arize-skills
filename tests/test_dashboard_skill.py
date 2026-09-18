@@ -149,8 +149,11 @@ def test_three_wide_stat_matches_known_good_grid_position():
 
 
 def test_grid_position_is_not_xywh():
-    # The natural-but-wrong guess is [x, y, w, h]; assert we never emit it.
-    assert dashboard.to_grid_position(row=1, col=1, width=12, height=2) != [0, 0, 12, 2]
+    # The bug this guards is `return [row, col, width, height]`, which for these
+    # arguments emits [1, 1, 12, 2]. Asserting against [0, 0, 12, 2] would pass
+    # even with that bug in place, so assert against what the bug really emits.
+    assert dashboard.to_grid_position(row=1, col=1, width=12, height=2) != [1, 1, 12, 2]
+    assert dashboard.to_grid_position(row=3, col=1, width=3, height=4) != [3, 1, 3, 4]
 
 
 def test_width_overflowing_grid_is_rejected():
@@ -198,7 +201,13 @@ def _schema_payload():
             "name": "support-agent",
             "tracingSchema": {
                 "spanProperties": {"edges": [entry("sp__status_code", "status_code", "STRING", "spanProperty")]},
-                "llmEvals": {"edges": [entry("ev__hallucination", "hallucination", "STRING", "llmEval")]},
+                # Arize stores one dimension per eval FIELD, not one per eval:
+                # eval|trace_eval|session_eval.<name>.(label|score|explanation|metadata).
+                "llmEvals": {"edges": [
+                    entry("ev__h_label", "eval.hallucination.label", "STRING", "llmEval"),
+                    entry("ev__h_score", "eval.hallucination.score", "DOUBLE", "llmEval"),
+                    entry("ev__h_expl", "eval.hallucination.explanation", "STRING", "llmEval"),
+                ]},
                 "annotations": {"edges": []},
             },
             "customMetrics": {"edges": [{"node": {"id": "cm-1", "name": "cost_per_call"}}]},
@@ -216,11 +225,21 @@ def _client_returning(payload, captured=None):
                             http=httpx.Client(transport=httpx.MockTransport(handler)))
 
 
+def test_discover_returns_one_entry_per_eval_field_not_per_eval():
+    """One eval yields 2-4 llmEvals entries; panel counts key off distinct names."""
+    result = dashboard.discover(_client_returning(_schema_payload()), "proj-1")
+    assert len(result["llmEvals"]) == 3
+    names = {e["name"].split(".")[1] for e in result["llmEvals"]}
+    assert names == {"hallucination"}
+
+
 def test_discover_flattens_the_three_buckets():
     result = dashboard.discover(_client_returning(_schema_payload()), "proj-1")
     assert result["project"]["name"] == "support-agent"
     assert result["llmEvals"] == [
-        {"id": "ev__hallucination", "name": "hallucination", "dataType": "STRING", "category": "llmEval"}
+        {"id": "ev__h_label", "name": "eval.hallucination.label", "dataType": "STRING", "category": "llmEval"},
+        {"id": "ev__h_score", "name": "eval.hallucination.score", "dataType": "DOUBLE", "category": "llmEval"},
+        {"id": "ev__h_expl", "name": "eval.hallucination.explanation", "dataType": "STRING", "category": "llmEval"},
     ]
     assert result["spanProperties"][0]["name"] == "status_code"
     assert result["annotations"] == []
@@ -253,8 +272,10 @@ def _valid_spec():
         "widgets": [
             {"type": "text", "title": "Header", "content": "## Evals",
              "row": 1, "col": 1, "width": 12, "height": 2},
+            # avg is numeric-only, so the average tile must sit on the eval's
+            # .score dimension; the STRING .label dimension would render n/a.
             {"type": "statistic", "title": "Hallucination", "aggregation": "avg",
-             "dimension": {"id": "ev__h", "name": "hallucination", "dataType": "STRING"},
+             "dimension": {"id": "ev__h_score", "name": "eval.hallucination.score", "dataType": "DOUBLE"},
              "dimensionCategory": "llmEval", "row": 3, "col": 1, "width": 3, "height": 4},
         ],
     }
@@ -309,7 +330,7 @@ def test_statistic_widget_mutation_carries_dimension_and_project():
     assert "createStatisticWidget" in query
     assert payload["modelId"] == "proj-1"
     assert payload["dimensionCategory"] == "llmEval"
-    assert payload["dimension"]["name"] == "hallucination"
+    assert payload["dimension"]["name"] == "eval.hallucination.score"
     assert payload["timeSeriesMetricType"] == "modelDataMetric"
     assert payload["creationStatus"] == "published"
 
@@ -371,6 +392,14 @@ def test_dashboard_url_uses_profile_host():
     assert url == "https://arize-app.iqhub.co/organizations/org-1/spaces/space-1/dashboards/dash-1"
 
 
+def _verify_payload(statistic_titles, text_titles, line_titles=(), name="Eval Health"):
+    edges = lambda titles: {"edges": [{"node": {"title": t}} for t in titles]}
+    return {"node": {"id": "dash-1", "name": name,
+                     "statisticWidgets": edges(statistic_titles),
+                     "textWidgets": edges(text_titles),
+                     "lineChartWidgets": edges(line_titles)}}
+
+
 def _scripted_client(responses, captured):
     queue = list(responses)
 
@@ -388,6 +417,7 @@ def test_apply_creates_dashboard_then_widgets_in_order():
         {"createDashboard": {"dashboard": {"id": "dash-1", "name": "Eval Health"}}},
         {"createTextWidget": {"textWidget": {"id": "w1", "title": "Header"}}},
         {"createStatisticWidget": {"statisticWidget": {"id": "w2", "title": "Hallucination"}}},
+        _verify_payload(["Hallucination"], ["Header"]),
     ], captured)
     result = dashboard.apply(client, _valid_spec())
     assert result["dashboardId"] == "dash-1"
@@ -445,8 +475,8 @@ def test_delete_uses_status_mutation_not_a_delete_mutation():
     assert sent["variables"]["input"]["status"] == "deleted"
 
 
-def test_cli_delete_requires_confirm(capsys):
-    code = dashboard.main(["delete", "--dashboard", "d1"])
+def test_cli_delete_requires_confirm(capsys, tmp_path):
+    code = dashboard.main(["delete", "--dashboard", "d1", "--home", str(tmp_path)])
     assert code != 0
     assert "--confirm" in capsys.readouterr().err
 
@@ -467,3 +497,309 @@ def test_apply_dry_run_accepts_none_client():
     result = dashboard.apply(None, _valid_spec(), dry_run=True)
     assert result["dryRun"] is True
     assert result["dashboardId"] is None
+
+
+# --- Text-widget placement is resolved before validation -------------------
+
+
+def _text_and_stat_spec():
+    """A header with no placement plus a statistic that explicitly claims row 1."""
+    return {
+        "dashboard": {"name": "D", "projectId": "proj-1", "spaceId": "space-1"},
+        "widgets": [
+            {"type": "text", "title": "Header", "content": "## Evals"},
+            {"type": "statistic", "title": "Stat", "aggregation": "count",
+             "dimension": {"id": "d", "name": "n", "dataType": "STRING"},
+             "dimensionCategory": "llmEval", "row": 1, "col": 1, "width": 3, "height": 4},
+        ],
+    }
+
+
+def test_unplaced_text_widget_is_resolved_to_its_real_grid_position():
+    """The fallback must be visible to the validator and to --dry-run, not implicit."""
+    spec = {"dashboard": {"name": "D", "projectId": "p", "spaceId": "s"},
+            "widgets": [{"type": "text", "title": "Header", "content": "## Evals"}]}
+    dashboard.validate_spec(spec)
+    widget = spec["widgets"][0]
+    assert dashboard._grid(widget) == [1, 1, 3, 13]
+    assert dashboard.widget_mutation(widget, "dash-1", "p")[1]["input"]["gridPosition"] == [1, 1, 3, 13]
+
+
+def test_unplaced_text_widget_overlapping_a_placed_widget_is_rejected():
+    with pytest.raises(dashboard.LayoutError, match="overlap"):
+        dashboard.validate_spec(_text_and_stat_spec())
+
+
+def test_two_unplaced_text_widgets_are_rejected_instead_of_stacking():
+    spec = {"dashboard": {"name": "D", "projectId": "p", "spaceId": "s"},
+            "widgets": [{"type": "text", "title": "A", "content": "a"},
+                        {"type": "text", "title": "B", "content": "b"}]}
+    with pytest.raises(dashboard.LayoutError, match="overlap"):
+        dashboard.validate_spec(spec)
+
+
+def test_cli_dry_run_prints_the_resolved_text_grid_position(tmp_path, capsys):
+    spec = {"dashboard": {"name": "D", "projectId": "p", "spaceId": "s"},
+            "widgets": [{"type": "text", "title": "Header", "content": "## Evals"}]}
+    spec_file = tmp_path / "spec.json"
+    spec_file.write_text(json.dumps(spec))
+    code = dashboard.main(["apply", "--spec", str(spec_file), "--dry-run", "--home", str(tmp_path)])
+    out = capsys.readouterr().out
+    assert code == 0
+    assert "Header: gridPosition=[1, 1, 3, 13]" in out
+    assert "<auto>" not in out
+
+
+# --- Templated dashboards refuse placement --------------------------------
+
+
+def _templated_spec():
+    return {
+        "dashboard": {"name": "Overview", "projectId": "proj-1", "spaceId": "space-1",
+                      "template": "generativeLlmModelV2"},
+        "widgets": [
+            {"type": "statistic", "title": "Hallucination", "aggregation": "avg",
+             "dimension": {"id": "ev__h_score", "name": "eval.hallucination.score", "dataType": "DOUBLE"},
+             "dimensionCategory": "llmEval"},
+        ],
+    }
+
+
+def test_templated_spec_accepts_unplaced_widgets():
+    dashboard.validate_spec(_templated_spec())
+
+
+def test_templated_spec_rejects_explicit_placement():
+    spec = _templated_spec()
+    spec["widgets"][0].update({"row": 1, "col": 1, "width": 3, "height": 4})
+    with pytest.raises(dashboard.SpecError, match="templated dashboard|explicit placement"):
+        dashboard.validate_spec(spec)
+
+
+def test_templated_spec_rejects_partial_placement():
+    """Partial placement is silently dropped by _placed(), so it must not slip through."""
+    spec = _templated_spec()
+    spec["widgets"][0]["row"] = 1
+    with pytest.raises(dashboard.SpecError, match="explicit placement"):
+        dashboard.validate_spec(spec)
+
+
+def test_templated_spec_rejects_text_widgets():
+    """A text widget cannot be auto-placed, so on a template it always overlaps."""
+    spec = _templated_spec()
+    spec["widgets"].append({"type": "text", "title": "Header", "content": "## Evals"})
+    with pytest.raises(dashboard.SpecError, match="text widget"):
+        dashboard.validate_spec(spec)
+
+
+def test_apply_from_template_pins_the_tracing_environment():
+    captured = []
+    client = _scripted_client([
+        {"createDashboardFromTemplate": {"dashboard": {"id": "dash-9", "name": "Overview"}}},
+        {"createStatisticWidget": {"statisticWidget": {"id": "w1", "title": "Hallucination"}}},
+        _verify_payload(["Hallucination"], [], name="Overview"),
+    ], captured)
+    result = dashboard.apply(client, _templated_spec())
+    assert result["dashboardId"] == "dash-9"
+    assert result["created"] == ["Hallucination"]
+    template_input = captured[0]["variables"]["input"]
+    assert "createDashboardFromTemplate" in captured[0]["query"]
+    assert template_input["template"] == "generativeLlmModelV2"
+    assert template_input["modelId"] == "proj-1"
+    # Omitting this makes every template panel query the production environment.
+    assert template_input["modelEnvironmentName"] == "tracing"
+    assert captured[1]["variables"]["input"]["dashboardId"] == "dash-9"
+
+
+# --- apply verifies what it created ---------------------------------------
+
+
+def test_apply_verifies_titles_and_reports_success():
+    captured = []
+    client = _scripted_client([
+        {"createDashboard": {"dashboard": {"id": "dash-1", "name": "Eval Health"}}},
+        {"createTextWidget": {"textWidget": {"id": "w1", "title": "Header"}}},
+        {"createStatisticWidget": {"statisticWidget": {"id": "w2", "title": "Hallucination"}}},
+        _verify_payload(["Hallucination"], ["Header"]),
+    ], captured)
+    result = dashboard.apply(client, _valid_spec())
+    assert result["verified"] is True
+    assert result["missingTitles"] == []
+    assert "VerifyDashboard" in captured[-1]["query"]
+
+
+def test_apply_reports_a_widget_that_did_not_land():
+    captured = []
+    client = _scripted_client([
+        {"createDashboard": {"dashboard": {"id": "dash-1", "name": "Eval Health"}}},
+        {"createTextWidget": {"textWidget": {"id": "w1", "title": "Header"}}},
+        {"createStatisticWidget": {"statisticWidget": {"id": "w2", "title": "Hallucination"}}},
+        _verify_payload([], ["Header"]),
+    ], captured)
+    result = dashboard.apply(client, _valid_spec())
+    assert result["verified"] is False
+    assert result["missingTitles"] == ["Hallucination"]
+
+
+def test_apply_tolerates_extra_template_widgets_in_the_readback():
+    captured = []
+    client = _scripted_client([
+        {"createDashboardFromTemplate": {"dashboard": {"id": "dash-9", "name": "Overview"}}},
+        {"createStatisticWidget": {"statisticWidget": {"id": "w1", "title": "Hallucination"}}},
+        _verify_payload(["Hallucination", "Template Latency", "Template Volume"], [], name="Overview"),
+    ], captured)
+    result = dashboard.apply(client, _templated_spec())
+    assert result["verified"] is True
+
+
+def test_apply_surfaces_a_failed_readback_without_raising():
+    captured = []
+    client = _scripted_client([
+        {"createDashboard": {"dashboard": {"id": "dash-1", "name": "Eval Health"}}},
+        {"createTextWidget": {"textWidget": {"id": "w1", "title": "Header"}}},
+        {"createStatisticWidget": {"statisticWidget": {"id": "w2", "title": "Hallucination"}}},
+        {"node": None},
+    ], captured)
+    result = dashboard.apply(client, _valid_spec())
+    # The dashboard id must survive: it is the only handle the user has.
+    assert result["dashboardId"] == "dash-1"
+    assert result["verified"] is False
+    assert "not found" in result["verifyError"]
+
+
+def test_cli_apply_exits_non_zero_when_a_widget_is_missing(tmp_path, capsys, monkeypatch):
+    spec_file = tmp_path / "spec.json"
+    spec_file.write_text(json.dumps(_valid_spec()))
+    captured = []
+    client = _scripted_client([
+        {"createDashboard": {"dashboard": {"id": "dash-1", "name": "Eval Health"}}},
+        {"createTextWidget": {"textWidget": {"id": "w1", "title": "Header"}}},
+        {"createStatisticWidget": {"statisticWidget": {"id": "w2", "title": "Hallucination"}}},
+        _verify_payload([], ["Header"]),
+    ], captured)
+    cfg = {"app_host": "app.arize.com", "app_scheme": "https", "api_key": "k", "name": "t"}
+    monkeypatch.setattr(dashboard, "_client_for", lambda args: (cfg, client))
+    code = dashboard.main(["apply", "--spec", str(spec_file), "--home", str(tmp_path)])
+    captured_io = capsys.readouterr()
+    assert code != 0
+    assert "Hallucination" in captured_io.err
+    # The dashboard id is still printed so the user can go look at it.
+    assert "dash-1" in captured_io.out
+
+
+# --- deep links -----------------------------------------------------------
+
+
+def test_apply_omits_a_link_without_an_org_and_never_invents_one():
+    captured = []
+    client = _scripted_client([
+        {"createDashboard": {"dashboard": {"id": "dash-1", "name": "Eval Health"}}},
+        {"createTextWidget": {"textWidget": {"id": "w1", "title": "Header"}}},
+        {"createStatisticWidget": {"statisticWidget": {"id": "w2", "title": "Hallucination"}}},
+        _verify_payload(["Hallucination"], ["Header"]),
+    ], captured)
+    result = dashboard.apply(client, _valid_spec())
+    assert result["url"] is None
+    assert "arize-link" in result["urlHint"]
+
+
+def test_apply_emits_a_deep_link_when_given_an_org():
+    captured = []
+    client = _scripted_client([
+        {"createDashboard": {"dashboard": {"id": "dash-1", "name": "Eval Health"}}},
+        {"createTextWidget": {"textWidget": {"id": "w1", "title": "Header"}}},
+        {"createStatisticWidget": {"statisticWidget": {"id": "w2", "title": "Hallucination"}}},
+        _verify_payload(["Hallucination"], ["Header"]),
+    ], captured)
+    cfg = {"app_host": "arize-app.iqhub.co", "app_scheme": "https"}
+    result = dashboard.apply(client, _valid_spec(), cfg=cfg, org_id="org-1")
+    assert result["url"] == (
+        "https://arize-app.iqhub.co/organizations/org-1/spaces/space-1/dashboards/dash-1"
+    )
+
+
+def test_cli_verify_org_without_space_is_a_plain_error(tmp_path, capsys, monkeypatch):
+    cfg = {"app_host": "app.arize.com", "app_scheme": "https"}
+    client = _scripted_client([], [])
+    monkeypatch.setattr(dashboard, "_client_for", lambda args: (cfg, client))
+    code = dashboard.main(["verify", "--dashboard", "d1", "--org", "org-1", "--home", str(tmp_path)])
+    err = capsys.readouterr().err
+    assert code != 0
+    assert "--space" in err
+    assert "Traceback" not in err
+
+
+def test_cli_verify_emits_a_link_with_org_and_space(tmp_path, capsys, monkeypatch):
+    cfg = {"app_host": "app.arize.com", "app_scheme": "https"}
+    client = _scripted_client([_verify_payload(["Hallucination"], ["Header"])], [])
+    monkeypatch.setattr(dashboard, "_client_for", lambda args: (cfg, client))
+    code = dashboard.main(["verify", "--dashboard", "dash-1", "--org", "org-1",
+                           "--space", "space-1", "--home", str(tmp_path)])
+    out = json.loads(capsys.readouterr().out)
+    assert code == 0
+    assert out["url"] == "https://app.arize.com/organizations/org-1/spaces/space-1/dashboards/dash-1"
+
+
+# --- spec-file errors are plain messages, not tracebacks ------------------
+
+
+def test_cli_missing_spec_file_reports_the_path_without_a_traceback(tmp_path, capsys):
+    missing = tmp_path / "typo.json"
+    code = dashboard.main(["apply", "--spec", str(missing), "--home", str(tmp_path)])
+    err = capsys.readouterr().err
+    assert code != 0
+    assert "Traceback" not in err
+    assert str(missing) in err
+
+
+def test_cli_malformed_spec_json_reports_the_line_without_a_traceback(tmp_path, capsys):
+    bad = tmp_path / "spec.json"
+    bad.write_text('{"dashboard": {"name": "D",}}')
+    code = dashboard.main(["apply", "--spec", str(bad), "--home", str(tmp_path)])
+    err = capsys.readouterr().err
+    assert code != 0
+    assert "Traceback" not in err
+    assert "not valid JSON" in err
+
+
+def test_load_spec_rejects_a_non_object_document(tmp_path):
+    path = tmp_path / "spec.json"
+    path.write_text("[]")
+    with pytest.raises(dashboard.SpecError, match="JSON object"):
+        dashboard.load_spec(path)
+
+
+# --- --app-host --------------------------------------------------------
+
+
+def test_app_host_flag_supplies_a_missing_on_prem_app_host(tmp_path):
+    write_profile(tmp_path, "onprem", api_host="arize-api.iqhub.co", app_host=None)
+    cfg = dashboard.load_profile(tmp_path, profile="onprem", environ={},
+                                 app_host="arize-app.iqhub.co")
+    assert dashboard.graphql_endpoint(cfg) == "https://arize-app.iqhub.co/graphql"
+
+
+def test_app_host_flag_beats_the_profile_and_the_env(tmp_path):
+    write_profile(tmp_path, "saas", app_host="app.arize.com")
+    cfg = dashboard.load_profile(tmp_path, profile="saas",
+                                 environ={"ARIZE_APP_HOST": "from-env.example.com"},
+                                 app_host="from-flag.example.com")
+    assert cfg["app_host"] == "from-flag.example.com"
+
+
+def test_cli_accepts_app_host_before_and_after_the_subcommand(tmp_path, capsys):
+    write_profile(tmp_path, "onprem", api_host="arize-api.iqhub.co", app_host=None)
+    (tmp_path / ".active_profile").write_text("onprem")
+    seen = {}
+
+    def fake_client_for(args):
+        seen["app_host"] = args.app_host
+        raise dashboard.ConfigError("stop here")
+
+    import unittest.mock
+    with unittest.mock.patch.object(dashboard, "_client_for", fake_client_for):
+        dashboard.main(["--app-host", "a.example.com", "list", "--space", "s", "--home", str(tmp_path)])
+        assert seen["app_host"] == "a.example.com"
+        dashboard.main(["list", "--space", "s", "--app-host", "b.example.com", "--home", str(tmp_path)])
+        assert seen["app_host"] == "b.example.com"
+    capsys.readouterr()
