@@ -245,3 +245,78 @@ def test_discover_tolerates_missing_buckets():
 def test_discover_rejects_an_unknown_project():
     with pytest.raises(dashboard.DashboardError, match="not a project"):
         dashboard.discover(_client_returning({"node": None}), "missing")
+
+
+def _valid_spec():
+    return {
+        "dashboard": {"name": "Eval Health", "projectId": "proj-1", "spaceId": "space-1"},
+        "widgets": [
+            {"type": "text", "title": "Header", "content": "## Evals",
+             "row": 1, "col": 1, "width": 12, "height": 2},
+            {"type": "statistic", "title": "Hallucination", "aggregation": "avg",
+             "dimension": {"id": "ev__h", "name": "hallucination", "dataType": "STRING"},
+             "dimensionCategory": "llmEval", "row": 3, "col": 1, "width": 3, "height": 4},
+        ],
+    }
+
+
+def test_valid_spec_passes():
+    dashboard.validate_spec(_valid_spec())
+
+
+def test_spec_requires_a_dashboard_name():
+    spec = _valid_spec()
+    del spec["dashboard"]["name"]
+    with pytest.raises(dashboard.SpecError, match="name"):
+        dashboard.validate_spec(spec)
+
+
+def test_spec_rejects_unknown_widget_type():
+    spec = _valid_spec()
+    spec["widgets"][0]["type"] = "pieChart"
+    with pytest.raises(dashboard.SpecError, match="pieChart"):
+        dashboard.validate_spec(spec)
+
+
+def test_spec_rejects_text_widget_without_content():
+    spec = _valid_spec()
+    del spec["widgets"][0]["content"]
+    with pytest.raises(dashboard.SpecError, match="content"):
+        dashboard.validate_spec(spec)
+
+
+def test_spec_surfaces_layout_errors():
+    spec = _valid_spec()
+    spec["widgets"][1]["col"] = 11
+    spec["widgets"][1]["width"] = 6
+    with pytest.raises(dashboard.LayoutError):
+        dashboard.validate_spec(spec)
+
+
+def test_text_widget_mutation_publishes_and_converts_grid():
+    widget = _valid_spec()["widgets"][0]
+    query, variables = dashboard.widget_mutation(widget, "dash-1", "proj-1")
+    assert "createTextWidget" in query
+    assert variables["input"]["gridPosition"] == [1, 1, 3, 13]
+    assert variables["input"]["creationStatus"] == "published"
+    assert variables["input"]["dashboardId"] == "dash-1"
+
+
+def test_statistic_widget_mutation_carries_dimension_and_project():
+    widget = _valid_spec()["widgets"][1]
+    query, variables = dashboard.widget_mutation(widget, "dash-1", "proj-1")
+    payload = variables["input"]
+    assert "createStatisticWidget" in query
+    assert payload["modelId"] == "proj-1"
+    assert payload["dimensionCategory"] == "llmEval"
+    assert payload["dimension"]["name"] == "hallucination"
+    assert payload["timeSeriesMetricType"] == "modelDataMetric"
+    assert payload["creationStatus"] == "published"
+
+
+def test_unplaced_widget_omits_grid_position():
+    query, variables = dashboard.widget_mutation(
+        {"type": "statistic", "title": "auto", "aggregation": "count",
+         "dimension": {"id": "d", "name": "n", "dataType": "STRING"}, "dimensionCategory": "spanProperty"},
+        "dash-1", "proj-1")
+    assert "gridPosition" not in variables["input"]

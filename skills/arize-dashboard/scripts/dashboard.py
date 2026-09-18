@@ -222,3 +222,97 @@ def discover(client, project_id, days=30, now=None):
             if e and e.get("node")
         ],
     }
+
+
+WIDGET_TYPES = ("text", "statistic", "lineChart")
+
+CREATE_TEXT_WIDGET = """
+mutation CreateTextWidget($input: CreateTextWidgetMutationInput!) {
+  createTextWidget(input: $input) { textWidget { id title } }
+}
+"""
+
+CREATE_STATISTIC_WIDGET = """
+mutation CreateStatisticWidget($input: CreateStatisticWidgetMutationInput!) {
+  createStatisticWidget(input: $input) { statisticWidget { id title } }
+}
+"""
+
+CREATE_LINE_CHART_WIDGET = """
+mutation CreateLineChartWidget($input: CreateLineChartWidgetMutationInput!) {
+  createLineChartWidget(input: $input) { lineChartWidget { id title } }
+}
+"""
+
+
+class SpecError(DashboardError):
+    pass
+
+
+def validate_spec(spec):
+    meta = spec.get("dashboard") or {}
+    for field in ("name", "projectId", "spaceId"):
+        if not meta.get(field):
+            raise SpecError(f"spec.dashboard.{field} is required.")
+    widgets = spec.get("widgets") or []
+    for widget in widgets:
+        title = widget.get("title", "<untitled>")
+        kind = widget.get("type")
+        if kind not in WIDGET_TYPES:
+            raise SpecError(f"Widget '{title}' has unsupported type '{kind}'. Supported: {', '.join(WIDGET_TYPES)}.")
+        if not widget.get("title"):
+            raise SpecError("Every widget needs a title.")
+        if kind == "text" and not widget.get("content"):
+            raise SpecError(f"Text widget '{title}' requires content.")
+        if kind in ("statistic", "lineChart"):
+            if not widget.get("dimension"):
+                raise SpecError(f"Widget '{title}' requires a dimension from discovery output.")
+            if not widget.get("dimensionCategory"):
+                raise SpecError(f"Widget '{title}' requires a dimensionCategory.")
+    validate_layout(widgets)
+
+
+def _grid(widget):
+    if not _placed(widget):
+        return None
+    return to_grid_position(widget["row"], widget["col"], widget["width"], widget["height"])
+
+
+def widget_mutation(widget, dashboard_id, project_id):
+    kind = widget["type"]
+    grid = _grid(widget)
+    payload = {"dashboardId": dashboard_id, "title": widget["title"], "creationStatus": "published"}
+    if kind == "text":
+        # createTextWidget requires gridPosition; fall back to a full-width band.
+        payload["content"] = widget["content"]
+        payload["gridPosition"] = grid or to_grid_position(1, 1, GRID_COLUMNS, 2)
+        return CREATE_TEXT_WIDGET, {"input": payload}
+
+    payload["modelId"] = project_id
+    payload["modelEnvironmentName"] = widget.get("modelEnvironmentName", "tracing")
+    payload["dimension"] = widget["dimension"]
+    payload["dimensionCategory"] = widget["dimensionCategory"]
+    payload["timeSeriesMetricType"] = widget.get("timeSeriesMetricType", "modelDataMetric")
+    if grid:
+        payload["gridPosition"] = grid
+
+    if kind == "statistic":
+        payload["aggregation"] = widget.get("aggregation", "count")
+        return CREATE_STATISTIC_WIDGET, {"input": payload}
+
+    plot = {
+        "modelId": project_id,
+        "modelVersionIds": [],
+        "modelEnvironmentName": payload["modelEnvironmentName"],
+        "dimension": widget["dimension"],
+        "dimensionCategory": widget["dimensionCategory"],
+        "metric": widget.get("metric", "count"),
+        "title": widget["title"],
+        "position": 0,
+        "filters": [],
+    }
+    line = {k: payload[k] for k in ("dashboardId", "title", "creationStatus", "timeSeriesMetricType")}
+    if grid:
+        line["gridPosition"] = grid
+    line["plots"] = [plot]
+    return CREATE_LINE_CHART_WIDGET, {"input": line}
