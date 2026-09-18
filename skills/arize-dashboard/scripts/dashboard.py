@@ -27,6 +27,10 @@ class GraphQLError(DashboardError):
     pass
 
 
+class LayoutError(DashboardError):
+    pass
+
+
 def active_profile_name(home, profile=None, environ=None):
     environ = os.environ if environ is None else environ
     if profile:
@@ -119,3 +123,43 @@ class Client:
             joined = "; ".join(e.get("message", "unknown error") for e in body["errors"])
             raise GraphQLError(f"{context} failed: {joined}")
         return body.get("data", {})
+
+
+GRID_COLUMNS = 12
+
+
+def to_grid_position(row, col, width, height):
+    """Convert natural 1-indexed placement to Arize's [rowStart, colStart, rowEnd, colEnd].
+
+    Arize reads gridPosition as [rowStart, colStart, rowEnd, colEnd] on a
+    12-column grid, NOT [x, y, w, h]. Passing [x, y, w, h] renders widgets as
+    tall narrow columns and makes data widgets disappear.
+    """
+    return [row, col, row + height, col + width]
+
+
+def _placed(widget):
+    return all(widget.get(k) is not None for k in ("row", "col", "width", "height"))
+
+
+def validate_layout(widgets):
+    boxes = []
+    for widget in widgets:
+        if not _placed(widget):
+            continue  # left to the backend's next-available-slot placement
+        title = widget.get("title", "<untitled>")
+        row, col = widget["row"], widget["col"]
+        width, height = widget["width"], widget["height"]
+        if width <= 0 or height <= 0:
+            raise LayoutError(f"Widget '{title}' must have positive width and height; got {width}x{height}.")
+        if row < 1 or col < 1:
+            raise LayoutError(f"Widget '{title}' row and col are 1-indexed; got row={row}, col={col}.")
+        if col + width > GRID_COLUMNS + 1:
+            raise LayoutError(
+                f"Widget '{title}' exceeds the {GRID_COLUMNS}-column grid: col={col} + width={width} > {GRID_COLUMNS + 1}."
+            )
+        boxes.append((title, row, col, row + height, col + width))
+    for i, (title_a, r1, c1, r2, c2) in enumerate(boxes):
+        for title_b, r3, c3, r4, c4 in boxes[i + 1:]:
+            if r1 < r4 and r3 < r2 and c1 < c4 and c3 < c2:
+                raise LayoutError(f"Widgets '{title_a}' and '{title_b}' overlap on the grid.")

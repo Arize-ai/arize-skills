@@ -135,3 +135,53 @@ def test_env_var_missing_profile_does_not_silently_load_config_toml(tmp_path):
     with pytest.raises(dashboard.ConfigError) as excinfo:
         dashboard.load_profile(tmp_path, profile=None, environ={"ARIZE_PROFILE": "staging"})
     assert "staging" in str(excinfo.value)
+
+
+def test_full_width_header_matches_known_good_grid_position():
+    # A full-width header occupying the first 2 rows.
+    assert dashboard.to_grid_position(row=1, col=1, width=12, height=2) == [1, 1, 3, 13]
+
+
+def test_three_wide_stat_matches_known_good_grid_position():
+    # A 3-wide stat in the next 4 rows at the left.
+    assert dashboard.to_grid_position(row=3, col=1, width=3, height=4) == [3, 1, 7, 4]
+
+
+def test_grid_position_is_not_xywh():
+    # The natural-but-wrong guess is [x, y, w, h]; assert we never emit it.
+    assert dashboard.to_grid_position(row=1, col=1, width=12, height=2) != [0, 0, 12, 2]
+
+
+def test_width_overflowing_grid_is_rejected():
+    with pytest.raises(dashboard.LayoutError, match="exceeds"):
+        dashboard.validate_layout([{"title": "wide", "row": 1, "col": 6, "width": 8, "height": 2}])
+
+
+def test_full_width_widget_is_allowed():
+    dashboard.validate_layout([{"title": "header", "row": 1, "col": 1, "width": 12, "height": 2}])
+
+
+def test_overlapping_widgets_are_rejected():
+    widgets = [
+        {"title": "a", "row": 1, "col": 1, "width": 6, "height": 4},
+        {"title": "b", "row": 2, "col": 3, "width": 6, "height": 4},
+    ]
+    with pytest.raises(dashboard.LayoutError, match="overlap"):
+        dashboard.validate_layout(widgets)
+
+
+def test_adjacent_widgets_do_not_count_as_overlapping():
+    widgets = [
+        {"title": "a", "row": 1, "col": 1, "width": 6, "height": 4},
+        {"title": "b", "row": 1, "col": 7, "width": 6, "height": 4},
+    ]
+    dashboard.validate_layout(widgets)
+
+
+def test_non_positive_dimensions_are_rejected():
+    with pytest.raises(dashboard.LayoutError, match="positive"):
+        dashboard.validate_layout([{"title": "bad", "row": 1, "col": 1, "width": 0, "height": 2}])
+
+
+def test_widgets_without_coordinates_are_left_to_auto_placement():
+    dashboard.validate_layout([{"title": "auto"}])
