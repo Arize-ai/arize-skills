@@ -87,3 +87,32 @@ def test_execute_returns_data():
     client = dashboard.Client("https://app.arize.com/graphql", "secret-key",
                               http=httpx.Client(transport=httpx.MockTransport(handler)))
     assert client.execute("query { viewer { id } }") == {"viewer": {"id": "abc"}}
+
+
+def test_terminal_default_falls_back_to_config_toml(tmp_path):
+    """Terminal default (no marker, no env, no arg) can fall back to config.toml."""
+    (tmp_path / "config.toml").write_text('[profile]\nname = "default"\n\n[auth]\napi_key = "config-key"\n\n[routing]\napi_host = "api.arize.com"\napp_scheme = "https"\n')
+    cfg = dashboard.load_profile(tmp_path, profile=None, environ={})
+    assert cfg["api_key"] == "config-key"
+
+
+def test_explicit_profile_missing_raises_error(tmp_path):
+    """Explicit --profile argument to missing file raises ConfigError with profile name."""
+    with pytest.raises(dashboard.ConfigError) as excinfo:
+        dashboard.load_profile(tmp_path, profile="staging", environ={})
+    assert "staging" in str(excinfo.value)
+
+
+def test_marker_file_missing_profile_raises_error(tmp_path):
+    """Marker file pointing to missing profile raises ConfigError."""
+    (tmp_path / ".active_profile").write_text("nonexistent")
+    with pytest.raises(dashboard.ConfigError) as excinfo:
+        dashboard.load_profile(tmp_path, profile=None, environ={})
+    assert "nonexistent" in str(excinfo.value)
+
+
+def test_env_var_missing_profile_raises_error(tmp_path):
+    """ARIZE_PROFILE env var pointing to missing profile raises ConfigError."""
+    with pytest.raises(dashboard.ConfigError) as excinfo:
+        dashboard.load_profile(tmp_path, profile=None, environ={"ARIZE_PROFILE": "staging"})
+    assert "staging" in str(excinfo.value)

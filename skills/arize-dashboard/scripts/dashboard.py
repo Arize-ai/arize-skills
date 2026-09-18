@@ -41,12 +41,33 @@ def active_profile_name(home, profile=None, environ=None):
     return "default"
 
 
+def _profile_name_is_explicit(home, profile, environ):
+    """Check if the profile name came from an explicit source (not terminal default)."""
+    if profile:
+        return True
+    if environ.get("ARIZE_PROFILE"):
+        return True
+    marker = Path(home) / ".active_profile"
+    if marker.exists():
+        name = marker.read_text().strip()
+        if name:
+            return True
+    return False
+
+
 def load_profile(home, profile=None, environ=None):
     environ = os.environ if environ is None else environ
     home = Path(home)
     name = active_profile_name(home, profile, environ)
+    is_explicit = _profile_name_is_explicit(home, profile, environ)
     path = home / "profiles" / f"{name}.toml"
     if not path.exists():
+        # If the name came from an explicit source, don't fall back to config.toml
+        if is_explicit:
+            raise ConfigError(
+                f"Profile '{name}' not found at {path}. Run 'ax profiles list' to see available profiles."
+            )
+        # Only fall back to config.toml for terminal defaults
         path = home / "config.toml"
     if not path.exists():
         raise ConfigError(
