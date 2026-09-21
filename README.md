@@ -56,7 +56,7 @@ The installer detects installed agents and optionally installs the `ax` CLI. Use
 
 ### Option 3: ax CLI
 
-If you already have `ax` installed (v0.9.0+):
+If you already have `ax` installed (v0.35.0+):
 
 ```bash
 ax skills install                                    # interactive
@@ -155,6 +155,7 @@ For interactive setup, `ax profiles create` also offers **Advanced → Single en
 | [arize-trace](skills/arize-trace/SKILL.md) | Export traces and spans by trace ID, span ID, or session ID. Debug LLM application issues. |
 | [arize-phoenix-migration](skills/arize-phoenix-migration/SKILL.md) | Migrate Phoenix project traces into Arize AX, preserve historical IDs and timestamps, and verify imported spans. |
 | [arize-instrumentation](skills/arize-instrumentation/SKILL.md) | Add Arize AX tracing to an app. Two-phase flow: analyze codebase, then implement instrumentation (uses [Agent-Assisted Tracing](https://arize.com/docs/ax/alyx/tracing-assistant)). |
+| [arize-instrumentation-health](skills/arize-instrumentation-health/SKILL.md) | Audit instrumentation health of existing traces — find orphaned/flat/blank spans and why evals or token/cost dashboards show n/a or zero. |
 | [arize-span-routing](skills/arize-span-routing/SKILL.md) | Send each agent's or tenant's Python spans to its correct Arize space and project using application metadata. |
 | [arize-dataset](skills/arize-dataset/SKILL.md) | Create, manage, and download datasets and examples. |
 | [arize-experiment](skills/arize-experiment/SKILL.md) | Run and analyze experiments against datasets. |

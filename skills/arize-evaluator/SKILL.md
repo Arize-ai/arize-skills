@@ -65,7 +65,7 @@ A **task** is how you run one or more evaluators against real data. Tasks are at
 
 ## Data Granularity
 
-Set `--data-granularity` when creating the evaluator (`ax evaluators create-template-evaluator` / `create-code-evaluator`), not on the task — it controls what unit of data that evaluator scores whenever it runs against a **project task** (not dataset/experiment tasks — those evaluate experiment runs directly). It defaults to `span`.
+Set `--data-granularity` when creating the evaluator (`ax evaluators create-evaluator template` / `create-evaluator code`), not on the task — it controls what unit of data that evaluator scores whenever it runs against a **project task** (not dataset/experiment tasks — those evaluate experiment runs directly). It defaults to `span`.
 
 | Level | What it evaluates | Use for | Result column prefix |
 |-------|-------------------|---------|---------------------|
@@ -146,7 +146,7 @@ If a suitable integration exists, note its ID. If not, create one using the **ar
 Use the template design best practices below. Keep the evaluator name and variables **generic** — the task (Step 6) handles project-specific wiring via `column_mappings`.
 
 ```bash
-ax evaluators create-template-evaluator \
+ax evaluators create-evaluator template \
   --name "Hallucination" \
   --space SPACE \
   --template-name "hallucination" \
@@ -423,7 +423,7 @@ The labels in `--classification-choices` must exactly match the labels reference
 | Scores look wrong | Add `--include-explanations` and inspect judge reasoning on a few samples |
 | Evaluator cancels on wrong span kind | Match `query_filter` and `column_mappings` to LLM vs CHAIN spans |
 | Time format error on `trigger-run` | Use `2026-03-21T09:00:00` — no trailing `Z` |
-| Run failed: "missing rails and classification choices" | Add `--classification-choices '{"label_a": 1, "label_b": 0}'` to `ax evaluators create-template-evaluator` — labels must match the template |
+| Run failed: "missing rails and classification choices" | Add `--classification-choices '{"label_a": 1, "label_b": 0}'` to `ax evaluators create-evaluator template` — labels must match the template |
 | Run `completed`, all spans skipped | Query filter matched spans but column mappings are wrong or template variables don't resolve — export a sample span and verify paths |
 | `query_filter` set but 0 spans scored | The filter attribute may not be indexed in the eval index. `attributes.metadata.*` and custom attributes are often not indexed. Use `span_kind` or `attributes.llm.model_name` instead, or remove the filter to confirm spans exist in the window. |
 | Custom **code** evaluator run cancels ~3s with `0/0/0` (successes/errors/skipped) | Wrong import path or `evaluate()` signature — see the "CRITICAL" callout under **Custom Python code evaluators** in [references/cli-reference.md](references/cli-reference.md). Must import from `arize.experimental.datasets.experiments.evaluators.base` (not `arize.experiments`) and declare named `evaluate()` params, not just `**kwargs`. |

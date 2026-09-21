@@ -1,6 +1,6 @@
 # `ax spans` / `ax traces` — Flag and Filter Reference
 
-Flag tables (verified against `--help` on arize-ax-cli 0.33.0) and `--filter` syntax. See [SKILL.md](../SKILL.md) for workflows and export strategy, and [span-columns.md](span-columns.md) for the full span attribute reference.
+Flag tables (verified against `--help` on arize-ax-cli 0.35.0) and `--filter` syntax. See [SKILL.md](../SKILL.md) for workflows and export strategy, and [span-columns.md](span-columns.md) for the full span attribute reference.
 
 ## `ax spans export`
 
@@ -68,8 +68,8 @@ Full column list in [span-columns.md](span-columns.md). The most frequently filt
 | `attributes.llm.model_name` | string | LLM model | `'gpt-4o'`, `'claude-3'` |
 | `attributes.input.value` | string | Span input | |
 | `attributes.output.value` | string | Span output | |
-| `attributes.error.type` | string | Error type | `'ValueError'`, `'TimeoutError'` |
-| `attributes.error.message` | string | Error message | |
+| `attributes.exception.type` | string | Exception class name | `'ValueError'`, `'TimeoutError'` |
+| `attributes.exception.message` | string | Exception message | |
 | `event.attributes` | string | Error tracebacks | Use CONTAINS (not exact match) |
 
 ### Operators
@@ -84,7 +84,7 @@ latency_ms > 5000
 name = 'ChatCompletion' AND status_code = 'ERROR'
 attributes.llm.model_name = 'gpt-4o'
 attributes.openinference.span.kind IN ('LLM', 'AGENT')
-attributes.error.type LIKE '%Transport%'
+attributes.exception.type LIKE '%Transport%'
 event.attributes CONTAINS 'TimeoutError'
 ```
 
