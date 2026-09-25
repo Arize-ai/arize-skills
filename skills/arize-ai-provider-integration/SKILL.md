@@ -1,10 +1,10 @@
 ---
 name: arize-ai-provider-integration
-description: Creates, reads, updates, and deletes Arize AI integrations that store LLM provider credentials used by evaluators and other Arize features. Supports any LLM provider (e.g. OpenAI, Anthropic, Azure OpenAI, AWS Bedrock, Vertex AI, Gemini, NVIDIA NIM). Use when the user mentions AI integration, LLM provider credentials, create integration, list integrations, update credentials, delete integration, or connecting an LLM provider to Arize.
+description: Creates, reads, updates, and deletes Arize AI integrations that store LLM provider credentials used by evaluators and other Arize features. Supports any LLM provider (e.g. OpenAI, Anthropic, Azure OpenAI, AWS Bedrock, Vertex AI, Gemini, NVIDIA NIM, Fireworks AI, Together AI). Use when the user mentions AI integration, LLM provider credentials, create integration, list integrations, update credentials, delete integration, or connecting an LLM provider to Arize.
 metadata:
   author: arize
   version: "1.0"
-compatibility: Requires the ax CLI and a configured Arize profile.
+compatibility: Requires the ax CLI and a configured Arize profile. The FIREWORKS and TOGETHER_AI providers require ax CLI ≥ 0.37.0.
 ---
 
 # Arize AI Integration Skill
@@ -195,6 +195,28 @@ ax ai-integrations create \
   --api-key $LITELLM_API_KEY
 ```
 
+### Fireworks AI
+
+Requires ax CLI ≥ 0.37.0. Fireworks is a single hosted service, so the API key is the only credential — do not pass `--base-url` or `--headers` (the server rejects them). Arize resolves the models the key can reach, so `--model-name` is only needed for fine-tunes or dedicated deployments that cannot be listed automatically.
+
+```bash
+ax ai-integrations create \
+  --name "My Fireworks AI Integration" \
+  --provider FIREWORKS \
+  --api-key $FIREWORKS_API_KEY
+```
+
+### Together AI
+
+Requires ax CLI ≥ 0.37.0. Together AI is a single hosted service, so the API key is the only credential — do not pass `--base-url` or `--headers` (the server rejects them). Arize resolves the models the key can reach, so `--model-name` is optional.
+
+```bash
+ax ai-integrations create \
+  --name "My Together AI Integration" \
+  --provider TOGETHER_AI \
+  --api-key $TOGETHER_API_KEY
+```
+
 ### Supported Providers
 
 | Provider | Required extra flags |
@@ -208,6 +230,8 @@ ax ai-integrations create \
 | `NVIDIA_NIM` | `--api-key <key>`, `--base-url <nim-endpoint>` |
 | `CUSTOM` | `--base-url <endpoint>` |
 | `LITELLM` | `--base-url <endpoint>` |
+| `FIREWORKS` | `--api-key <key>` (ax CLI ≥ 0.37.0) |
+| `TOGETHER_AI` | `--api-key <key>` (ax CLI ≥ 0.37.0) |
 
 ### Optional flags for any provider
 
@@ -283,6 +307,7 @@ Omit `--force` to get a confirmation prompt instead of deleting immediately.
 | `Integration not found` | Verify with `ax ai-integrations list --space SPACE` |
 | `has_api_key: false` after create | Credentials were not saved — re-run `update` with the correct `--api-key` or `--provider-metadata` |
 | Evaluator runs fail with LLM errors | Check integration credentials with `ax ai-integrations get INT_ID`; rotate the API key if needed |
+| `Invalid value for '--provider'` with `FIREWORKS` or `TOGETHER_AI` | The installed ax CLI predates these providers — upgrade to ≥ 0.37.0 (see [references/ax-setup.md](references/ax-setup.md)) |
 | `provider` mismatch | Cannot change provider after creation — delete and recreate with the correct provider |
 
 ---

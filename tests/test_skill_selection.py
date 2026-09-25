@@ -231,6 +231,16 @@ SPECIFIC_PROMPTS = [
         ["arize-ai-provider-integration"],
         ["specific", "ai-provider-integration"],
     ),
+    (
+        "Add my Fireworks AI API key to Arize as an AI provider",
+        ["arize-ai-provider-integration"],
+        ["specific", "ai-provider-integration"],
+    ),
+    (
+        "Add my Together AI API key to Arize so evaluators can use it",
+        ["arize-ai-provider-integration"],
+        ["specific", "ai-provider-integration"],
+    ),
     # arize-compliance-audit
     (
         "Audit my AI app for EU AI Act compliance",
