@@ -115,23 +115,23 @@ ax ai-integrations create \
   --api-key $OPENAI_API_KEY
 ```
 
-For a provider's full example and notes (Bedrock/Vertex metadata, base URLs, flags to avoid), see that provider's section in [references/providers.md](references/providers.md).
+For a provider's full example and notes (Bedrock/Vertex metadata, base URLs, flags to avoid), open only that provider's file from the **Details** column below.
 
 ### Supported Providers
 
-| Provider | Required extra flags | Key env var |
-|----------|---------------------|-------------|
-| `OPEN_AI` | `--api-key <key>` | `$OPENAI_API_KEY` |
-| `ANTHROPIC` | `--api-key <key>` | `$ANTHROPIC_API_KEY` |
-| `AZURE_OPEN_AI` | `--api-key <key>`, `--base-url <azure-endpoint>` | `$AZURE_OPENAI_API_KEY` |
-| `AWS_BEDROCK` | `--provider-metadata '{"role_arn": "<arn>"}'` (no API key) | — |
-| `VERTEX_AI` | `--provider-metadata '{"project_id": "<gcp-project>", "location": "<region>", "project_access_label": "<label>"}'` (no API key) | — |
-| `GEMINI` | `--api-key <key>` | `$GEMINI_API_KEY` |
-| `NVIDIA_NIM` | `--api-key <key>`, `--base-url <nim-endpoint>` | `$NVIDIA_API_KEY` |
-| `CUSTOM` | `--base-url <endpoint>` | `$CUSTOM_LLM_API_KEY` |
-| `LITELLM` | `--base-url <endpoint>` | `$LITELLM_API_KEY` |
-| `FIREWORKS` | `--api-key <key>` only — no `--base-url` or `--headers` | `$FIREWORKS_API_KEY` |
-| `TOGETHER_AI` | `--api-key <key>` only — no `--base-url` or `--headers` | `$TOGETHER_API_KEY` |
+| Provider | Required extra flags | Key env var | Details |
+|----------|---------------------|-------------|---------|
+| `OPEN_AI` | `--api-key <key>` | `$OPENAI_API_KEY` | [provider-openai.md](references/provider-openai.md) |
+| `ANTHROPIC` | `--api-key <key>` | `$ANTHROPIC_API_KEY` | [provider-anthropic.md](references/provider-anthropic.md) |
+| `AZURE_OPEN_AI` | `--api-key <key>`, `--base-url <azure-endpoint>` | `$AZURE_OPENAI_API_KEY` | [provider-azure-openai.md](references/provider-azure-openai.md) |
+| `AWS_BEDROCK` | `--provider-metadata '{"role_arn": "<arn>"}'` (no API key) | — | [provider-aws-bedrock.md](references/provider-aws-bedrock.md) |
+| `VERTEX_AI` | `--provider-metadata '{"project_id": "<gcp-project>", "location": "<region>", "project_access_label": "<label>"}'` (no API key) | — | [provider-vertex-ai.md](references/provider-vertex-ai.md) |
+| `GEMINI` | `--api-key <key>` | `$GEMINI_API_KEY` | [provider-gemini.md](references/provider-gemini.md) |
+| `NVIDIA_NIM` | `--api-key <key>`, `--base-url <nim-endpoint>` | `$NVIDIA_API_KEY` | [provider-nvidia-nim.md](references/provider-nvidia-nim.md) |
+| `CUSTOM` | `--base-url <endpoint>` | `$CUSTOM_LLM_API_KEY` | [provider-custom.md](references/provider-custom.md) |
+| `LITELLM` | `--base-url <endpoint>` | `$LITELLM_API_KEY` | [provider-litellm.md](references/provider-litellm.md) |
+| `FIREWORKS` | `--api-key <key>` only — no `--base-url` or `--headers` | `$FIREWORKS_API_KEY` | [provider-fireworks.md](references/provider-fireworks.md) |
+| `TOGETHER_AI` | `--api-key <key>` only — no `--base-url` or `--headers` | `$TOGETHER_API_KEY` | [provider-together-ai.md](references/provider-together-ai.md) |
 
 ### Optional flags for any provider
 
