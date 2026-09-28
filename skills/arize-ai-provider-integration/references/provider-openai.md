@@ -6,5 +6,8 @@
 ax ai-integrations create \
   --name "My OpenAI Integration" \
   --provider OPEN_AI \
-  --api-key $OPENAI_API_KEY
+  --api-key $OPENAI_API_KEY \
+  --enable-default-models
 ```
+
+`--enable-default-models` is required unless you pass `--model-name` instead: the server rejects an integration with no model source.

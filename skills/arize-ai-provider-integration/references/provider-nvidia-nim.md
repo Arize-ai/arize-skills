@@ -7,5 +7,7 @@ ax ai-integrations create \
   --name "My NVIDIA NIM Integration" \
   --provider NVIDIA_NIM \
   --api-key $NVIDIA_API_KEY \
-  --base-url "https://integrate.api.nvidia.com/v1"
+  --enable-default-models
 ```
+
+`--base-url` and `--api-key` are both optional: omit `--base-url` to use NVIDIA's hosted endpoint, or set it to a self-hosted NIM endpoint (e.g. `--base-url "https://my-nim.example.com/v1"`). `--enable-default-models` is required unless you pass `--model-name` instead: the server rejects an integration with no model source.
