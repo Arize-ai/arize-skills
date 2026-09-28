@@ -18,7 +18,7 @@ compatibility: Requires the ax CLI and a configured Arize profile.
 - **Provider** = the LLM service backing the integration (e.g., `OPEN_AI`, `ANTHROPIC`, `AWS_BEDROCK`)
 - **Integration ID** = a base64-encoded global identifier for an integration (e.g., `TGxtSW50ZWdyYXRpb246MTI6YUJjRA==`); required for evaluator creation and other downstream operations
 - **Scoping** = visibility rules controlling which spaces or users can use an integration
-- **Auth type** = how Arize authenticates with the provider: `DEFAULT` (provider API key), `PROXY_WITH_HEADERS` (proxy via custom headers), or `BEARER_TOKEN` (bearer token auth)
+- **Auth type** = how Arize authenticates with the provider: `DEFAULT` (provider API key), `PROXY_WITH_HEADERS` (proxy via custom headers), `BEARER_TOKEN` (bearer token auth), or `OAUTH2_CLIENT_CREDENTIALS` (OAuth2 client-credentials flow)
 
 ## Prerequisites
 
@@ -208,6 +208,8 @@ ax ai-integrations create \
 | `NVIDIA_NIM` | `--api-key <key>`, `--base-url <nim-endpoint>` |
 | `CUSTOM` | `--base-url <endpoint>` |
 | `LITELLM` | `--base-url <endpoint>` |
+| `FIREWORKS` | `--api-key <key>` (not called out under "Provider-specific requirements" in `ax ai-integrations create --help` — confirm current requirements there before creating) |
+| `TOGETHER_AI` | `--api-key <key>` (same caveat as `FIREWORKS`) |
 
 ### Optional flags for any provider
 
