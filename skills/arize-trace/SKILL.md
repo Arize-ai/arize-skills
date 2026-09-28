@@ -4,7 +4,7 @@ description: Downloads, exports, and inspects existing Arize traces and spans to
 metadata:
   author: arize
   version: "1.0"
-compatibility: Requires the ax CLI (≥ 0.33.0) and a configured Arize profile.
+compatibility: Requires the ax CLI (≥ 0.37.0) and a configured Arize profile.
 ---
 
 # Arize Trace Skill
@@ -269,14 +269,6 @@ ax spans delete PROJECT --span-id id1,id2 --force
 ax spans export PROJECT --trace-id TRACE_ID --stdout | jq '.[]'
 ```
 
-## Troubleshooting rules
-
-- If `ax traces export` fails before querying spans because of project-name resolution, retry with a base64 project ID.
-- If `ax spaces list` is unsupported, treat `ax projects list -o json` as the fallback discovery surface.
-- If a user-provided `--space` is rejected by the CLI but the API key still lists projects without it, report the mismatch instead of silently swapping identifiers.
-- If exporter verification is the goal and the CLI path is unreliable, use the app's runtime/exporter logs plus the latest local `trace_id` to distinguish local instrumentation success from Arize-side ingestion failure.
-
-
 ## Span Column Reference (OpenInference Semantic Conventions)
 
 Core columns you'll need on almost every task:
@@ -311,6 +303,13 @@ For the full column map — timing/status fields, prompt templates, cost/token c
 | `unknown attribute` in filter | The attribute path is wrong or not indexed. Try browsing a small sample first to see actual column names: `ax spans export PROJECT -l 5 --stdout \| jq '.[0] \| keys'` |
 | Attribute columns exist but values look empty | Make sure you are inspecting exported spans, not model column discovery. Column discovery returns schema metadata only. For per-span values, run `ax spans export PROJECT --trace-id TRACE_ID --stdout` and inspect `.[] .attributes` or explicit fields like `.attributes["input.value"]`, `.attributes["output.value"]`, and `.attributes["tool.name"]`. |
 | `Timeout on large export` | Use `--days 7` to narrow the time range |
+
+### Additional rules
+
+- If `ax traces export` fails before querying spans because of project-name resolution, retry with a base64 project ID (see "Resolving project for export" in Concepts).
+- If `ax spaces list` is unsupported, treat `ax projects list -o json` as the fallback discovery surface.
+- If a user-provided `--space` is rejected by the CLI but the API key still lists projects without it, report the mismatch instead of silently swapping identifiers.
+- If exporter verification is the goal and the CLI path is unreliable, use the app's runtime/exporter logs plus the latest local `trace_id` to distinguish local instrumentation success from Arize-side ingestion failure.
 
 ## Related Skills
 

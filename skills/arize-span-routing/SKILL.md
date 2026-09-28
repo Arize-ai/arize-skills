@@ -135,7 +135,7 @@ All auto-instrumented and manual child spans created inside the routing context 
 
 For background work, propagate the OpenTelemetry context explicitly or resolve and enter a new routing context in the worker. Never rely on request-local context after a queue or thread boundary.
 
-See `references/REFERENCE.md` for agent experiment endpoints, existing-provider details, concurrency rules, testing, verification, and troubleshooting.
+See [references/REFERENCE.md](references/REFERENCE.md) for agent experiment endpoints, existing-provider details, concurrency rules, testing, verification, and troubleshooting.
 
 ## Verification
 

@@ -210,29 +210,9 @@ ax prompts list --space SPACE
 
 ### Step 3: Save to Hub
 
-**New prompt:**
-```bash
-ax prompts create \
-  --name "your-prompt-name" \
-  --space SPACE \
-  --provider OPEN_AI \
-  --model gpt-4o \
-  --input-variable-format F_STRING \
-  --messages '[{"role":"SYSTEM","content":"Your system text."},{"role":"USER","content":"{question}"}]' \
-  --description "What this prompt does" \
-  --commit-message "Initial version"
-```
+**New prompt:** same flag shape as **Workflow A, Step 3** — `--name`, `--space`, `--provider`, `--model`, `--input-variable-format`, `--messages`, `--description`, `--commit-message`. The one difference: pass `--messages` as an inline JSON array (built from the extracted span/code text) instead of a file, e.g. `--messages '[{"role":"SYSTEM","content":"Your system text."},{"role":"USER","content":"{question}"}]'`.
 
-**New version on existing prompt** (include `--space` when `PROMPT_NAME_OR_ID` is a **name**, not only an ID):
-```bash
-ax prompts create-version PROMPT_NAME_OR_ID \
-  --space SPACE \
-  --provider OPEN_AI \
-  --model gpt-4o \
-  --input-variable-format F_STRING \
-  --messages '[{"role":"SYSTEM","content":"Updated system text."},{"role":"USER","content":"{question}"}]' \
-  --commit-message "Describe what changed"
-```
+**New version on existing prompt:** same flag shape as **Workflow A, Step 4** (`create-version`, no `--description`), with `--messages` as inline JSON as above. Include `--space` when `PROMPT_NAME_OR_ID` is a **name**, not only an ID.
 
 Note the returned prompt ID (`pr_...`) and version ID (`prv_...`) for future commands.
 
@@ -349,19 +329,7 @@ ax prompts get "source-prompt" --space SPACE -o json
 
 2. From the JSON, take **messages**, **provider**, **model**, and **input variable format** (`F_STRING` / `MUSTACHE` / `NONE`).
 
-3. **Create** a new prompt with a new `--name` and the copied payload:
-
-```bash
-ax prompts create \
-  --name "source-prompt-copy" \
-  --space SPACE \
-  --provider PROVIDER_FROM_SOURCE \
-  --model MODEL_FROM_SOURCE \
-  --input-variable-format F_STRING \
-  --messages ./messages_extracted.json \
-  --description "Copy of source-prompt" \
-  --commit-message "Initial version (duplicated)"
-```
+3. **Create** a new prompt with a new `--name` and the copied payload — same flag shape as **Workflow A, Step 3**, with `--provider`/`--model`/`--input-variable-format` taken from the fetched JSON and `--messages` pointed at the extracted payload (e.g. `--messages ./messages_extracted.json`).
 
 Confirm the new name and space before `create`. Labels are **not** copied — use **Workflow C** on the new prompt if needed.
 
