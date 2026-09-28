@@ -197,7 +197,7 @@ ax ai-integrations create \
 
 ### Fireworks AI
 
-Requires ax CLI ≥ 0.37.0. Fireworks is a single hosted service, so the API key is the only credential — do not pass `--base-url` or `--headers` (the server rejects them). Arize resolves the models the key can reach, so `--model-name` is only needed for fine-tunes or dedicated deployments that cannot be listed automatically.
+Requires ax CLI ≥ 0.37.0. Fireworks is a single hosted service, so the API key is the only credential. Do not pass `--base-url` or `--headers` — they are not used for this provider, and the CLI stores them without validation. Arize resolves the models the key can reach, so `--model-name` is only needed for fine-tunes or dedicated deployments that cannot be listed automatically.
 
 ```bash
 ax ai-integrations create \
@@ -208,7 +208,7 @@ ax ai-integrations create \
 
 ### Together AI
 
-Requires ax CLI ≥ 0.37.0. Together AI is a single hosted service, so the API key is the only credential — do not pass `--base-url` or `--headers` (the server rejects them). Arize resolves the models the key can reach, so `--model-name` is optional.
+Requires ax CLI ≥ 0.37.0. Together AI is a single hosted service, so the API key is the only credential. Do not pass `--base-url` or `--headers` — they are not used for this provider, and the CLI stores them without validation. Arize resolves the models the key can reach, so `--model-name` is optional.
 
 ```bash
 ax ai-integrations create \
