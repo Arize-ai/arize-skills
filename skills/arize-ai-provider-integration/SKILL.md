@@ -106,139 +106,42 @@ ax ai-integrations list --space SPACE
 
 If no suitable integration exists, create one. The required flags depend on the provider.
 
-### OpenAI
+Every create command follows this shape; the provider-specific flags come from the table below:
 
 ```bash
 ax ai-integrations create \
   --name "My OpenAI Integration" \
   --provider OPEN_AI \
-  --api-key $OPENAI_API_KEY
+  --api-key $OPENAI_API_KEY \
+  --enable-default-models
 ```
 
-### Anthropic
+Every integration except LiteLLM, Fireworks AI and Together AI needs a model source: pass `--enable-default-models` (Arize's default model list for the provider) and/or one or more `--model-name` flags. Without either, the server rejects the create with `400: An integration must have at least one model available`.
 
-```bash
-ax ai-integrations create \
-  --name "My Anthropic Integration" \
-  --provider ANTHROPIC \
-  --api-key $ANTHROPIC_API_KEY
-```
-
-### Azure OpenAI
-
-```bash
-ax ai-integrations create \
-  --name "My Azure OpenAI Integration" \
-  --provider AZURE_OPEN_AI \
-  --api-key $AZURE_OPENAI_API_KEY \
-  --base-url "https://my-resource.openai.azure.com/"
-```
-
-### AWS Bedrock
-
-AWS Bedrock uses IAM role-based auth. Provide the ARN of the role Arize should assume via `--provider-metadata`:
-
-```bash
-ax ai-integrations create \
-  --name "My Bedrock Integration" \
-  --provider AWS_BEDROCK \
-  --provider-metadata '{"role_arn": "arn:aws:iam::123456789012:role/ArizeBedrockRole"}'
-```
-
-### Vertex AI
-
-Vertex AI uses GCP service account credentials. Provide the GCP project and region via `--provider-metadata`:
-
-```bash
-ax ai-integrations create \
-  --name "My Vertex AI Integration" \
-  --provider VERTEX_AI \
-  --provider-metadata '{"project_id": "my-gcp-project", "location": "us-central1", "project_access_label": "my-access-label"}'
-```
-
-### Gemini
-
-```bash
-ax ai-integrations create \
-  --name "My Gemini Integration" \
-  --provider GEMINI \
-  --api-key $GEMINI_API_KEY
-```
-
-### NVIDIA NIM
-
-```bash
-ax ai-integrations create \
-  --name "My NVIDIA NIM Integration" \
-  --provider NVIDIA_NIM \
-  --api-key $NVIDIA_API_KEY \
-  --base-url "https://integrate.api.nvidia.com/v1"
-```
-
-### Custom (OpenAI-compatible endpoint)
-
-```bash
-ax ai-integrations create \
-  --name "My Custom Integration" \
-  --provider CUSTOM \
-  --base-url "https://my-llm-proxy.example.com/v1" \
-  --api-key $CUSTOM_LLM_API_KEY
-```
-
-### LiteLLM
-
-```bash
-ax ai-integrations create \
-  --name "My LiteLLM Integration" \
-  --provider LITELLM \
-  --base-url "https://my-litellm-proxy.example.com" \
-  --api-key $LITELLM_API_KEY
-```
-
-### Fireworks AI
-
-Fireworks is a single hosted service, so the API key is the only credential. Do not pass `--base-url` or `--headers` — they are not used for this provider, and the CLI stores them without validation. Arize resolves the models the key can reach, so `--model-name` is only needed for fine-tunes or dedicated deployments that cannot be listed automatically.
-
-```bash
-ax ai-integrations create \
-  --name "My Fireworks AI Integration" \
-  --provider FIREWORKS \
-  --api-key $FIREWORKS_API_KEY
-```
-
-### Together AI
-
-Together AI is a single hosted service, so the API key is the only credential. Do not pass `--base-url` or `--headers` — they are not used for this provider, and the CLI stores them without validation. Arize resolves the models the key can reach, so `--model-name` is optional.
-
-```bash
-ax ai-integrations create \
-  --name "My Together AI Integration" \
-  --provider TOGETHER_AI \
-  --api-key $TOGETHER_API_KEY
-```
+For a provider's full example and notes (Bedrock/Vertex metadata, base URLs, flags to avoid), open only that provider's file from the **Details** column below.
 
 ### Supported Providers
 
-| Provider | Required extra flags |
-|----------|---------------------|
-| `OPEN_AI` | `--api-key <key>` |
-| `ANTHROPIC` | `--api-key <key>` |
-| `AZURE_OPEN_AI` | `--api-key <key>`, `--base-url <azure-endpoint>` |
-| `AWS_BEDROCK` | `--provider-metadata '{"role_arn": "<arn>"}'` |
-| `VERTEX_AI` | `--provider-metadata '{"project_id": "<gcp-project>", "location": "<region>", "project_access_label": "<label>"}'` |
-| `GEMINI` | `--api-key <key>` |
-| `NVIDIA_NIM` | `--api-key <key>`, `--base-url <nim-endpoint>` |
-| `CUSTOM` | `--base-url <endpoint>` |
-| `LITELLM` | `--base-url <endpoint>` |
-| `FIREWORKS` | `--api-key <key>` |
-| `TOGETHER_AI` | `--api-key <key>` |
+| Provider | Required extra flags ("model source" = `--enable-default-models` or `--model-name`) | Key env var | Details |
+|----------|---------------------|-------------|---------|
+| `OPEN_AI` | `--api-key <key>`, model source | `$OPENAI_API_KEY` | [provider-openai.md](references/provider-openai.md) |
+| `ANTHROPIC` | `--api-key <key>`, model source | `$ANTHROPIC_API_KEY` | [provider-anthropic.md](references/provider-anthropic.md) |
+| `AZURE_OPEN_AI` | `--api-key <key>`, `--base-url <azure-endpoint>`, `--model-name <deployment>` | `$AZURE_OPENAI_API_KEY` | [provider-azure-openai.md](references/provider-azure-openai.md) |
+| `AWS_BEDROCK` | `--provider-metadata '{"role_arn": "<arn>"}'` (no API key), model source | — | [provider-aws-bedrock.md](references/provider-aws-bedrock.md) |
+| `VERTEX_AI` | `--provider-metadata '{"project_id": "<gcp-project>", "location": "<region>", "project_access_label": "<label>"}'` (no API key), model source | — | [provider-vertex-ai.md](references/provider-vertex-ai.md) |
+| `GEMINI` | `--api-key <key>`, model source | `$GEMINI_API_KEY` | [provider-gemini.md](references/provider-gemini.md) |
+| `NVIDIA_NIM` | model source; `--api-key` and `--base-url` optional (default: NVIDIA hosted) | `$NVIDIA_API_KEY` | [provider-nvidia-nim.md](references/provider-nvidia-nim.md) |
+| `CUSTOM` | `--base-url <endpoint>`, model source | `$CUSTOM_LLM_API_KEY` | [provider-custom.md](references/provider-custom.md) |
+| `LITELLM` | `--base-url <endpoint>`, `--api-key <key>` | `$LITELLM_API_KEY` | [provider-litellm.md](references/provider-litellm.md) |
+| `FIREWORKS` | `--api-key <key>` only — no `--base-url` or `--headers` | `$FIREWORKS_API_KEY` | [provider-fireworks.md](references/provider-fireworks.md) |
+| `TOGETHER_AI` | `--api-key <key>` only — no `--base-url` or `--headers` | `$TOGETHER_API_KEY` | [provider-together-ai.md](references/provider-together-ai.md) |
 
 ### Optional flags for any provider
 
 | Flag | Description |
 |------|-------------|
-| `--model-name` | Allowed model name (repeat for multiple, e.g. `--model-name gpt-4o --model-name gpt-4o-mini`); omit to allow all models |
-| `--enable-default-models` | Enable the provider's default model list |
+| `--model-name` | Allowed model name (repeat for multiple, e.g. `--model-name gpt-4o --model-name gpt-4o-mini`); satisfies the model-source requirement |
+| `--enable-default-models` | Enable Arize's default model list for the provider; satisfies the model-source requirement |
 | `--function-calling-enabled` | Enable tool/function calling support |
 | `--auth-type` | Authentication type: `DEFAULT`, `PROXY_WITH_HEADERS`, `BEARER_TOKEN`, or `OAUTH2_CLIENT_CREDENTIALS` |
 | `--headers` | Custom headers as JSON object or file path (for proxy auth) |
@@ -308,7 +211,8 @@ Omit `--force` to get a confirmation prompt instead of deleting immediately.
 | `has_api_key: false` after create | Credentials were not saved — re-run `update` with the correct `--api-key` or `--provider-metadata` |
 | Evaluator runs fail with LLM errors | Check integration credentials with `ax ai-integrations get INT_ID`; rotate the API key if needed |
 | `Invalid value for '--provider'` with `FIREWORKS` or `TOGETHER_AI` | The installed ax CLI predates these providers — upgrade the ax CLI (see [references/ax-setup.md](references/ax-setup.md)) |
-| `provider` mismatch | Cannot change provider after creation — delete and recreate with the correct provider |
+| `An integration must have at least one model available` | Add `--enable-default-models` or at least one `--model-name` (required for every provider except LiteLLM, Fireworks AI and Together AI) |
+| Integration has the wrong `provider` | `ax ai-integrations update NAME_OR_ID --provider NEW_PROVIDER` changes it, but other fields are kept as-is — pass the new provider's required flags (API key, base URL, model source) in the same call. When the two providers need very different settings, deleting and recreating is cleaner |
 
 ---
 
