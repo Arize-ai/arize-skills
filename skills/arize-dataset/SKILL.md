@@ -27,9 +27,9 @@ Proceed directly with the task — run the `ax` command you need. Do NOT check v
 If an `ax` command fails, troubleshoot based on the error:
 - `command not found` or version error → see [references/ax-setup.md](references/ax-setup.md)
 - `401 Unauthorized` / missing API key → run `ax profiles show` to inspect the current profile. If the profile is missing or the API key is wrong, follow [references/ax-profiles.md](references/ax-profiles.md) to create/update it. If the user doesn't have their key, direct them to https://app.arize.com/admin > API Keys
-- Space unknown → run `ax spaces list` to pick by name, or ask the user
+- Space unknown → resolve it as described in [Space](references/ax-profiles.md#space): the user's choice, then `ARIZE_SPACE_ID`, then `ax spaces list` (use the only space, otherwise ask)
 - Project unclear → ask the user, or run `ax projects list -o json --limit 100` and present as selectable options
-- **Security:** Never read `.env` files or search the filesystem for credentials. Use `ax profiles` for Arize credentials and `ax ai-integrations` for LLM provider keys. Never ask the user to paste secrets into chat. For missing credentials, see [references/ax-profiles.md](references/ax-profiles.md).
+- **Security:** Never read `.env` files or search the filesystem for credentials. The one exception is the non-secret `ARIZE_SPACE_ID` line, read on its own to resolve the space (see [Space](references/ax-profiles.md#space)). Use `ax profiles` for Arize credentials and `ax ai-integrations` for LLM provider keys. Never ask the user to paste secrets into chat. For missing credentials, see [references/ax-profiles.md](references/ax-profiles.md).
 
 ## List Datasets: `ax datasets list`
 

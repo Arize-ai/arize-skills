@@ -61,10 +61,10 @@ Proceed directly with the task — run the `ax` command you need. Do NOT check v
 If an `ax` command fails, troubleshoot based on the error:
 - `command not found` or version error → see [references/ax-setup.md](references/ax-setup.md)
 - `401 Unauthorized` / missing API key → run `ax profiles show` to inspect the current profile. If the profile is missing or the API key is wrong, follow [references/ax-profiles.md](references/ax-profiles.md) to create/update it. If the user doesn't have their key, direct them to https://app.arize.com/admin > API Keys
-- Space unknown → run `ax spaces list` to pick by name, or ask the user
+- Space unknown → resolve it as described in [Space](references/ax-profiles.md#space): the user's choice, then `ARIZE_SPACE_ID`, then `ax spaces list` (use the only space, otherwise ask)
 - Project unclear → ask the user, or run `ax projects list -o json --limit 100` and present as selectable options
 - LLM provider call fails (missing provider credentials) → run `ax ai-integrations list --space SPACE` to check for platform-managed credentials. If none exist, use the **arize-ai-provider-integration** skill — never ask the user to paste a provider key into chat.
-- **Security:** Never read `.env` files or search the filesystem for credentials. Use `ax profiles` for Arize credentials and `ax ai-integrations` for LLM provider keys. Never ask the user to paste secrets into chat. For missing credentials, see [references/ax-profiles.md](references/ax-profiles.md).
+- **Security:** Never read `.env` files or search the filesystem for credentials. The one exception is the non-secret `ARIZE_SPACE_ID` line, read on its own to resolve the space (see [Space](references/ax-profiles.md#space)). Use `ax profiles` for Arize credentials and `ax ai-integrations` for LLM provider keys. Never ask the user to paste secrets into chat. For missing credentials, see [references/ax-profiles.md](references/ax-profiles.md).
 
 ### When you must ask the user first
 
@@ -80,23 +80,23 @@ Still prefer `ax spaces list`, `ax projects list`, `ax datasets list`, `ax exper
 
 ```bash
 # Sample LLM spans (where prompts live)
-ax spans export PROJECT --filter "attributes.openinference.span.kind = 'LLM'" -l 10 --stdout
+ax spans export PROJECT --space SPACE --filter "attributes.openinference.span.kind = 'LLM'" -l 10 --stdout
 
 # Filter by model
-ax spans export PROJECT --filter "attributes.llm.model_name = 'gpt-4o'" -l 10 --stdout
+ax spans export PROJECT --space SPACE --filter "attributes.llm.model_name = 'gpt-4o'" -l 10 --stdout
 
 # Filter by span name (e.g., a specific LLM call)
-ax spans export PROJECT --filter "name = 'ChatCompletion'" -l 10 --stdout
+ax spans export PROJECT --space SPACE --filter "name = 'ChatCompletion'" -l 10 --stdout
 ```
 
 ### Export a trace to inspect prompt structure
 
 ```bash
 # Export all spans in a trace
-ax spans export PROJECT --trace-id TRACE_ID
+ax spans export PROJECT --space SPACE --trace-id TRACE_ID
 
 # Export a single span
-ax spans export PROJECT --span-id SPAN_ID
+ax spans export PROJECT --space SPACE --span-id SPAN_ID
 ```
 
 ### Extract prompts from exported JSON
@@ -137,22 +137,22 @@ If the span has `attributes.llm.prompt_template.template`, the prompt uses varia
 
 ```bash
 # Find error spans -- these indicate prompt failures
-ax spans export PROJECT \
+ax spans export PROJECT --space SPACE \
   --filter "status_code = 'ERROR' AND attributes.openinference.span.kind = 'LLM'" \
   -l 20 --stdout
 
 # Find spans with low eval scores
-ax spans export PROJECT \
+ax spans export PROJECT --space SPACE \
   --filter "annotation.correctness.label = 'incorrect'" \
   -l 20 --stdout
 
 # Find spans with high latency (may indicate overly complex prompts)
-ax spans export PROJECT \
+ax spans export PROJECT --space SPACE \
   --filter "attributes.openinference.span.kind = 'LLM' AND latency_ms > 10000" \
   -l 20 --stdout
 
 # Export error traces for detailed inspection
-ax spans export PROJECT --trace-id TRACE_ID
+ax spans export PROJECT --space SPACE --trace-id TRACE_ID
 ```
 
 ### From datasets and experiments
@@ -319,11 +319,11 @@ When optimizing prompts that use template variables:
 
 1. Find a failing trace ID directly from the known filter — skip `ax traces list`'s human-browsing view and go straight to the scriptable path:
    ```bash
-   ax spans export PROJECT --filter "status_code = 'ERROR'" -l 5 --stdout | jq -r '.[0].context.trace_id'
+   ax spans export PROJECT --space SPACE --filter "status_code = 'ERROR'" -l 5 --stdout | jq -r '.[0].context.trace_id'
    ```
 2. Export the full trace:
    ```bash
-   ax spans export PROJECT --trace-id TRACE_ID
+   ax spans export PROJECT --space SPACE --trace-id TRACE_ID
    ```
 3. Extract the prompt from the LLM span:
    ```bash
@@ -358,7 +358,7 @@ When optimizing prompts that use template variables:
 
 1. Export spans where the output format is wrong:
    ```bash
-   ax spans export PROJECT \
+   ax spans export PROJECT --space SPACE \
      --filter "attributes.openinference.span.kind = 'LLM' AND annotation.format.label = 'incorrect'" \
      -l 10 --stdout > bad_format.json
    ```
@@ -370,13 +370,13 @@ When optimizing prompts that use template variables:
 
 1. Find traces where the model hallucinated:
    ```bash
-   ax spans export PROJECT \
+   ax spans export PROJECT --space SPACE \
      --filter "annotation.faithfulness.label = 'unfaithful'" \
      -l 20 --stdout
    ```
 2. Export and inspect the retriever + LLM spans together:
    ```bash
-   ax spans export PROJECT --trace-id TRACE_ID
+   ax spans export PROJECT --space SPACE --trace-id TRACE_ID
    jq '[.[] | {kind: .attributes.openinference.span.kind, name, input: .attributes.input.value, output: .attributes.output.value}]' trace_*/spans.json
    ```
 3. Check if the retrieved context actually contained the answer

@@ -110,9 +110,18 @@ ax profiles delete staging --force
 
 ## Space
 
-**The `ax` CLI takes the space per command via the `-s` / `--space` flag** — it accepts a space **name** or **base64 ID** (e.g. `my-workspace` or `U3BhY2U6...`). There is no space profile field and **no space environment variable for the CLI**. Find your space with `ax spaces list`, then pass it:
+**The `ax` CLI takes the space per command via the `-s` / `--space` flag** — it accepts a space **name** or **base64 ID** (e.g. `my-workspace` or `U3BhY2U6...`). There is no space profile field and **no space environment variable for the CLI**.
+
+Resolve the space **once per session**, then pass it with `--space` on every command that takes a project, dataset, task, or other resource by **name**. Stop at the first step that gives an answer:
+
+1. **The user named a space** — use it.
+1. **`ARIZE_SPACE_ID` is set** — use its value. This is the base64 Space ID that the `arize-otel` SDK sends traces to, so it points CLI reads at the same space the app writes to. It is an identifier, not a credential: reading it, printing it, and passing it are all fine. Check the shell first (`echo "$ARIZE_SPACE_ID"`). If it is empty, read **only that line** from the app's `.env` (`grep -E '^ARIZE_SPACE_ID=' .env`) — never read or print the rest of the file, which holds secrets.
+1. **Neither** — run `ax spaces list -o json`. If exactly one space comes back, use it. If there are several, show their **names** as a numbered list and ask the user to pick one; don't make them find a base64 ID.
+
+Tell the user which space you're using and where it came from, e.g. *Using space `U3BhY2U6...` (from `ARIZE_SPACE_ID`)*.
 
 ```bash
+ax spans export my-project --space "$ARIZE_SPACE_ID"
 ax spans export my-project --space my-workspace
 ```
 

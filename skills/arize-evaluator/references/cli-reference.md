@@ -313,7 +313,7 @@ ax evaluators create-code-evaluator-version NAME_OR_ID \
 ```bash
 # List / Get
 ax tasks list --space SPACE
-ax tasks list --project PROJECT_NAME
+ax tasks list --project PROJECT_NAME --space SPACE
 ax tasks list --dataset DATASET_NAME --space SPACE
 ax tasks list --task-type TEMPLATE_EVALUATION   # filter by type: TEMPLATE_EVALUATION, CODE_EVALUATION, RUN_EXPERIMENT
 ax tasks get TASK_ID
@@ -322,7 +322,7 @@ ax tasks get TASK_ID
 ax tasks create-evaluation \
   --name "Correctness Monitor" \
   --task-type TEMPLATE_EVALUATION \
-  --project PROJECT_NAME \
+  --project PROJECT_NAME --space SPACE \
   --evaluators '[{"evaluator_id": "EVAL_ID", "column_mappings": {"input": "attributes.input.value", "output": "attributes.output.value"}}]' \
   --is-continuous \
   --sampling-rate 0.1
@@ -331,7 +331,7 @@ ax tasks create-evaluation \
 ax tasks create-evaluation \
   --name "Correctness Backfill" \
   --task-type TEMPLATE_EVALUATION \
-  --project PROJECT_NAME \
+  --project PROJECT_NAME --space SPACE \
   --evaluators '[{"evaluator_id": "EVAL_ID", "column_mappings": {"input": "attributes.input.value", "output": "attributes.output.value"}}]' \
   --no-continuous
 
