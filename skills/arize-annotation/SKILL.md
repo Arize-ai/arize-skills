@@ -4,7 +4,7 @@ description: Creates and manages annotation configs (categorical, continuous, fr
 metadata:
   author: arize
   version: "1.0"
-compatibility: Requires the ax CLI (≥ 0.33.0) and a configured Arize profile.
+compatibility: Requires the ax CLI (≥ 0.34.0) and a configured Arize profile.
 ---
 
 # Arize Annotation Skill
@@ -41,7 +41,7 @@ An **annotation config** defines the schema for a single type of human feedback 
 | **Type** | `CATEGORICAL` (pick from a list), `CONTINUOUS` (numeric range), or `FREEFORM` (free text). |
 | **Values** | For categorical: array of `{"label": str, "score": number}` pairs. |
 | **Min/Max Score** | For continuous: numeric bounds. |
-| **Optimization Direction** | Whether higher scores are better (`MINIMIZE`) or worse (`MAXIMIZE`). Used to render trends in the UI. |
+| **Optimization Direction** | Whether higher scores are better (`MAXIMIZE`) or worse (`MINIMIZE`). Used to render trends in the UI. |
 
 ### Where labels get applied (surfaces)
 

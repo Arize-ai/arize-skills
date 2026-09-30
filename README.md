@@ -115,17 +115,11 @@ ax profiles use staging
 ax profiles delete staging
 ```
 
-You'll also need a space name or ID. Find yours by running `ax spaces list -o json` (use the `name` or base64 `id`), then persist it:
-```bash
-# macOS/Linux — add to ~/.zshrc or ~/.bashrc
-export ARIZE_SPACE="my-workspace"        # name, or base64 ID like U3BhY2U6...
-```
+You'll also need a space name or ID. Find yours by running `ax spaces list -o json` (use the `name` or base64 `id`). The `ax` CLI has no env var for a default space or project — pass `--space` (and a project positional/flag where a command takes one) explicitly on every command.
 
 **Option B — Environment variables**:
 ```bash
 export ARIZE_API_KEY="your-api-key"       # from https://app.arize.com/admin > API Keys
-export ARIZE_SPACE="my-workspace"         # space name or base64 ID from ax spaces list
-# export ARIZE_DEFAULT_PROJECT=my-project # optional default project
 # export OPENAI_API_KEY="sk-..."          # for AI integrations and evaluators
 # export ANTHROPIC_API_KEY="sk-ant-..."   # for AI integrations and evaluators
 ```

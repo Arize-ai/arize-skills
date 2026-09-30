@@ -4,7 +4,7 @@ description: Downloads, exports, and inspects existing Arize traces and spans to
 metadata:
   author: arize
   version: "1.0"
-compatibility: Requires the ax CLI (≥ 0.33.0) and a configured Arize profile.
+compatibility: Requires the ax CLI (≥ 0.34.0) and a configured Arize profile.
 ---
 
 # Arize Trace Skill
@@ -76,7 +76,7 @@ ax spans export PROJECT --span-id SPAN_ID --output-dir .arize-tmp-traces
 ax spans export PROJECT --session-id SESSION_ID --output-dir .arize-tmp-traces
 ```
 
-Flags: see [references/spans-cli.md](references/spans-cli.md#ax-spans-export).
+Flags: run `ax spans export --help`; gotchas in [references/spans-cli.md](references/spans-cli.md).
 
 Output is a JSON array of span objects. File naming: `{type}_{id}_{timestamp}/spans.json`.
 
@@ -192,7 +192,7 @@ ax traces export PROJECT --filter "status_code = 'ERROR'" --stdout
 ax traces export PROJECT --space SPACE --filter "status_code = 'ERROR'" --all --output-dir .arize-tmp-traces
 ```
 
-Flags: see [references/spans-cli.md](references/spans-cli.md#ax-traces-export).
+Flags: run `ax traces export --help`; gotchas in [references/spans-cli.md](references/spans-cli.md).
 
 ### How it differs from `ax spans export`
 
@@ -209,7 +209,7 @@ ax traces list PROJECT --space SPACE --filter "status_code = 'ERROR'"
 ax traces list PROJECT --space SPACE --start-time "2026-08-01T00:00:00Z" -o json
 ```
 
-`--space` is required when `PROJECT` is a name. Flags: `--filter`, `--start-time`/`--end-time` (ISO 8601), `--limit, -l` (default 15), `--cursor, -c`, `-o, --output`. The same [filter syntax](references/spans-cli.md#filter-syntax) applies.
+`--space` is required when `PROJECT` is a name. Run `ax traces list --help` for the full flag list. The same [filter syntax](references/spans-cli.md#filter-syntax) applies.
 
 **When the filter is unknown:** `ax traces list` to locate a trace → `ax spans export PROJECT --trace-id TRACE_ID` to pull its spans (immediately consistent; see Time-series index lag below). When you already know the filter, skip listing and export directly.
 
@@ -233,7 +233,7 @@ ax spans annotate PROJECT --file annotations.json --start-time "2026-05-01T00:00
 ax spans annotate PROJECT --file annotations.json --days 7
 ```
 
-Flags: see [references/spans-cli.md](references/spans-cli.md#ax-spans-annotate).
+Flags: run `ax spans annotate --help`; gotchas in [references/spans-cli.md](references/spans-cli.md).
 
 The annotation file must contain the span ID and the annotation fields to write. Export a sample span first to confirm span IDs and available fields before bulk-annotating.
 
