@@ -107,19 +107,18 @@ ax profiles delete staging --force
 
 ## Space
 
-There is no profile field or environment variable the CLI reads for space. Every `ax` command that needs one takes it per-invocation via `-s`/`--space`, accepting a space **name** (e.g., `my-workspace`) or a base64 space **ID** (e.g., `U3BhY2U6...`). A resource passed by **name** fails without it (`project 'my-project' not found. Provide 'space'...`); a base64 resource ID does not need it.
+The CLI has no default space. Pass `-s`/`--space` (name or base64 ID) whenever a resource is given by **name**, or it fails with `project '...' not found. Provide 'space'`.
 
-Resolve the space **once per session**, then pass it with `--space` on every command that takes a project, dataset, task, or other resource by **name**. Stop at the first step that gives an answer:
+Resolve it once per session; first match wins:
 
-1. **The user named a space** — use it.
-1. **`ARIZE_SPACE_ID` is set** — use its value. This is the base64 Space ID that the `arize-otel` SDK sends traces to, so it points CLI reads at the same space the app writes to. It is an identifier, not a credential: reading it, printing it, and passing it are all fine. Check the shell first (`echo "$ARIZE_SPACE_ID"`). If it is empty, read **only that line** from the app's `.env` (`grep -E '^ARIZE_SPACE_ID=' .env`) — never read or print the rest of the file, which holds secrets.
-1. **Neither** — run `ax spaces list -o json`. If exactly one space comes back, use it. If there are several, show their **names** as a numbered list and ask the user to pick one; don't make them find a base64 ID.
+1. The space the user named.
+1. `ARIZE_SPACE_ID` (the tracing space; not a secret): `echo "$ARIZE_SPACE_ID"`, else `grep -E '^ARIZE_SPACE_ID=' .env` — read only that line.
+1. `ax spaces list -o json`: use the only space, otherwise ask the user to pick a name.
 
-Tell the user which space you're using and where it came from, e.g. *Using space `U3BhY2U6...` (from `ARIZE_SPACE_ID`)*.
+Tell the user which space you used and why.
 
 ```bash
 ax spans export my-project --space "$ARIZE_SPACE_ID"
-ax spans export my-project --space my-workspace
 ```
 
 ## Save Credentials for Future Use

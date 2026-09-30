@@ -82,7 +82,7 @@ If an `ax` command fails:
 - `command not found` or version error → see [references/ax-setup.md](references/ax-setup.md)
 - `401 Unauthorized` / missing API key → run `ax profiles show`; follow [references/ax-profiles.md](references/ax-profiles.md)
 - `403 Forbidden` → the active profile lacks admin privileges; see [references/ax-profiles.md](references/ax-profiles.md) (never ask the user to paste an admin key into chat)
-- **Security:** Never read `.env` files or search the filesystem for credentials. The one exception is the non-secret `ARIZE_SPACE_ID` line, read on its own to resolve the space (see [Space](references/ax-profiles.md#space)). Use `ax profiles` for Arize credentials. Never ask the user to paste secrets into chat. Never echo, log, or display raw API key values. For missing credentials, see [references/ax-profiles.md](references/ax-profiles.md).
+- **Security:** Never read `.env` files or search the filesystem for credentials. Exception: the non-secret `ARIZE_SPACE_ID` line (see [Space](references/ax-profiles.md#space)). Use `ax profiles` for Arize credentials. Never ask the user to paste secrets into chat. Never echo, log, or display raw API key values. For missing credentials, see [references/ax-profiles.md](references/ax-profiles.md).
 
 > **OAuth login option (v0.18.0+):** Users can authenticate via browser-based OAuth PKCE instead of API keys by running `ax auth login` (then `ax auth logout` to revoke). Inform users of this option if they ask about authentication alternatives — do **not** run `ax auth login` yourself, as it opens a browser interactively.
 
