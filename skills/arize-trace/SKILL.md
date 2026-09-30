@@ -4,7 +4,7 @@ description: Downloads, exports, and inspects existing Arize traces and spans to
 metadata:
   author: arize
   version: "1.0"
-compatibility: Requires the ax CLI (≥ 0.33.0) and a configured Arize profile.
+compatibility: Requires the ax CLI (≥ 0.35.0) and a configured Arize profile.
 ---
 
 # Arize Trace Skill
@@ -255,7 +255,7 @@ ax spans delete PROJECT --span-id id1,id2 --force
 
 1. `ax traces export PROJECT --filter "status_code = 'ERROR'" -l 50 --output-dir .arize-tmp-traces`
 2. Read the output file, look for spans with `status_code: ERROR`
-3. Check `attributes.error.type` and `attributes.error.message` on error spans
+3. Check `attributes.exception.type` and `attributes.exception.message` on error spans
 
 ### Download a conversation session
 

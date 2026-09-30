@@ -11,7 +11,7 @@ Official references (read the skill body first; open docs only if the user needs
 - CLI: https://arize.com/docs/api-clients/cli/prompts
 - Creating prompts in the product (Prompt Playground, variables, params): https://arize.com/docs/ax/prompts/tutorial/create-a-prompt
 
-See [references/cli-prompts.md](references/cli-prompts.md) for full flag tables.
+Run `ax prompts <subcommand> --help` for full flag lists. See [references/cli-prompts.md](references/cli-prompts.md) for gotchas `--help` doesn't cover.
 
 ---
 
@@ -385,7 +385,7 @@ Confirm the new name and space before `create`. Labels are **not** copied — us
 | Delete (all versions) | `ax prompts delete NAME_OR_ID [--space SPACE] --force` |
 | Duplicate (no single command) | `get -o json` → extract fields → `create` with new `--name` (see **Workflow D** step 4d) |
 
-For exhaustive flags and defaults, see [references/cli-prompts.md](references/cli-prompts.md).
+Run `ax prompts <subcommand> --help` for exhaustive flags and defaults; see [references/cli-prompts.md](references/cli-prompts.md) for gotchas.
 
 ---
 

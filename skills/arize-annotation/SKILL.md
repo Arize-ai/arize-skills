@@ -4,7 +4,7 @@ description: Creates and manages annotation configs (categorical, continuous, fr
 metadata:
   author: arize
   version: "1.0"
-compatibility: Requires the ax CLI (≥ 0.33.0) and a configured Arize profile.
+compatibility: Requires the ax CLI (≥ 0.35.0) and a configured Arize profile.
 ---
 
 # Arize Annotation Skill
@@ -256,8 +256,10 @@ ax annotation-queues assign-record NAME_OR_ID RECORD_ID --email user@example.com
 ### Delete Records
 
 ```bash
-ax annotation-queues delete-records NAME_OR_ID --space SPACE
+ax annotation-queues delete-records NAME_OR_ID --record-id RECORD_ID --space SPACE
 ```
+
+Repeat `--record-id` for multiple records (max 100 per call).
 
 ---
 
