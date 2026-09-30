@@ -21,6 +21,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from harness.skill_router import SkillSelectionRunner
 from test_skill_selection import (
+    DISAMBIGUATION_PROMPTS,
     MULTI_SKILL_PROMPTS,
     NEGATIVE_PROMPTS,
     SPECIFIC_PROMPTS,
@@ -44,6 +45,7 @@ ALL_PROMPTS = (
     [(p, e, t) for p, e, t in SPECIFIC_PROMPTS]
     + [(p, e, t) for p, e, t in VAGUE_PROMPTS]
     + [(p, e, t) for p, e, t in MULTI_SKILL_PROMPTS]
+    + [(p, e, t) for p, e, t in DISAMBIGUATION_PROMPTS]
     + [(p, e, t) for p, e, t in NEGATIVE_PROMPTS]
 )
 
