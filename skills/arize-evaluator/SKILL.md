@@ -37,7 +37,7 @@ An **evaluator** is an LLM-as-judge definition. It contains:
 
 | Field | Description |
 |-------|-------------|
-| **Template** | The judge prompt. Uses `{{variable}}` (double-brace) placeholders (e.g. `{{input}}`, `{{output}}`, `{{context}}`) that get filled in at run time via a task's column mappings. |
+| **Template** | The judge prompt. Uses `{variable}` placeholders (e.g. `{input}`, `{output}`, `{context}`) that get filled in at run time via a task's column mappings. |
 | **Classification choices** | The set of allowed output labels (e.g. `factual` / `hallucinated`). Binary is the default and most common. Each choice can optionally carry a numeric score. |
 | **AI Integration** | Stored LLM provider credentials (OpenAI, Anthropic, Bedrock, etc.) the evaluator uses to call the judge model. |
 | **Model** | The specific judge model (e.g. `gpt-4o`, `claude-sonnet-4-5`). |
@@ -79,13 +79,13 @@ For **trace** granularity, spans sharing the same `context.trace_id` are grouped
 
 For **session** granularity, the same trace-level grouping happens first, then traces are ordered by `start_time` and grouped by `attributes.session.id`. Session-level values are capped at 100K characters total.
 
-### The `{{conversation}}` template variable
+### The `{conversation}` template variable
 
-At session granularity, `{{conversation}}` is a special template variable that renders as a JSON array of `{input, output}` turns across all traces in the session, built from `attributes.input.value` / `attributes.llm.input_messages` (input side) and `attributes.output.value` / `attributes.llm.output_messages` (output side).
+At session granularity, `{conversation}` is a special template variable that renders as a JSON array of `{input, output}` turns across all traces in the session, built from `attributes.input.value` / `attributes.llm.input_messages` (input side) and `attributes.output.value` / `attributes.llm.output_messages` (output side).
 
-At span or trace granularity, `{{conversation}}` is treated as a regular template variable and resolved via column mappings like any other.
+At span or trace granularity, `{conversation}` is treated as a regular template variable and resolved via column mappings like any other.
 
-> **Note:** For `{{conversation}}` to work, spans must carry `attributes.session.id`. See the **arize-instrumentation** skill for how to emit `session.id` from application code, including the `force_flush()` pattern required for Jupyter notebooks and short-lived scripts.
+> **Note:** For `{conversation}` to work, spans must carry `attributes.session.id`. See the **arize-instrumentation** skill for how to emit `session.id` from application code, including the `force_flush()` pattern required for Jupyter notebooks and short-lived scripts.
 
 ### Multi-evaluator tasks
 
@@ -158,9 +158,9 @@ ax evaluators create-template-evaluator \
   --classification-choices '{"factual": 1, "hallucinated": 0}' \
   --template 'You are an evaluator. Given the user question and the model response, decide if the response is factual or contains unsupported claims.
 
-User question: {{input}}
+User question: {input}
 
-Model response: {{output}}
+Model response: {output}
 
 Respond with exactly one of these labels: hallucinated, factual'
 ```
@@ -184,7 +184,7 @@ Do not guess paths. Pull a sample and inspect what fields are actually present:
 ax spans export PROJECT --space SPACE -l 5 --days 7 --stdout
 ```
 
-For each template variable (`{{input}}`, `{{output}}`, `{{context}}`), find the matching JSON path. Common starting points — **always verify on your actual data before using**:
+For each template variable (`{input}`, `{output}`, `{context}`), find the matching JSON path. Common starting points — **always verify on your actual data before using**:
 
 | Template var | LLM span | CHAIN span |
 |---|---|---|
@@ -350,7 +350,7 @@ ax tasks get-run RUN_ID
 
 ### 1. Use generic, portable variable names
 
-Use `{{input}}`, `{{output}}`, and `{{context}}` — not names tied to a specific project or span attribute (e.g. do not use `{{attributes_input_value}}`). The evaluator itself stays abstract; the **task's `column_mappings`** is where you wire it to the actual fields in a specific project or experiment. This lets the same evaluator run across multiple projects and experiments without modification.
+Use `{input}`, `{output}`, and `{context}` — not names tied to a specific project or span attribute (e.g. do not use `{attributes_input_value}`). The evaluator itself stays abstract; the **task's `column_mappings`** is where you wire it to the actual fields in a specific project or experiment. This lets the same evaluator run across multiple projects and experiments without modification.
 
 ### 2. Default to binary labels
 
@@ -385,14 +385,14 @@ During initial setup, always include explanations so you can verify the judge is
 
 ### 6. Pass the template in single quotes in bash
 
-Single quotes prevent the shell from interpolating `{{variable}}` placeholders. Double quotes will cause issues:
+Single quotes prevent the shell from interpolating `{variable}` placeholders. Double quotes will cause issues:
 
 ```bash
 # Correct
---template 'Judge this: {{input}} → {{output}}'
+--template 'Judge this: {input} → {output}'
 
 # Wrong — shell may interpret { } or fail
---template "Judge this: {{input}} → {{output}}"
+--template "Judge this: {input} → {output}"
 ```
 
 ### 7. Always set `--classification-choices` to match your template labels
@@ -414,7 +414,7 @@ The labels in `--classification-choices` must exactly match the labels reference
 | `experiment-ids required for dataset tasks` | Add `--experiment-ids` to `create` and `trigger-run` |
 | `sampling-rate only valid for project tasks` | Remove `--sampling-rate` from dataset tasks |
 | Validation error on `ax spans export` | Project name usually works; if you still get a validation error, look up the base64 project ID via `ax projects list --space SPACE -o json` and use the `id` field instead |
-| Template validation errors | Use single-quoted `--template '...'` in bash; double braces `{{var}}`, not single `{var}` |
+| Template validation errors | Use single-quoted `--template '...'` in bash; single braces `{var}`, not `{{var}}` (the CLI's `--help` wrongly says `{{variable}}`) |
 | Run stuck in `pending` | `ax tasks get-run RUN_ID`; then `ax tasks cancel-run RUN_ID` |
 | Run `cancelled` ~1s | Integration credentials invalid — check AI integration |
 | Run `cancelled` ~3min | Found spans but LLM call failed — wrong model name or bad key |
