@@ -22,7 +22,7 @@ jobs:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           persist-credentials: false
-      - uses: hermes-labs-ai/lintlang@c0cab00048220286858f227aaf4b13cc043f718b # v0.8.0
+      - uses: hermes-labs-ai/lintlang@6115fb5b86611b81e18144a9d9ec7111b68978f5 # v0.8.2
         with:
           path: .
           fail-on: fail
