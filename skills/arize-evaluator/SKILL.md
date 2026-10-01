@@ -37,7 +37,7 @@ An **evaluator** is an LLM-as-judge definition. It contains:
 
 | Field | Description |
 |-------|-------------|
-| **Template** | The judge prompt. Uses `{{variable}}` (double-brace) placeholders (e.g. `{{input}}`, `{{output}}`, `{{context}}`) that get filled in at run time via a task's column mappings. |
+| **Template** | The judge prompt. Uses `{variable}` placeholders (e.g. `{input}`, `{output}`, `{context}`) that get filled in at run time via a task's column mappings. |
 | **Classification choices** | The set of allowed output labels (e.g. `factual` / `hallucinated`). Binary is the default and most common. Each choice can optionally carry a numeric score. |
 | **AI Integration** | Stored LLM provider credentials (OpenAI, Anthropic, Bedrock, etc.) the evaluator uses to call the judge model. |
 | **Model** | The specific judge model (e.g. `gpt-4o`, `claude-sonnet-4-5`). |
@@ -57,7 +57,7 @@ A **task** is how you run one or more evaluators against real data. Tasks are at
 |-------|-------------|
 | **Evaluators** | List of evaluators to run. You can run multiple in one task. |
 | **Column mappings** | Maps each evaluator's template variables to actual field paths on spans or experiment runs (e.g. `"input" → "attributes.input.value"`). This is what makes evaluators portable across projects and experiments. |
-| **Query filter** | SQL-style expression to select which spans/runs to evaluate (e.g. `"span_kind = 'LLM'"`). Optional but important for precision. |
+| **Query filter** | SQL-style expression to select which spans/runs to evaluate (e.g. `"attributes.openinference.span.kind = 'LLM'"`). Set it with the task-level `--query-filter`. Optional but important for precision. |
 | **Continuous** | For project tasks: whether to automatically score new spans as they arrive. |
 | **Sampling rate** | For continuous project tasks: fraction of new spans to evaluate (0–1). |
 
@@ -79,17 +79,17 @@ For **trace** granularity, spans sharing the same `context.trace_id` are grouped
 
 For **session** granularity, the same trace-level grouping happens first, then traces are ordered by `start_time` and grouped by `attributes.session.id`. Session-level values are capped at 100K characters total.
 
-### The `{{conversation}}` template variable
+### The `{conversation}` template variable
 
-At session granularity, `{{conversation}}` is a special template variable that renders as a JSON array of `{input, output}` turns across all traces in the session, built from `attributes.input.value` / `attributes.llm.input_messages` (input side) and `attributes.output.value` / `attributes.llm.output_messages` (output side).
+At session granularity, `{conversation}` is a special template variable that renders as a JSON array of `{input, output}` turns across all traces in the session, built from `attributes.input.value` / `attributes.llm.input_messages` (input side) and `attributes.output.value` / `attributes.llm.output_messages` (output side).
 
-At span or trace granularity, `{{conversation}}` is treated as a regular template variable and resolved via column mappings like any other.
+At span or trace granularity, `{conversation}` is treated as a regular template variable and resolved via column mappings like any other.
 
-> **Note:** For `{{conversation}}` to work, spans must carry `attributes.session.id`. See the **arize-instrumentation** skill for how to emit `session.id` from application code, including the `force_flush()` pattern required for Jupyter notebooks and short-lived scripts.
+> **Note:** For `{conversation}` to work, spans must carry `attributes.session.id`. See the **arize-instrumentation** skill for how to emit `session.id` from application code, including the `force_flush()` pattern required for Jupyter notebooks and short-lived scripts.
 
 ### Multi-evaluator tasks
 
-A task can contain evaluators at different granularities. At runtime the system uses the **highest** granularity (session > trace > span) for data fetching and automatically **splits into one child run per evaluator**. Per-evaluator `query_filter` in the task's evaluators JSON further narrows which spans are included (e.g., only tool-call spans within a session).
+A task can contain evaluators at different granularities. At runtime the system uses the **highest** granularity (session > trace > span) for data fetching and automatically **splits into one child run per evaluator**. A per-evaluator `query_filter` in the evaluators JSON is currently ignored at run time ([Arize-ai/arize#89044](https://github.com/Arize-ai/arize/issues/89044)); filter with the task-level `--query-filter` instead.
 
 ---
 
@@ -158,9 +158,9 @@ ax evaluators create-template-evaluator \
   --classification-choices '{"factual": 1, "hallucinated": 0}' \
   --template 'You are an evaluator. Given the user question and the model response, decide if the response is factual or contains unsupported claims.
 
-User question: {{input}}
+User question: {input}
 
-Model response: {{output}}
+Model response: {output}
 
 Respond with exactly one of these labels: hallucinated, factual'
 ```
@@ -184,7 +184,7 @@ Do not guess paths. Pull a sample and inspect what fields are actually present:
 ax spans export PROJECT --space SPACE -l 5 --days 7 --stdout
 ```
 
-For each template variable (`{{input}}`, `{{output}}`, `{{context}}`), find the matching JSON path. Common starting points — **always verify on your actual data before using**:
+For each template variable (`{input}`, `{output}`, `{context}`), find the matching JSON path. Common starting points — **always verify on your actual data before using**:
 
 | Template var | LLM span | CHAIN span |
 |---|---|---|
@@ -195,7 +195,7 @@ For each template variable (`{{input}}`, `{{output}}`, `{{context}}`), find the 
 
 **Validate span kind alignment:** If the evaluator prompt assumes LLM final text but the task targets CHAIN spans (or vice versa), runs can cancel or score the wrong text. Make sure the `query_filter` on the task matches the span kind you mapped.
 
-**`query_filter` only works on indexed attributes:** The `query_filter` in the evaluators JSON is evaluated against the eval index, not the raw span store. Attributes under `attributes.metadata.*` or custom keys may not be indexed and will silently match nothing. Use well-known indexed attributes like `span_kind` or `attributes.llm.model_name` for filtering. If a filter returns 0 spans despite data existing, try removing the filter as a diagnostic step.
+**Filters run against the eval index:** span kind is `attributes.openinference.span.kind` — `span_kind` is not a column and silently matches nothing. Custom attributes such as `attributes.metadata.*` may not be indexed either. If a filter returns 0 spans despite data existing, remove it to confirm the window has data.
 
 **Full example `--evaluators` JSON:**
 
@@ -203,7 +203,6 @@ For each template variable (`{{input}}`, `{{output}}`, `{{context}}`), find the 
 [
   {
     "evaluator_id": "EVAL_ID",
-    "query_filter": "span_kind = 'LLM'",
     "column_mappings": {
       "input": "attributes.input.value",
       "output": "attributes.llm.output_messages.0.message.content",
@@ -224,6 +223,7 @@ ax tasks create-evaluation \
   --task-type TEMPLATE_EVALUATION \
   --project PROJECT --space SPACE \
   --evaluators '[{"evaluator_id": "EVAL_ID", "column_mappings": {"input": "attributes.input.value", "output": "attributes.output.value"}}]' \
+  --query-filter "attributes.openinference.span.kind = 'LLM'" \
   --no-continuous
 ```
 
@@ -234,6 +234,7 @@ ax tasks create-evaluation \
   --task-type TEMPLATE_EVALUATION \
   --project PROJECT --space SPACE \
   --evaluators '[{"evaluator_id": "EVAL_ID", "column_mappings": {"input": "attributes.input.value", "output": "attributes.output.value"}}]' \
+  --query-filter "attributes.openinference.span.kind = 'LLM'" \
   --is-continuous \
   --sampling-rate 0.1
 ```
@@ -350,7 +351,7 @@ ax tasks get-run RUN_ID
 
 ### 1. Use generic, portable variable names
 
-Use `{{input}}`, `{{output}}`, and `{{context}}` — not names tied to a specific project or span attribute (e.g. do not use `{{attributes_input_value}}`). The evaluator itself stays abstract; the **task's `column_mappings`** is where you wire it to the actual fields in a specific project or experiment. This lets the same evaluator run across multiple projects and experiments without modification.
+Use `{input}`, `{output}`, and `{context}` — not names tied to a specific project or span attribute (e.g. do not use `{attributes_input_value}`). The evaluator itself stays abstract; the **task's `column_mappings`** is where you wire it to the actual fields in a specific project or experiment. This lets the same evaluator run across multiple projects and experiments without modification.
 
 ### 2. Default to binary labels
 
@@ -385,14 +386,14 @@ During initial setup, always include explanations so you can verify the judge is
 
 ### 6. Pass the template in single quotes in bash
 
-Single quotes prevent the shell from interpolating `{{variable}}` placeholders. Double quotes will cause issues:
+Single quotes prevent the shell from interpolating `{variable}` placeholders. Double quotes will cause issues:
 
 ```bash
 # Correct
---template 'Judge this: {{input}} → {{output}}'
+--template 'Judge this: {input} → {output}'
 
 # Wrong — shell may interpret { } or fail
---template "Judge this: {{input}} → {{output}}"
+--template "Judge this: {input} → {output}"
 ```
 
 ### 7. Always set `--classification-choices` to match your template labels
@@ -414,7 +415,7 @@ The labels in `--classification-choices` must exactly match the labels reference
 | `experiment-ids required for dataset tasks` | Add `--experiment-ids` to `create` and `trigger-run` |
 | `sampling-rate only valid for project tasks` | Remove `--sampling-rate` from dataset tasks |
 | `project '...' not found` or validation error on `ax spans export` | Add `--space SPACE`; if it persists, look up the base64 project ID via `ax projects list --space SPACE -o json` and use the `id` field instead |
-| Template validation errors | Use single-quoted `--template '...'` in bash; double braces `{{var}}`, not single `{var}` |
+| Template validation errors | Use single-quoted `--template '...'` in bash; single braces `{var}`, not `{{var}}` (the CLI's `--help` wrongly says `{{variable}}`) |
 | Run stuck in `pending` | `ax tasks get-run RUN_ID`; then `ax tasks cancel-run RUN_ID` |
 | Run `cancelled` ~1s | Integration credentials invalid — check AI integration |
 | Run `cancelled` ~3min | Found spans but LLM call failed — wrong model name or bad key |
@@ -425,7 +426,8 @@ The labels in `--classification-choices` must exactly match the labels reference
 | Time format error on `trigger-run` | Use `2026-03-21T09:00:00` — no trailing `Z` |
 | Run failed: "missing rails and classification choices" | Add `--classification-choices '{"label_a": 1, "label_b": 0}'` to `ax evaluators create-template-evaluator` — labels must match the template |
 | Run `completed`, all spans skipped | Query filter matched spans but column mappings are wrong or template variables don't resolve — export a sample span and verify paths |
-| `query_filter` set but 0 spans scored | The filter attribute may not be indexed in the eval index. `attributes.metadata.*` and custom attributes are often not indexed. Use `span_kind` or `attributes.llm.model_name` instead, or remove the filter to confirm spans exist in the window. |
+| `query_filter` set but 0 spans scored, or `No data found` | Use `attributes.openinference.span.kind`, not `span_kind`. Custom attributes may not be indexed. Remove the filter to confirm spans exist in the window. |
+| Spans of the wrong kind scored | The per-evaluator `query_filter` is ignored ([Arize-ai/arize#89044](https://github.com/Arize-ai/arize/issues/89044)); move it to the task's `--query-filter` |
 | Custom **code** evaluator run cancels ~3s with `0/0/0` (successes/errors/skipped) | Wrong import path or `evaluate()` signature — see the "CRITICAL" callout under **Custom Python code evaluators** in [references/cli-reference.md](references/cli-reference.md). Must import from `arize.experimental.datasets.experiments.evaluators.base` (not `arize.experiments`) and declare named `evaluate()` params, not just `**kwargs`. |
 
 ### Diagnosing cancelled runs

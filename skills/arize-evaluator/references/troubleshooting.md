@@ -48,11 +48,11 @@ for s in spans:
 
 **5. Verify span kind matches evaluator scope**
 
-If the evaluator was created with `--data-granularity trace` but the task's `query_filter` is `span_kind = 'LLM'`, the run may find no qualifying data and cancel. Ensure the granularity and filter are consistent.
+If the evaluator was created with `--data-granularity trace` but the task's `query_filter` is `attributes.openinference.span.kind = 'LLM'`, the run may find no qualifying data and cancel. Ensure the granularity and filter are consistent.
 
 **6. Check that all template variables resolve**
 
-Every `{{variable}}` in the evaluator template must have a corresponding `column_mappings` entry that resolves to a non-null value. Test resolution against a real span:
+Every `{variable}` in the evaluator template must have a corresponding `column_mappings` entry that resolves to a non-null value. Test resolution against a real span:
 ```bash
 ax spans export PROJECT --space SPACE -l 3 --days 7 --stdout | python3 -c "
 import sys, json

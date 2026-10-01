@@ -44,7 +44,7 @@ ax evaluators create-template-evaluator \
   --include-explanations \
   --use-function-calling \
   --classification-choices '{"correct": 1, "incorrect": 0}' \
-  --template 'Judge if the response answers the question. Question: {{input}} Response: {{output}} Labels: correct, incorrect'
+  --template 'Judge if the response answers the question. Question: {input} Response: {output} Labels: correct, incorrect'
 
 # Create a new template version (for prompt or model changes — versions are immutable)
 ax evaluators create-template-evaluator-version NAME_OR_ID \
@@ -54,7 +54,7 @@ ax evaluators create-template-evaluator-version NAME_OR_ID \
   --model-name "gpt-4o" \
   --include-explanations \
   --classification-choices '{"correct": 1, "incorrect": 0}' \
-  --template 'Updated prompt with {{input}}, {{output}}, {{context}}'
+  --template 'Updated prompt with {input}, {output}, {context}'
 ```
 
 **Key flags for `create-template-evaluator`:**
@@ -67,7 +67,7 @@ ax evaluators create-template-evaluator-version NAME_OR_ID \
 | `--commit-message` | yes | Description of this version |
 | `--ai-integration-id` | yes | AI integration ID (from above) |
 | `--model-name` | yes | Judge model (e.g. `gpt-4o`) |
-| `--template` | yes | Prompt with `{{variable}}` placeholders (double curly braces; single-quoted in bash) |
+| `--template` | yes | Prompt with `{variable}` placeholders (single-quoted in bash) |
 | `--classification-choices` | yes | JSON object mapping choice labels to numeric scores e.g. `'{"correct": 1, "incorrect": 0}'` |
 | `--description` | no | Human-readable description |
 | `--include-explanations` | no | Include reasoning alongside the label |
@@ -357,7 +357,7 @@ ax tasks update TASK \
   --name "New Task Name" \
   --sampling-rate 0.2 \
   --is-continuous \
-  --query-filter "span_kind = 'LLM'" \
+  --query-filter "attributes.openinference.span.kind = 'LLM'" \
   --evaluators '[{"evaluator_id": "EVAL_ID", "column_mappings": {"output": "output"}}]'
 
 # Delete a task (irreversible)
