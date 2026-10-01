@@ -57,7 +57,7 @@ A **task** is how you run one or more evaluators against real data. Tasks are at
 |-------|-------------|
 | **Evaluators** | List of evaluators to run. You can run multiple in one task. |
 | **Column mappings** | Maps each evaluator's template variables to actual field paths on spans or experiment runs (e.g. `"input" → "attributes.input.value"`). This is what makes evaluators portable across projects and experiments. |
-| **Query filter** | SQL-style expression to select which spans/runs to evaluate (e.g. `"span_kind = 'LLM'"`). Optional but important for precision. |
+| **Query filter** | SQL-style expression to select which spans/runs to evaluate (e.g. `"attributes.openinference.span.kind = 'LLM'"`). Set it with the task-level `--query-filter`. Optional but important for precision. |
 | **Continuous** | For project tasks: whether to automatically score new spans as they arrive. |
 | **Sampling rate** | For continuous project tasks: fraction of new spans to evaluate (0–1). |
 
@@ -89,7 +89,7 @@ At span or trace granularity, `{{conversation}}` is treated as a regular templat
 
 ### Multi-evaluator tasks
 
-A task can contain evaluators at different granularities. At runtime the system uses the **highest** granularity (session > trace > span) for data fetching and automatically **splits into one child run per evaluator**. Per-evaluator `query_filter` in the task's evaluators JSON further narrows which spans are included (e.g., only tool-call spans within a session).
+A task can contain evaluators at different granularities. At runtime the system uses the **highest** granularity (session > trace > span) for data fetching and automatically **splits into one child run per evaluator**. A per-evaluator `query_filter` in the evaluators JSON is currently ignored at run time ([Arize-ai/arize#89044](https://github.com/Arize-ai/arize/issues/89044)); filter with the task-level `--query-filter` instead.
 
 ---
 
@@ -195,7 +195,7 @@ For each template variable (`{{input}}`, `{{output}}`, `{{context}}`), find the 
 
 **Validate span kind alignment:** If the evaluator prompt assumes LLM final text but the task targets CHAIN spans (or vice versa), runs can cancel or score the wrong text. Make sure the `query_filter` on the task matches the span kind you mapped.
 
-**`query_filter` only works on indexed attributes:** The `query_filter` in the evaluators JSON is evaluated against the eval index, not the raw span store. Attributes under `attributes.metadata.*` or custom keys may not be indexed and will silently match nothing. Use well-known indexed attributes like `span_kind` or `attributes.llm.model_name` for filtering. If a filter returns 0 spans despite data existing, try removing the filter as a diagnostic step.
+**Filters run against the eval index:** span kind is `attributes.openinference.span.kind` — `span_kind` is not a column and silently matches nothing. Custom attributes such as `attributes.metadata.*` may not be indexed either. If a filter returns 0 spans despite data existing, remove it to confirm the window has data.
 
 **Full example `--evaluators` JSON:**
 
@@ -203,7 +203,6 @@ For each template variable (`{{input}}`, `{{output}}`, `{{context}}`), find the 
 [
   {
     "evaluator_id": "EVAL_ID",
-    "query_filter": "span_kind = 'LLM'",
     "column_mappings": {
       "input": "attributes.input.value",
       "output": "attributes.llm.output_messages.0.message.content",
@@ -224,6 +223,7 @@ ax tasks create-evaluation \
   --task-type TEMPLATE_EVALUATION \
   --project PROJECT \
   --evaluators '[{"evaluator_id": "EVAL_ID", "column_mappings": {"input": "attributes.input.value", "output": "attributes.output.value"}}]' \
+  --query-filter "attributes.openinference.span.kind = 'LLM'" \
   --no-continuous
 ```
 
@@ -234,6 +234,7 @@ ax tasks create-evaluation \
   --task-type TEMPLATE_EVALUATION \
   --project PROJECT \
   --evaluators '[{"evaluator_id": "EVAL_ID", "column_mappings": {"input": "attributes.input.value", "output": "attributes.output.value"}}]' \
+  --query-filter "attributes.openinference.span.kind = 'LLM'" \
   --is-continuous \
   --sampling-rate 0.1
 ```
@@ -425,7 +426,8 @@ The labels in `--classification-choices` must exactly match the labels reference
 | Time format error on `trigger-run` | Use `2026-03-21T09:00:00` — no trailing `Z` |
 | Run failed: "missing rails and classification choices" | Add `--classification-choices '{"label_a": 1, "label_b": 0}'` to `ax evaluators create-template-evaluator` — labels must match the template |
 | Run `completed`, all spans skipped | Query filter matched spans but column mappings are wrong or template variables don't resolve — export a sample span and verify paths |
-| `query_filter` set but 0 spans scored | The filter attribute may not be indexed in the eval index. `attributes.metadata.*` and custom attributes are often not indexed. Use `span_kind` or `attributes.llm.model_name` instead, or remove the filter to confirm spans exist in the window. |
+| `query_filter` set but 0 spans scored, or `No data found` | Use `attributes.openinference.span.kind`, not `span_kind`. Custom attributes may not be indexed. Remove the filter to confirm spans exist in the window. |
+| Spans of the wrong kind scored | The per-evaluator `query_filter` is ignored ([Arize-ai/arize#89044](https://github.com/Arize-ai/arize/issues/89044)); move it to the task's `--query-filter` |
 | Custom **code** evaluator run cancels ~3s with `0/0/0` (successes/errors/skipped) | Wrong import path or `evaluate()` signature — see the "CRITICAL" callout under **Custom Python code evaluators** in [references/cli-reference.md](references/cli-reference.md). Must import from `arize.experimental.datasets.experiments.evaluators.base` (not `arize.experiments`) and declare named `evaluate()` params, not just `**kwargs`. |
 
 ### Diagnosing cancelled runs

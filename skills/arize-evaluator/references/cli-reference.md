@@ -357,7 +357,7 @@ ax tasks update TASK \
   --name "New Task Name" \
   --sampling-rate 0.2 \
   --is-continuous \
-  --query-filter "span_kind = 'LLM'" \
+  --query-filter "attributes.openinference.span.kind = 'LLM'" \
   --evaluators '[{"evaluator_id": "EVAL_ID", "column_mappings": {"output": "output"}}]'
 
 # Delete a task (irreversible)
