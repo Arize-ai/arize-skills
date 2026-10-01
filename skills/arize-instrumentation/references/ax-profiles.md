@@ -110,10 +110,16 @@ ax profiles delete staging --force
 
 ## Space
 
-**The `ax` CLI takes the space per command via the `-s` / `--space` flag** — it accepts a space **name** or **base64 ID** (e.g. `my-workspace` or `U3BhY2U6...`). There is no space profile field and **no space environment variable for the CLI**. Find your space with `ax spaces list`, then pass it:
+**The `ax` CLI takes the space per command via the `-s` / `--space` flag** — it accepts a space **name** or **base64 ID** (e.g. `my-workspace` or `U3BhY2U6...`). Resolve it once per session; first match wins:
+
+1. The space the user named.
+1. `ARIZE_SPACE_ID` (the tracing space; not a secret): `echo "$ARIZE_SPACE_ID"`, else `grep -E '^ARIZE_SPACE_ID=' .env` — read only that line.
+1. `ax spaces list -o json`: use the only space, otherwise ask the user to pick a name.
+
+Tell the user which space you used and why.
 
 ```bash
-ax spans export my-project --space my-workspace
+ax spans export my-project --space "$ARIZE_SPACE_ID"
 ```
 
 **For app instrumentation (the `arize-otel` SDK), not the CLI:** the SDK reads the **`ARIZE_SPACE_ID`** env var — the **base64 Space ID** (e.g. `U3BhY2U6...`), not a name. Set it in the app's `.env` or shell:

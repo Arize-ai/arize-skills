@@ -54,9 +54,9 @@ Proceed directly — run the `ax` subcommand you need. Do NOT check versions, en
 If a command fails:
 - `command not found` or version errors → [references/ax-setup.md](references/ax-setup.md)
 - `401` / profile issues → `ax profiles show`, then [references/ax-profiles.md](references/ax-profiles.md); API keys: https://app.arize.com/admin
-- Space unknown → `ax spaces list`
+- Space unknown → see [Space](references/ax-profiles.md#space)
 - LLM calls from Hub/Playground need provider credentials → **arize-ai-provider-integration** (`ax ai-integrations list --space SPACE`)
-- **Security:** Never read `.env` or search the filesystem for secrets. Use `ax profiles` and `ax ai-integrations` only. Never ask the user to paste secrets into chat. For missing credentials, see [references/ax-profiles.md](references/ax-profiles.md).
+- **Security:** Never read `.env` or search the filesystem for secrets. Exception: the non-secret `ARIZE_SPACE_ID` line (see [Space](references/ax-profiles.md#space)). Use `ax profiles` and `ax ai-integrations` only. Never ask the user to paste secrets into chat. For missing credentials, see [references/ax-profiles.md](references/ax-profiles.md).
 
 ### When you must ask the user first
 

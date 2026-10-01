@@ -22,9 +22,9 @@ Proceed directly with the task — run the `ax` command you need. Do NOT check v
 If an `ax` command fails, troubleshoot based on the error:
 - `command not found` or version error → see [references/ax-setup.md](references/ax-setup.md)
 - `401 Unauthorized` / missing API key → run `ax profiles show` to inspect the current profile. If the profile is missing or the API key is wrong, follow [references/ax-profiles.md](references/ax-profiles.md) to create/update it. If the user doesn't have their key, direct them to https://app.arize.com/admin > API Keys
-- Space unknown → run `ax spaces list` to pick by name, or ask the user
+- Space unknown → see [Space](references/ax-profiles.md#space)
 - LLM provider call fails (missing provider credentials) → run `ax ai-integrations list --space SPACE` to check for platform-managed credentials. If none exist, use the **arize-ai-provider-integration** skill — never ask the user to paste a provider key into chat.
-- **Security:** Never read `.env` files or search the filesystem for credentials. Use `ax profiles` for Arize credentials and `ax ai-integrations` for LLM provider keys. Never ask the user to paste secrets into chat. For missing credentials, see [references/ax-profiles.md](references/ax-profiles.md).
+- **Security:** Never read `.env` files or search the filesystem for credentials. Exception: the non-secret `ARIZE_SPACE_ID` line (see [Space](references/ax-profiles.md#space)). Use `ax profiles` for Arize credentials and `ax ai-integrations` for LLM provider keys. Never ask the user to paste secrets into chat. For missing credentials, see [references/ax-profiles.md](references/ax-profiles.md).
 - **CRITICAL — Never fabricate evaluation results:** If an evaluation task fails, is cancelled, or produces no scores, report the failure clearly and explain what went wrong. Do NOT perform a "manual evaluation," invent quality scores, estimate percentages, or present any agent-generated analysis as if it came from the Arize evaluation system. Instead suggest: (1) fix the identified issue and retry, (2) try running from the Arize UI, (3) verify integration credentials with `ax ai-integrations list`, (4) contact support at https://arize.com/support
 
 ---
@@ -105,7 +105,7 @@ Use this when the user says something like *"create an evaluator for my Playgrou
 
 ### Step 1: Confirm the project name
 
-`ax spans export` accepts a project name directly — no ID lookup needed. If you don't know the project name, list available projects:
+`ax spans export` accepts a project name with `--space SPACE` — no ID lookup needed. If you don't know the project name, list available projects:
 
 ```bash
 ax projects list --space SPACE -o json
@@ -221,7 +221,7 @@ Include a mapping for **every** variable the template references. Omitting one c
 ax tasks create-evaluation \
   --name "Hallucination Backfill" \
   --task-type TEMPLATE_EVALUATION \
-  --project PROJECT \
+  --project PROJECT --space SPACE \
   --evaluators '[{"evaluator_id": "EVAL_ID", "column_mappings": {"input": "attributes.input.value", "output": "attributes.output.value"}}]' \
   --query-filter "attributes.openinference.span.kind = 'LLM'" \
   --no-continuous
@@ -232,7 +232,7 @@ ax tasks create-evaluation \
 ax tasks create-evaluation \
   --name "Hallucination Monitor" \
   --task-type TEMPLATE_EVALUATION \
-  --project PROJECT \
+  --project PROJECT --space SPACE \
   --evaluators '[{"evaluator_id": "EVAL_ID", "column_mappings": {"input": "attributes.input.value", "output": "attributes.output.value"}}]' \
   --query-filter "attributes.openinference.span.kind = 'LLM'" \
   --is-continuous \
@@ -414,7 +414,7 @@ The labels in `--classification-choices` must exactly match the labels reference
 | `project and dataset-id are mutually exclusive` | Use only one when creating a task |
 | `experiment-ids required for dataset tasks` | Add `--experiment-ids` to `create` and `trigger-run` |
 | `sampling-rate only valid for project tasks` | Remove `--sampling-rate` from dataset tasks |
-| Validation error on `ax spans export` | Project name usually works; if you still get a validation error, look up the base64 project ID via `ax projects list --space SPACE -o json` and use the `id` field instead |
+| `project '...' not found` or validation error on `ax spans export` | Add `--space SPACE`; if it persists, look up the base64 project ID via `ax projects list --space SPACE -o json` and use the `id` field instead |
 | Template validation errors | Use single-quoted `--template '...'` in bash; single braces `{var}`, not `{{var}}` (the CLI's `--help` wrongly says `{{variable}}`) |
 | Run stuck in `pending` | `ax tasks get-run RUN_ID`; then `ax tasks cancel-run RUN_ID` |
 | Run `cancelled` ~1s | Integration credentials invalid — check AI integration |
