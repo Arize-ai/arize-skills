@@ -48,7 +48,7 @@ for s in spans:
 
 **5. Verify span kind matches evaluator scope**
 
-If the evaluator was created with `--data-granularity trace` but the task's `query_filter` is `span_kind = 'LLM'`, the run may find no qualifying data and cancel. Ensure the granularity and filter are consistent.
+If the evaluator was created with `--data-granularity trace` but the task's `query_filter` is `attributes.openinference.span.kind = 'LLM'`, the run may find no qualifying data and cancel. Ensure the granularity and filter are consistent.
 
 **6. Check that all template variables resolve**
 
