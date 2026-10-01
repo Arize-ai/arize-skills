@@ -113,7 +113,11 @@ Output is a JSON array of run objects:
 ]
 ```
 
-There is no `evaluations` object. Values from `annotate-runs` are in `annotations` (`null` when there are none). Evaluator task results are flat `additional_properties["eval.<name>.label|score|explanation"]` keys. With `--all`, annotations are flat too: `additional_properties["annotation.<name>.label|score|text"]`.
+Where results appear in each run:
+
+- `annotations`: values written by `annotate-runs` (`null` when there are none)
+- `additional_properties["eval.<name>.label|score|explanation"]`: results from an evaluator task
+- With `--all`, annotations are flat keys too: `additional_properties["annotation.<name>.label|score|text"]`
 
 ## Create Experiment: `ax experiments create`
 
