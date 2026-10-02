@@ -261,7 +261,24 @@ Examples:
         "ARIZE_SPACE": arize_space,
         "ARIZE_DEFAULT_PROJECT": os.environ.get("TEST_PROJECT_NAME", "skill-tests"),
         "PATH": os.environ.get("PATH", "") + ":" + os.path.expanduser("~/.local/bin"),
+        # Keep HOME so ax profiles / Claude Code config resolve when env is replaced.
+        "HOME": os.environ.get("HOME", ""),
     }
+    # Forward source-platform credentials for migration skills when present.
+    for key in (
+        "LANGFUSE_PUBLIC_KEY",
+        "LANGFUSE_SECRET_KEY",
+        "LANGFUSE_BASE_URL",
+        "LANGSMITH_API_KEY",
+        "LANGSMITH_WORKSPACE_ID",
+        "LANGSMITH_ENDPOINT",
+        "BRAINTRUST_API_KEY",
+        "BRAINTRUST_API_URL",
+        "OPENAI_API_KEY",
+        "ANTHROPIC_API_KEY",
+    ):
+        if os.environ.get(key):
+            arize_env[key] = os.environ[key]
 
     # Workspace: use the provided path or a temporary directory
     if args.workspace:
