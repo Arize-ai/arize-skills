@@ -188,11 +188,11 @@ def _kind_from_name(name: str, hint: str = "") -> str:
     blob = f"{name} {hint}".lower()
     if any(x in blob for x in ("tool", "listorders", "viewtracking", "execute_tool")):
         return "TOOL"
-    if any(x in blob for x in ("llm", "chat", "generat", "completion", "gpt", "doGenerate")):
+    if any(x in blob for x in ("llm", "chat", "generate", "generation", "completion", "gpt", "dogenerate")):
         return "LLM"
     if any(x in blob for x in ("agent", "invoke_agent", "conversation", "chat.session")):
         return "AGENT"
-    if any(x in blob for x in ("retriev", "embed")):
+    if any(x in blob for x in ("retrieve", "retriever", "retrieval", "embed")):
         return "RETRIEVER"
     if any(x in blob for x in ("chain", "step", "request", "turn", "traceable")):
         return "CHAIN"
