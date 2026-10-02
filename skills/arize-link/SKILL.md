@@ -1,6 +1,6 @@
 ---
 name: arize-link
-description: Generates deep links to the Arize UI for projects, traces, spans, sessions, datasets, labeling queues, evaluators, and annotation configs. Discovers organization and project IDs with the ax CLI and produces clickable URLs for sharing Arize resources with team members. Use when the user wants to link to or open a project, trace, span, session, dataset, evaluator, or annotation config in the Arize UI.
+description: Generates deep links to the Arize UI for projects, traces, spans, sessions, datasets, experiments, labeling queues, evaluators, and annotation configs. Discovers organization and project IDs with the ax CLI and produces clickable URLs for sharing Arize resources with team members. Use when the user wants to link to or open a project, trace, span, session, dataset, experiment, evaluator, or annotation config in the Arize UI.
 metadata:
   author: arize
   version: "1.0"
@@ -8,7 +8,7 @@ metadata:
 
 # Arize Link
 
-Generate deep links to the Arize UI for projects, traces, spans, sessions, datasets, labeling queues, evaluators, and annotation configs.
+Generate deep links to the Arize UI for projects, traces, spans, sessions, datasets, experiments, labeling queues, evaluators, and annotation configs.
 
 ## When to Use
 
@@ -25,6 +25,8 @@ Collect from the user, context (exported trace data or parsed URLs), or the `ax`
 | `org_id` (base64) | `project_id` + `trace_id` [+ `span_id`] — trace/span |
 | `space_id` (base64) | `project_id` + `session_id` — session |
 | | `dataset_id` — dataset |
+| | `dataset_id` + `experiment_id` (one or more) — experiment or comparison |
+| | `experiment_id` — experiment with no dataset |
 | | `queue_id` — specific queue (omit for list) |
 | | `evaluator_id` [+ `version`] — evaluator |
 
@@ -45,6 +47,12 @@ ax projects list --space "{space_name_or_id}" --limit 100 --output json
 ```
 
 Use the matching project's `id`; its `space_id` supplies the space ID required in the URL. The command accepts a space name or ID; if no space is known, run `ax projects list --limit 100 --output json` and select the matching project.
+
+To discover experiment IDs, list the experiments on the dataset; each has an `id` and a `dataset_id`:
+
+```bash
+ax experiments list --dataset "{dataset_name_or_id}" --space "{space_name_or_id}" --output json
+```
 
 **All path IDs must be base64-encoded** (characters: `A-Za-z0-9+/=`). A raw numeric ID produces a valid-looking URL that 404s. If the user provides a number, ask them to copy the ID directly from their Arize browser URL (`https://app.arize.com/organizations/{org_id}/spaces/{space_id}/…`). If you have a raw internal ID (e.g. `Organization:1:abC1`), base64-encode it before inserting into the URL.
 
@@ -71,6 +79,18 @@ Base URL: `https://app.arize.com` (override for on-prem)
 ```
 {base_url}/organizations/{org_id}/spaces/{space_id}/datasets/{dataset_id}?selectedTab=examples
 ```
+
+**Experiment** (repeat `experimentId` to compare experiments side by side):
+```
+{base_url}/organizations/{org_id}/spaces/{space_id}/datasets/{dataset_id}/experiments/compare?experimentId={experiment_id}
+{base_url}/organizations/{org_id}/spaces/{space_id}/datasets/{dataset_id}/experiments/compare?experimentId={experiment_id_a}&experimentId={experiment_id_b}
+```
+
+**Experiment with no dataset:**
+```
+{base_url}/organizations/{org_id}/spaces/{space_id}/experiments/{experiment_id}
+```
+URL-encode experiment IDs (`=` → `%3D`, `+` → `%2B`, `/` → `%2F`).
 
 **Queue list / specific queue:**
 ```
