@@ -1,5 +1,25 @@
 # Changelog
 
+## [1.3.0](https://github.com/Arize-ai/arize-skills/compare/v1.2.0...v1.3.0) (2026-10-02)
+
+
+### Features
+
+* add project URLs to arize-link skill ([#131](https://github.com/Arize-ai/arize-skills/issues/131)) ([5dfbe64](https://github.com/Arize-ai/arize-skills/commit/5dfbe64e47475949bfa9c385e4b707d4682830d0))
+* **ai-provider-integration:** add Fireworks AI and Together AI providers ([#143](https://github.com/Arize-ai/arize-skills/issues/143)) ([e6aecb9](https://github.com/Arize-ai/arize-skills/commit/e6aecb95441afe8fa97d15d908f97a42f40ce518))
+* **arize-instrumentation-health:** health-audit skill, manual-span recipes, Python preflight ([#94](https://github.com/Arize-ai/arize-skills/issues/94)) ([c97ebea](https://github.com/Arize-ai/arize-skills/commit/c97ebeaafd6b2c2a52410a3cd41f9ce03cb6b951))
+* **arize-link:** add experiment and experiment comparison links ([#151](https://github.com/Arize-ai/arize-skills/issues/151)) ([f23d980](https://github.com/Arize-ai/arize-skills/commit/f23d98014023f067a49ab309a3a1db7389b5c4a2))
+* migrate Phoenix datasets and evaluations into AX ([#138](https://github.com/Arize-ai/arize-skills/issues/138)) ([8ced205](https://github.com/Arize-ai/arize-skills/commit/8ced205d8ae20dc757edf44a59ff3e285de298bb))
+* migrate Phoenix traces into Arize AX ([#134](https://github.com/Arize-ai/arize-skills/issues/134)) ([92722c8](https://github.com/Arize-ai/arize-skills/commit/92722c850c56542354ccbb499c83391240bfb948))
+
+
+### Bug Fixes
+
+* **arize-evaluator:** filter on attributes.openinference.span.kind at task level ([#149](https://github.com/Arize-ai/arize-skills/issues/149)) ([ba95d27](https://github.com/Arize-ai/arize-skills/commit/ba95d276244a7e9860aa35b1fca6b4abdbf4c67d))
+* **arize-evaluator:** use single-brace {variable} placeholders in templates ([#148](https://github.com/Arize-ai/arize-skills/issues/148)) ([8c6f121](https://github.com/Arize-ai/arize-skills/commit/8c6f121c8f92f74b6739b6b36e1e75e0e9503155))
+* **arize-experiment:** document the real export shape and annotate-runs rules ([#150](https://github.com/Arize-ai/arize-skills/issues/150)) ([8634855](https://github.com/Arize-ai/arize-skills/commit/8634855fd04db15731dc8a60a63650cf3c7a32e9))
+* **skills:** resolve the space before running ax commands that take a name ([#147](https://github.com/Arize-ai/arize-skills/issues/147)) ([20baa00](https://github.com/Arize-ai/arize-skills/commit/20baa00bc511d968eb9db0d915755976e499c2f0))
+
 ## [1.2.0](https://github.com/Arize-ai/arize-skills/compare/v1.1.0...v1.2.0) (2026-07-29)
 
 
