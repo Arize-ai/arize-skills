@@ -44,6 +44,24 @@ https://app.arize.com/organizations/{org_id}/spaces/{space_id}/datasets/{dataset
 https://app.arize.com/organizations/{org_id}/spaces/{space_id}/datasets/{dataset_id}?selectedTab=experiments
 ```
 
+## Experiment
+
+```
+https://app.arize.com/organizations/{org_id}/spaces/{space_id}/datasets/{dataset_id}/experiments/compare?experimentId={experiment_id}
+```
+
+## Experiment comparison
+
+```
+https://app.arize.com/organizations/{org_id}/spaces/{space_id}/datasets/{dataset_id}/experiments/compare?experimentId={experiment_id_a}&experimentId={experiment_id_b}
+```
+
+## Experiment with no dataset
+
+```
+https://app.arize.com/organizations/{org_id}/spaces/{space_id}/experiments/{experiment_id}
+```
+
 ## Labeling Queue list
 
 ```
