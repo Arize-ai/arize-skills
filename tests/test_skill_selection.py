@@ -293,6 +293,54 @@ SPECIFIC_PROMPTS = [
         ["arize-admin"],
         ["specific", "admin"],
     ),
+    # arize-migrate-langfuse
+    (
+        "Migrate our Langfuse setup to Arize AX",
+        ["arize-migrate-langfuse"],
+        ["specific", "migrate-langfuse"],
+    ),
+    (
+        "Import my Langfuse datasets into Arize and switch tracing off Langfuse",
+        ["arize-migrate-langfuse"],
+        ["specific", "migrate-langfuse"],
+    ),
+    (
+        "We're leaving Langfuse for Arize — help me cut over",
+        ["arize-migrate-langfuse"],
+        ["specific", "migrate-langfuse"],
+    ),
+    # arize-migrate-langsmith
+    (
+        "Migrate from LangSmith to Arize AX",
+        ["arize-migrate-langsmith"],
+        ["specific", "migrate-langsmith"],
+    ),
+    (
+        "Export my LangSmith datasets and start sending traces to Arize instead",
+        ["arize-migrate-langsmith"],
+        ["specific", "migrate-langsmith"],
+    ),
+    (
+        "Replace LangSmith with Arize for observability",
+        ["arize-migrate-langsmith"],
+        ["specific", "migrate-langsmith"],
+    ),
+    # arize-migrate-braintrust
+    (
+        "Migrate from Braintrust to Arize AX",
+        ["arize-migrate-braintrust"],
+        ["specific", "migrate-braintrust"],
+    ),
+    (
+        "Import Braintrust datasets into Arize and switch logging to AX",
+        ["arize-migrate-braintrust"],
+        ["specific", "migrate-braintrust"],
+    ),
+    (
+        "We're leaving Braintrust for Arize — help me cut over tracing",
+        ["arize-migrate-braintrust"],
+        ["specific", "migrate-braintrust"],
+    ),
 ]
 
 # Single-skill: vague/ambiguous prompts (harder to route correctly)
