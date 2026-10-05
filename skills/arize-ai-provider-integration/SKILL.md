@@ -18,7 +18,13 @@ compatibility: Requires the ax CLI and a configured Arize profile.
 - **Provider** = the LLM service backing the integration (e.g., `OPEN_AI`, `ANTHROPIC`, `AWS_BEDROCK`)
 - **Integration ID** = a base64-encoded global identifier for an integration (e.g., `TGxtSW50ZWdyYXRpb246MTI6YUJjRA==`); required for evaluator creation and other downstream operations
 - **Scoping** = visibility rules controlling which spaces or users can use an integration
-- **Auth type** = how Arize authenticates with the provider: `DEFAULT` (provider API key), `PROXY_WITH_HEADERS` (proxy via custom headers), or `BEARER_TOKEN` (bearer token auth)
+- **Auth type** = how Arize authenticates with the provider: `DEFAULT` (provider API key), `PROXY_WITH_HEADERS` (proxy via custom headers), `BEARER_TOKEN` (bearer token auth), or `OAUTH2_CLIENT_CREDENTIALS` (client-credentials grant)
+
+### `ax ai-integrations` vs `ax integrations`
+
+The CLI carries two integration surfaces. Use `ax ai-integrations`, which this skill documents, for LLM provider credentials: it is the only one of the two whose `--provider` accepts `AZURE_OPEN_AI`, and it takes provider specifics as a single `--provider-metadata` JSON object.
+
+Reach for `ax integrations` in two cases. Use `ax integrations list --type LLM|AGENT|EVALUATOR --space SPACE --output json` to find an integration of a type other than LLM; `ax ai-integrations list` has no `--type` filter. Use `ax integrations create agent` for an agent-replay integration (`--endpoint`, a Draft-07 `--input-schema`, `--request-presets`, `--scopings`), which has no equivalent on `ax ai-integrations`. Run `ax integrations create agent --help` for its flags. Creating an `EVALUATOR`-type integration is not reachable from either surface on CLI 0.38.0 — see the remote-evaluator note in the **arize-evaluator** skill.
 
 ## Prerequisites
 
@@ -138,14 +144,7 @@ For a provider's full example and notes (Bedrock/Vertex metadata, base URLs, fla
 
 ### Optional flags for any provider
 
-| Flag | Description |
-|------|-------------|
-| `--model-name` | Allowed model name (repeat for multiple, e.g. `--model-name gpt-4o --model-name gpt-4o-mini`); satisfies the model-source requirement |
-| `--enable-default-models` | Enable Arize's default model list for the provider; satisfies the model-source requirement |
-| `--function-calling-enabled` | Enable tool/function calling support |
-| `--auth-type` | Authentication type: `DEFAULT`, `PROXY_WITH_HEADERS`, `BEARER_TOKEN`, or `OAUTH2_CLIENT_CREDENTIALS` |
-| `--headers` | Custom headers as JSON object or file path (for proxy auth) |
-| `--provider-metadata` | Provider-specific metadata as JSON object or file path |
+Run `ax ai-integrations create --help` for the full list. Note that its `--auth-type` description text names only three values while the flag accepts a fourth, `OAUTH2_CLIENT_CREDENTIALS`; the enum in the usage line is the accurate one.
 
 ### After creation
 

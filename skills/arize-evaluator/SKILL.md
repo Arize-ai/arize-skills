@@ -341,9 +341,12 @@ ax tasks trigger-run TASK_ID \
   --experiment-ids "EXP_ID" \
   --wait
 
-ax tasks list-runs TASK_ID
-ax tasks get-run RUN_ID
+# Block on a run already in flight, then read its result
+ax tasks wait-for-run RUN_ID --timeout 300
+ax tasks get-run RUN_ID --output json
 ```
+
+`--wait` on `trigger-run`, or `wait-for-run` on a run already started, blocks until the run finishes and is the path to use when the next step depends on the result. `ax tasks list-runs TASK_ID` is a paginated table for a human reading run history.
 
 ---
 
@@ -396,9 +399,9 @@ Single quotes prevent the shell from interpolating `{variable}` placeholders. Do
 --template "Judge this: {input} → {output}"
 ```
 
-### 7. Always set `--classification-choices` to match your template labels
+### 7. Match `--classification-choices` to the template's labels
 
-The labels in `--classification-choices` must exactly match the labels referenced in `--template` (same spelling, same casing). Omitting `--classification-choices` causes task runs to fail with "missing rails and classification choices."
+Set `--classification-choices` whenever the template asks the judge to pick a label, and make its keys exactly the labels the template names — same spelling, same casing. A mismatch, or omitting the flag on a classification template, fails the run with "missing rails and classification choices." Omit the flag only for a freeform evaluator, where the judge returns text rather than a label.
 
 ---
 

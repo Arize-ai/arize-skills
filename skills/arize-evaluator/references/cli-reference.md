@@ -60,7 +60,7 @@ ax evaluators create-evaluator-version template NAME_OR_ID \
 Run `ax evaluators create-evaluator template --help` for the current flag list and which flags are required. Three things `--help` does not convey:
 
 - Write `--template` with single-brace `{variable}` placeholders. The CLI's own `--help` text says `{{variable}}`, which the server rejects — see the Template validation row in [SKILL.md](../SKILL.md).
-- Pass `--classification-choices` whenever the template asks the judge to pick a label, and make its keys exactly the labels named in the template. Omitting it produces freeform output; mismatched keys fail the run.
+- `--classification-choices` is optional despite gating classification output — see "Match `--classification-choices` to the template's labels" in [SKILL.md](../SKILL.md) for when to pass it.
 - `--data-granularity` applies only to project tasks. Dataset and experiment tasks evaluate experiment runs directly and ignore it.
 
 #### Code evaluators (deterministic, no LLM)
@@ -212,55 +212,9 @@ ax evaluators create-evaluator code \
   --code @./my_evaluator.py
 ```
 
-You *can* inline both blocks instead, single-quoting each so the shell does not
-interpolate the Python — but for anything with its own imports or multiple branches
-like this, the file-based form above is easier to read and less error-prone:
-
-```bash
-# Custom Python (inline): workable, but harder to maintain than the file form
-ax evaluators create-evaluator code \
-  --name "JSON Schema Check" \
-  --space SPACE \
-  --commit-message "Initial version" \
-  --code-type custom \
-  --code-name "json_schema_eval" \
-  --variables '["prediction"]' \
-  --static-params '[{"name": "required_keys", "type": "STRING_ARRAY", "default_value": ["answer", "confidence"]}]' \
-  --imports 'import json
-
-from arize.experimental.datasets.experiments.evaluators.base import (
-    EvaluationResult,
-    CodeEvaluator,
-)' \
-  --code 'class JSONSchemaEval(CodeEvaluator):
-    def evaluate(self, *, prediction=None, **kwargs) -> EvaluationResult:
-        required_keys = self.required_keys or []
-        try:
-            parsed = json.loads(prediction or "")
-        except (TypeError, ValueError) as exc:
-            return EvaluationResult(
-                label="fail",
-                score=0.0,
-                explanation=f"output is not valid JSON: {exc}",
-            )
-        if not isinstance(parsed, dict):
-            return EvaluationResult(
-                label="fail",
-                score=0.0,
-                explanation="output JSON is not an object",
-            )
-        missing = [key for key in required_keys if key not in parsed]
-        passed = not missing
-        return EvaluationResult(
-            label="pass" if passed else "fail",
-            score=float(passed),
-            explanation=(
-                "all required keys present"
-                if passed
-                else f"missing keys: {', '.join(missing)}"
-            ),
-        )'
-```
+Both flags also take the source inline, single-quoted so the shell does not
+interpolate the Python. Use the `@filepath` form above whenever the evaluator has
+its own imports or more than one branch; inline source is for a one-expression check.
 
 ```bash
 # Create a new version of a code evaluator
