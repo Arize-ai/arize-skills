@@ -1,49 +1,22 @@
-# `ax spans` / `ax traces` — Flag and Filter Reference
+# `ax spans` / `ax traces` — Filter Reference
 
-Flag tables (verified against `--help` on arize-ax-cli 0.33.0) and `--filter` syntax. See [SKILL.md](../SKILL.md) for workflows and export strategy, and [span-columns.md](span-columns.md) for the full span attribute reference.
+`--filter` syntax and the export rules that `--help` does not state. See [SKILL.md](../SKILL.md) for workflows and export strategy, and [span-columns.md](span-columns.md) for the full span attribute reference.
 
-## `ax spans export`
+For flags, defaults and required arguments, run the command's own help — it is current for the installed CLI:
 
-| Flag | Default | Description |
-|------|---------|-------------|
-| `PROJECT` (positional) | `$ARIZE_DEFAULT_PROJECT` | Project name or base64 ID |
-| `--trace-id` | — | Filter by `context.trace_id` (mutex with other ID flags) |
-| `--span-id` | — | Filter by `context.span_id` (mutex with other ID flags) |
-| `--session-id` | — | Filter by `attributes.session.id` (mutex with other ID flags) |
-| `--filter` | — | SQL-like filter; combinable with any ID flag |
-| `--limit, -l` | 100 | Max spans (REST); ignored with `--all` |
-| `--space, -s` | — | Required when using `--all` (Arrow Flight); not needed for project name in spans export |
-| `--days` | 30 | Lookback window; ignored if `--start-time`/`--end-time` set |
-| `--start-time` / `--end-time` | — | ISO 8601 time range override |
-| `--output-dir` | `.` (current directory) | Output directory — the SKILL.md workflow always passes `--output-dir .arize-tmp-traces` explicitly, don't rely on this default |
-| `--stdout` | false | Print JSON to stdout instead of file |
-| `--all` | false | Unlimited bulk export via Arrow Flight |
+```bash
+ax spans export --help
+ax traces export --help
+ax spans annotate --help
+```
 
-## `ax traces export`
+## Export rules not covered by `--help`
 
-| Flag | Type | Default | Description |
-|------|------|---------|-------------|
-| `PROJECT` | string | required | Project name or base64 ID (positional arg) |
-| `--filter` | string | none | Filter expression for phase-1 span lookup |
-| `--space, -s` | string | none | Space name or ID; required when `PROJECT` is a name or when using `--all` (Arrow Flight) |
-| `--limit, -l` | int | 50 | Max number of traces to export |
-| `--days` | int | 30 | Lookback window in days |
-| `--start-time` | string | none | Override start (ISO 8601) |
-| `--end-time` | string | none | Override end (ISO 8601) |
-| `--output-dir` | string | `.` | Output directory |
-| `--stdout` | bool | false | Print JSON to stdout instead of file |
-| `--all` | bool | false | Use Arrow Flight for both phases |
-
-## `ax spans annotate`
-
-| Flag | Type | Required | Description |
-|------|------|----------|-------------|
-| `PROJECT` | string | yes | Project name or base64 ID (positional) |
-| `--file, -f` | path | yes | Annotation file: JSON, JSONL, CSV, or Parquet (use `-` for stdin) |
-| `--space, -s` | string | no | Space name or ID (required when `PROJECT` is a name) |
-| `--start-time` | string | no | ISO 8601 start of annotation window |
-| `--end-time` | string | no | ISO 8601 end of annotation window (defaults to now) |
-| `--days` | int | no | Lookback window in days, alternative to `--start-time` |
+- **The project argument is required on all three commands, and a project *name* also requires `--space`.** There is no default project and no environment variable that supplies one; the CLI reads only `ARIZE_API_KEY` and `ARIZE_REGION` plus the profile. Resolve the space first (see [ax-profiles.md](ax-profiles.md#space)), or pass a base64 project ID, which needs no space.
+- **`--trace-id`, `--span-id` and `--session-id` are mutually exclusive** on `ax spans export`. Pass one. `--filter` combines with any of them.
+- **`--all` switches `ax spans export` and `ax traces export` to Arrow Flight**, which streams every matching row and ignores `--limit`. Flight needs `--space`.
+- **Pass `--output-dir` explicitly.** It defaults to the working directory, so an omitted flag writes export files into the user's repo. The SKILL.md workflow uses `--output-dir .arize-tmp-traces`.
+- **`--days` is ignored once `--start-time` is set.** With `--end-time` alone, the lookback runs backwards from `--end-time`.
 
 ---
 

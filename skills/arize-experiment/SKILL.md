@@ -32,9 +32,11 @@ If an `ax` command fails, troubleshoot based on the error:
 - **Security:** Never read `.env` files or search the filesystem for credentials. Exception: the non-secret `ARIZE_SPACE_ID` line (see [Space](references/ax-profiles.md#space)). Use `ax profiles` for Arize credentials and `ax ai-integrations` for LLM provider keys. Never ask the user to paste secrets into chat. For missing credentials, see [references/ax-profiles.md](references/ax-profiles.md).
 - **CRITICAL — Never fabricate outputs:** When running an experiment, you MUST call the real model API specified by the user for every dataset example. Never fabricate, simulate, or hardcode model outputs, latencies, or evaluation scores. If you cannot call the API (missing SDK, missing credentials, network error), stop and tell the user what is needed before proceeding.
 
+**Standalone experiments:** every `ax experiments` subcommand accepts an experiment with no linked dataset. Omit `--dataset` for a standalone experiment and pass `--space` instead, which resolves the experiment directly. With `--dataset`, `--space` is needed only to resolve the dataset by name.
+
 ## List Experiments: `ax experiments list`
 
-Browse experiments, optionally filtered by dataset. Output goes to stdout.
+Browse experiments, optionally filtered by dataset. Output goes to stdout. For programmatic use pass `-o json` and read the rows; the default table paginates at 15 and is for human browsing.
 
 ```bash
 ax experiments list
@@ -43,7 +45,7 @@ ax experiments list --cursor CURSOR_TOKEN
 ax experiments list -o json
 ```
 
-Flags: see [references/experiments-cli.md#list](references/experiments-cli.md#list).
+Flags: run `ax experiments list --help`.
 
 ## Get Experiment: `ax experiments get`
 
@@ -55,7 +57,7 @@ ax experiments get NAME_OR_ID -o json
 ax experiments get NAME_OR_ID --dataset DATASET_NAME --space SPACE   # required when using experiment name instead of ID
 ```
 
-Flags: see [references/experiments-cli.md#get](references/experiments-cli.md#get).
+Flags: run `ax experiments get --help`.
 
 ### Response fields
 
@@ -84,7 +86,9 @@ ax experiments export EXPERIMENT_NAME --dataset DATASET_NAME --space SPACE --std
 ax experiments export EXPERIMENT_NAME --dataset DATASET_NAME --space SPACE --stdout | jq '.[0]'
 ```
 
-Flags: see [references/experiments-cli.md#export](references/experiments-cli.md#export).
+Flags: run `ax experiments export --help`.
+
+Runs whose task raised an exception are included in the export with `output: null` and an `error` field holding the exception message. Count those before comparing scores — a run that errored is not a run that scored zero.
 
 ### REST vs Flight (`--all`)
 
@@ -128,7 +132,7 @@ ax experiments create --name "gpt-4o-baseline" --dataset DATASET_NAME --space SP
 ax experiments create --name "claude-test" --dataset DATASET_NAME --space SPACE --file runs.csv
 ```
 
-Flags: see [references/experiments-cli.md#create](references/experiments-cli.md#create). `--dataset` is optional — omit it to create a standalone experiment with no linked dataset (then `--space` is required instead).
+Flags: run `ax experiments create --help`.
 
 ### Passing data via stdin
 
@@ -178,20 +182,20 @@ def task(dataset_row):
     return resp.content[0].text
 ```
 
-`--dry-run` tests against the first 10 examples without uploading, to validate the task before a full run. Flags: see [references/experiments-cli.md#run](references/experiments-cli.md#run).
+`--dry-run` tests against the first 10 examples without uploading, to validate the task before a full run. Flags: run `ax experiments run --help`.
 
 > **Choose the run path based on where the logic lives.** Use `ax experiments run` when there's a local Python task to execute — it runs `task.py` on this machine and uploads the results; no AI integration is required. Use `ax tasks create-run-experiment` when the run should be hosted and recurring — it registers a platform-side `run_experiment` task that Arize executes on a schedule or on demand, driven by a JSON `--run-configuration` (model + messages + AI integration) instead of local code. Default to `ax experiments run` for local/ad-hoc runs and custom logic; use the task path for recurring, hosted runs — see the **arize-evaluator** skill for that route.
 
 ## List Runs: `ax experiments list-runs`
 
-Paginated terminal view of an experiment's runs (vs. `export`, which downloads them to a file).
+Paginated terminal view of an experiment's runs, for a human reading the output. To read runs programmatically use `ax experiments export`, which writes every run to a file in one call instead of paging.
 
 ```bash
 ax experiments list-runs EXPERIMENT_NAME --dataset DATASET_NAME --space SPACE --limit 30
 ax experiments list-runs EXPERIMENT_ID
 ```
 
-Flags: see [references/experiments-cli.md#list-runs](references/experiments-cli.md#list-runs).
+Flags: run `ax experiments list-runs --help`.
 
 ## Delete Experiment: `ax experiments delete`
 
@@ -201,7 +205,7 @@ ax experiments delete NAME_OR_ID --dataset DATASET_NAME --space SPACE   # requir
 ax experiments delete NAME_OR_ID --force   # skip confirmation prompt
 ```
 
-Flags: see [references/experiments-cli.md#delete](references/experiments-cli.md#delete).
+Flags: run `ax experiments delete --help`.
 
 ## Annotate Runs: `ax experiments annotate-runs`
 
@@ -241,7 +245,7 @@ A JSON array; each item annotates one run:
 
 > `record_id` keys on the **run** id, which only exists after `create`. So the order is always: `create` → `export` (to read each run's `id`) → build annotations → `annotate-runs`.
 
-Flags: see [references/experiments-cli.md#annotate-runs](references/experiments-cli.md#annotate-runs).
+Flags: run `ax experiments annotate-runs --help`.
 
 ## Experiment Run Schema
 

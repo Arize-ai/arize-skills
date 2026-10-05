@@ -118,14 +118,15 @@ ax profiles delete staging
 You'll also need a space name or ID. Find yours by running `ax spaces list -o json` (use the `name` or base64 `id`), then persist it:
 ```bash
 # macOS/Linux — add to ~/.zshrc or ~/.bashrc
-export ARIZE_SPACE="my-workspace"        # name, or base64 ID like U3BhY2U6...
+export ARIZE_SPACE_ID="my-workspace"     # name, or base64 ID like U3BhY2U6...
 ```
+
+The `ax` CLI has no default-space setting, so every command that takes a project, dataset or task by name needs `--space`. The skills read `ARIZE_SPACE_ID` to find that value and pass it explicitly.
 
 **Option B — Environment variables**:
 ```bash
 export ARIZE_API_KEY="your-api-key"       # from https://app.arize.com/admin > API Keys
-export ARIZE_SPACE="my-workspace"         # space name or base64 ID from ax spaces list
-# export ARIZE_DEFAULT_PROJECT=my-project # optional default project
+export ARIZE_SPACE_ID="my-workspace"      # space name or base64 ID from ax spaces list
 # export OPENAI_API_KEY="sk-..."          # for AI integrations and evaluators
 # export ANTHROPIC_API_KEY="sk-ant-..."   # for AI integrations and evaluators
 ```
@@ -215,7 +216,7 @@ Export the required environment variables before running:
 
 ```bash
 export ARIZE_API_KEY="your-api-key"       # from https://app.arize.com/admin > API Keys
-export ARIZE_SPACE="my-workspace"         # space name or base64 ID from ax spaces list
+export ARIZE_SPACE_ID="my-workspace"      # space name or base64 ID from ax spaces list
 export TEST_PROJECT_NAME="my-project"     # optional: Arize project for trace tests
 export TEST_MODEL="claude-sonnet-4-6"     # optional: Claude model override
 ```
