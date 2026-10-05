@@ -1,147 +1,50 @@
-# ax prompts — CLI reference
+# ax prompts — CLI notes
 
-Consult when you need full flag lists or edge cases. Official docs: https://arize.com/docs/api-clients/cli/prompts
+Flag names, arguments, types, defaults, and which options are required are authoritative in `--help` for the installed CLI:
 
----
+- Command list → run `ax prompts --help`
+- One command's flags → run `ax prompts <sub> --help`, e.g. `ax prompts create --help`
 
-## `ax prompts list`
-
-List prompts in a space.
-
-```bash
-ax prompts list [--space SPACE] [--name FILTER] [--limit N] [--cursor CURSOR] [--output FILE]
-```
-
-| Option | Description |
-|--------|-------------|
-| `--space` | Space name or ID |
-| `--name` | Case-insensitive substring filter on prompt name |
-| `--limit` | Max results (default 15) |
-| `--cursor` | Pagination cursor |
+This file carries only what `--help` does not cover: the provider-enum scope, the variable-format mapping, the Prompt Hub wording map, tags, and the messages JSON shape. Official docs: https://arize.com/docs/api-clients/cli/prompts
 
 ---
 
-## `ax prompts create`
+## The prompts provider enum is narrower than `ax ai-integrations`
 
-Create a prompt with an initial version.
+`ax prompts create` and `ax prompts create-version` accept `OPEN_AI`, `AZURE_OPEN_AI`, `AWS_BEDROCK`, `VERTEX_AI`, `ANTHROPIC`, `CUSTOM`.
 
-```bash
-ax prompts create \
-  --name NAME \
-  --space SPACE \
-  --provider PROVIDER \
-  --input-variable-format FORMAT \
-  --messages JSON_OR_PATH \
-  [--commit-message MSG] \
-  [--description DESC] \
-  [--model MODEL]
-```
-
-| Option | Description |
-|--------|-------------|
-| `--name` | Unique prompt name within the space |
-| `--space` | Space name or ID |
-| `--provider` | **Required.** `OPEN_AI`, `ANTHROPIC`, `AZURE_OPEN_AI`, `AWS_BEDROCK`, `VERTEX_AI`, `CUSTOM` (no `GEMINI` option here, unlike `ax ai-integrations`) |
-| `--input-variable-format` | `F_STRING` (default for `{variable}` placeholders — use without asking the user), `MUSTACHE` for `{{variable}}`, or `NONE` |
-| `--messages` | Path to JSON file or inline JSON array of message objects |
-| `--commit-message` | Initial version message (default: `Initial version`). Same concept as Hub **Version description (optional)** on first save. |
-| `--description` | Optional prompt-level description (Hub **Description (optional)** on the prompt) |
-| `--model` | Default model for this version. CLI may allow omission; the main **SKILL.md** for this skill requires always passing an explicit `--model` when proposing `create` commands. |
-
-**Tags:** Prompt Hub lets you set comma-separated **Tags (optional)** on the new-prompt save form. There is no `--tags` (or similar) on `ax prompts create` in current CLI help — add tags in the UI after create, or document them for the user to paste.
+`ax ai-integrations create` accepts those six plus `NVIDIA_NIM`, `GEMINI`, `LITELLM`, `FIREWORKS`, and `TOGETHER_AI`. So a space can hold a Gemini (or LiteLLM, Fireworks, Together, NVIDIA NIM) integration that has no matching `ax prompts --provider` value. When the model the user names is served by one of those, confirm which `--provider` value to store on the prompt version before running `create` or `create-version`.
 
 ---
 
-## `ax prompts get`
+## Choosing `--input-variable-format`
 
-Get a prompt by name or ID. Without `--version-id` or `--label`, returns the latest version.
+`--input-variable-format` is required on both `create` and `create-version`. Pick the value from the literal placeholder syntax in the message strings:
 
-```bash
-ax prompts get NAME_OR_ID [--space SPACE] [--version-id ID] [--label LABEL]
-```
+| Placeholder written in the message text | Value to pass |
+|-----------------------------------------|---------------|
+| `{name}` — single braces                | `F_STRING`    |
+| `{{name}}` — double braces              | `MUSTACHE`    |
+| braces meant literally, no substitution | `NONE`        |
 
----
-
-## `ax prompts update`
-
-Update prompt description only (not messages or model).
-
-```bash
-ax prompts update NAME_OR_ID [--space SPACE] --description DESC
-```
+Default to `F_STRING`; the main **SKILL.md** for this skill makes single braces the house convention and says not to ask the user about the format.
 
 ---
 
-## `ax prompts delete`
+## Prompt Hub UI wording → CLI flag
 
-Delete a prompt and **all** versions. Irreversible.
-
-```bash
-ax prompts delete NAME_OR_ID [--space SPACE] [--force]
-```
-
----
-
-## `ax prompts list-versions`
-
-```bash
-ax prompts list-versions NAME_OR_ID [--space SPACE] [--limit N] [--cursor CURSOR]
-```
+| Prompt Hub UI field | CLI flag |
+|---------------------|----------|
+| **Version description (optional)** on the first save | `--commit-message` on `create` |
+| **Version description (optional)** on **Save New Version** | `--commit-message` on `create-version` |
+| **Description (optional)** on the prompt | `--description` on `create` or `update` |
+| **Tags (optional)** on the save form | no CLI equivalent — see below |
 
 ---
 
-## `ax prompts create-version`
+## Tags are set in the Hub UI
 
-Add a new immutable version to an existing prompt.
-
-```bash
-ax prompts create-version NAME_OR_ID \
-  --provider PROVIDER \
-  --input-variable-format FORMAT \
-  --messages JSON_OR_PATH \
-  [--space SPACE] \
-  [--commit-message MSG] \
-  [--model MODEL]
-```
-
-| Option | Description |
-|--------|-------------|
-| `--provider` | **Required.** Same enum as `create`: `OPEN_AI`, `ANTHROPIC`, `AZURE_OPEN_AI`, `AWS_BEDROCK`, `VERTEX_AI`, `CUSTOM` |
-| `--input-variable-format` | Same as `create` (default `F_STRING` for `{variable}`) |
-| `--messages` | Updated messages JSON for this version |
-| `--commit-message` | Same concept as Hub **Save New Version** → **Version description (optional)** (CLI default: `New version`) |
-| `--model` | Default model for this version — **always pass explicitly** per the main **SKILL.md** in this skill (confirm if unknown). |
-| `--space` | Required when `NAME_OR_ID` is a prompt name |
-
----
-
-## `ax prompts get-version-by-label`
-
-Resolve which version a label points to.
-
-```bash
-ax prompts get-version-by-label NAME_OR_ID --label LABEL [--space SPACE]
-```
-
----
-
-## `ax prompts set-version-labels`
-
-Set labels on a **version ID**. Replaces **all** existing labels on that version with the provided list.
-
-```bash
-ax prompts set-version-labels VERSION_ID --label L1 [--label L2 ...]
-```
-
----
-
-## `ax prompts remove-version-label`
-
-Remove one label from a version (does not delete the version).
-
-```bash
-ax prompts remove-version-label VERSION_ID --label LABEL
-```
+Prompt Hub takes comma-separated **Tags (optional)** on its save form. `ax prompts create` and `ax prompts update` expose no tag flag, so add tags in the Hub UI after the prompt exists, or list the suggested tags in prose for the user to apply.
 
 ---
 

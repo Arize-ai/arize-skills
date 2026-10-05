@@ -11,7 +11,7 @@ Official references (read the skill body first; open docs only if the user needs
 - CLI: https://arize.com/docs/api-clients/cli/prompts
 - Creating prompts in the product (Prompt Playground, variables, params): https://arize.com/docs/ax/prompts/tutorial/create-a-prompt
 
-See [references/cli-prompts.md](references/cli-prompts.md) for full flag tables.
+Run `ax prompts --help` for the command list and `ax prompts <sub> --help` for one command's flags and defaults. See [references/cli-prompts.md](references/cli-prompts.md) for what `--help` leaves out: provider-enum scope, variable-format mapping, Hub wording map, tags, and the messages JSON shape.
 
 ---
 
@@ -369,23 +369,9 @@ Confirm the new name and space before `create`. Labels are **not** copied — us
 
 ## CLI quick reference
 
-| Goal | Command |
-|------|---------|
-| List prompts | `ax prompts list --space SPACE` |
-| Create | `ax prompts create --name NAME --space SPACE --provider PROVIDER --model MODEL --input-variable-format F_STRING --messages ...` |
-| Get (latest) | `ax prompts get NAME_OR_ID [--space SPACE]` |
-| Get by version | `ax prompts get NAME_OR_ID --version-id prv_...` |
-| Get by label | `ax prompts get NAME_OR_ID --label LABEL` |
-| New version | `ax prompts create-version NAME_OR_ID --provider PROVIDER --model MODEL --input-variable-format F_STRING --messages ...` |
-| List versions | `ax prompts list-versions NAME_OR_ID [--space SPACE]` |
-| Resolve label | `ax prompts get-version-by-label NAME_OR_ID --label LABEL [--space SPACE]` |
-| Set labels | `ax prompts set-version-labels VERSION_ID --label L ...` |
-| Remove label | `ax prompts remove-version-label VERSION_ID --label LABEL` |
-| Update description | `ax prompts update NAME_OR_ID --description "..." [--space SPACE]` |
-| Delete (all versions) | `ax prompts delete NAME_OR_ID [--space SPACE] --force` |
-| Duplicate (no single command) | `get -o json` → extract fields → `create` with new `--name` (see **Workflow D** step 4d) |
+Run `ax prompts --help` for the full command list, and `ax prompts <sub> --help` for that command's arguments, flags, and defaults. Workflows A–D above show the commands in the order this skill uses them.
 
-For exhaustive flags and defaults, see [references/cli-prompts.md](references/cli-prompts.md).
+One gap the command list does not show: **duplicate** has no command of its own — do it as `get -o json` → extract fields → `create` with a new `--name` (**Workflow D** step 4d).
 
 ---
 

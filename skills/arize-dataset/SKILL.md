@@ -42,15 +42,9 @@ ax datasets list --cursor CURSOR_TOKEN
 ax datasets list -o json
 ```
 
-### Flags
+Flags: run `ax datasets list --help`.
 
-| Flag | Type | Default | Description |
-|------|------|---------|-------------|
-| `--space` | string | from profile | Filter by space |
-| `--name, -n` | string | none | Substring filter on dataset name |
-| `--limit, -l` | int | 15 | Max results (1-100) |
-| `--cursor` | string | none | Pagination cursor from previous response |
-| `-o, --output` | string | table | Output format: table, json, csv, parquet, or file path |
+`--limit` defaults to 15, so a bare `list` shows only the first page. Raise it to cover the expected result count, and when the response still returns a cursor, pass it back as `--cursor` to read the next page.
 
 ## Get Dataset: `ax datasets get`
 
@@ -62,13 +56,7 @@ ax datasets get NAME_OR_ID -o json
 ax datasets get NAME_OR_ID --space SPACE   # required when using dataset name instead of ID
 ```
 
-### Flags
-
-| Flag | Type | Default | Description |
-|------|------|---------|-------------|
-| `NAME_OR_ID` | string | required | Dataset name or ID (positional) |
-| `--space` | string | none | Space name or ID (required if using dataset name instead of ID) |
-| `-o, --output` | string | table | Output format |
+Flags: run `ax datasets get --help`.
 
 ### Response fields
 
@@ -97,16 +85,9 @@ ax datasets export NAME_OR_ID --stdout | jq '.[0]'
 ax datasets export NAME_OR_ID --space SPACE   # required when using dataset name instead of ID
 ```
 
-### Flags
+Flags: run `ax datasets export --help`.
 
-| Flag | Type | Default | Description |
-|------|------|---------|-------------|
-| `NAME_OR_ID` | string | required | Dataset name or ID (positional) |
-| `--space` | string | none | Space name or ID (required if using dataset name instead of ID) |
-| `--version-id` | string | latest | Export a specific dataset version |
-| `--all` | bool | false | Unlimited bulk export (use for datasets > 500 examples) |
-| `--output-dir` | string | `.` | Output directory |
-| `--stdout` | bool | false | Print JSON to stdout instead of file |
+Omitting `--version-id` exports the latest version.
 
 **Agent auto-escalation rule:** If an export returns exactly 500 examples, the result is likely truncated — re-run with `--all` to get the full dataset.
 
@@ -138,7 +119,7 @@ Output is a JSON array of example objects. Each example has system fields (`id`,
 
 ## Create Dataset: `ax datasets create`
 
-Create a new dataset from a data file.
+Create a new dataset from a data file or from inline JSON.
 
 ```bash
 ax datasets create --name "My Dataset" --space SPACE --file data.csv
@@ -147,23 +128,17 @@ ax datasets create --name "My Dataset" --space SPACE --file data.jsonl
 ax datasets create --name "My Dataset" --space SPACE --file data.parquet
 ```
 
-### Flags
+Flags: run `ax datasets create --help`.
 
-| Flag | Type | Required | Description |
-|------|------|----------|-------------|
-| `--name, -n` | string | yes | Dataset name |
-| `--space` | string | yes | Space to create the dataset in |
-| `--file, -f` | path | yes | Data file: CSV, JSON, JSONL, or Parquet |
-| `-o, --output` | string | no | Output format for the returned dataset metadata |
+### Passing data inline or via stdin
 
-### Passing data via stdin
-
-Use `--file -` to pipe data directly — no temp file needed:
+When generating the examples rather than reading an existing file, skip the temp file: use `--json` for a payload written in the command, and `--file -` when the data arrives on stdin from another command or a heredoc.
 
 ```bash
+ax datasets create --name "my-dataset" --space SPACE --json '[{"question": "What is 2+2?", "answer": "4"}]'
+
 echo '[{"question": "What is 2+2?", "answer": "4"}]' | ax datasets create --name "my-dataset" --space SPACE --file -
 
-# Or with a heredoc
 ax datasets create --name "my-dataset" --space SPACE --file - << 'EOF'
 [{"question": "What is 2+2?", "answer": "4"}]
 EOF
@@ -215,18 +190,7 @@ ax datasets append DATASET_NAME --space SPACE --file additions.json
 ax datasets append DATASET_NAME --space SPACE --json '[{"q": "..."}]' --version-id VERSION_ID
 ```
 
-### Flags
-
-| Flag | Type | Required | Description |
-|------|------|----------|-------------|
-| `NAME_OR_ID` | string | yes | Dataset name or ID (positional); add `--space` when using name |
-| `--space` | string | no | Space name or ID (required if using dataset name instead of ID) |
-| `--json` | string | mutex | JSON array of example objects |
-| `--file, -f` | path | mutex | Data file (CSV, JSON, JSONL, Parquet) |
-| `--version-id` | string | no | Append to a specific version (default: latest) |
-| `-o, --output` | string | no | Output format for the returned dataset metadata |
-
-Exactly one of `--json` or `--file` is required.
+Flags: run `ax datasets append --help`.
 
 ### Validation
 
@@ -259,13 +223,7 @@ ax datasets delete NAME_OR_ID --space SPACE   # required when using dataset name
 ax datasets delete NAME_OR_ID --force   # skip confirmation prompt
 ```
 
-### Flags
-
-| Flag | Type | Default | Description |
-|------|------|---------|-------------|
-| `NAME_OR_ID` | string | required | Dataset name or ID (positional) |
-| `--space` | string | none | Space name or ID (required if using dataset name instead of ID) |
-| `--force, -f` | bool | false | Skip confirmation prompt |
+Flags: run `ax datasets delete --help`.
 
 ## Update Dataset: `ax datasets update`
 
@@ -276,61 +234,50 @@ ax datasets update NAME_OR_ID --name "new-dataset-name"
 ax datasets update NAME_OR_ID --name "new-dataset-name" --space SPACE
 ```
 
-### Flags
-
-| Flag | Type | Required | Description |
-|------|------|----------|-------------|
-| `NAME_OR_ID` | string | yes | Dataset name or ID (positional) |
-| `--name` | string | yes | New dataset name |
-| `--space` | string | no | Space name or ID (required if using dataset name instead of ID) |
+Flags: run `ax datasets update --help`.
 
 ## Annotate Examples: `ax datasets annotate-examples`
 
-Write annotations onto dataset examples in bulk from a file. Upsert semantics — existing annotations with the same key are updated, new ones are created. Up to 1000 annotations per request.
+Write annotations onto dataset examples in bulk from a file. Upsert semantics — resubmitting the same annotation config name for an example overwrites the previous value. Up to 1000 examples per request. Record IDs that match no example in the dataset are silently ignored — take each `record_id` from an export of the same dataset rather than from memory.
 
 ```bash
 ax datasets annotate-examples NAME_OR_ID --file annotations.json
 ax datasets annotate-examples NAME_OR_ID --file annotations.csv --space SPACE
 ```
 
-### Flags
-
-| Flag | Type | Required | Description |
-|------|------|----------|-------------|
-| `NAME_OR_ID` | string | yes | Dataset name or ID (positional) |
-| `--file, -f` | path | yes | Annotation file: JSON, JSONL, CSV, or Parquet (use `-` for stdin) |
-| `--space` | string | no | Space name or ID (required if using dataset name instead of ID) |
+Flags and the `record_id` / `values` record shape: run `ax datasets annotate-examples --help`.
 
 ## Workflows
 
 ### Find a dataset by name
 
-All dataset commands accept a name or ID directly. You can pass a dataset name as the positional argument (add `--space SPACE` when not using an ID):
+All dataset commands accept a name or ID directly, so the scriptable default is to pass the dataset name as the positional argument — no lookup step (add `--space SPACE` whenever the argument is a name rather than a base64 ID):
 
 ```bash
-# Use name directly
+# Default: use the name directly
 ax datasets get "eval-set-v1" --space SPACE
 ax datasets export "eval-set-v1" --space SPACE
 
-# Or resolve name to ID via list if you need the base64 ID
+# When the base64 ID is needed, resolve it in one step
 # ax datasets list -o json wraps the array under a "datasets" key
-ax datasets list -o json | jq '.datasets[] | select(.name == "eval-set-v1") | .id'
+ax datasets list -o json | jq -r '.datasets[] | select(.name == "eval-set-v1") | .id'
 ```
+
+Use the name or this `-o json` + `jq` form in any script or multi-step workflow. Use bare `ax datasets list` when the user is browsing and wants to read the table — its default output is paginated, so a dataset further down the list will not appear.
 
 ### Create a dataset from file for evaluation
 
 1. Prepare a CSV/JSON/Parquet file with your evaluation columns (e.g., `input`, `expected_output`)
-   - If generating data inline, pipe it via stdin using `--file -` (see the Create Dataset section)
+   - If generating the data inline, pass it with `--json` or pipe it in with `--file -` (see the Create Dataset section)
 2. `ax datasets create --name "eval-set-v1" --space SPACE --file eval_data.csv`
 3. Verify: `ax datasets get DATASET_NAME --space SPACE`
 4. Use the dataset name to run experiments
 
 ### Add examples to an existing dataset
 
-```bash
-# Find the dataset
-ax datasets list --space SPACE
+Append straight to the dataset name — see **Find a dataset by name** above when the name itself is unknown.
 
+```bash
 # Append inline or from a file using the dataset name (see Append Examples section for full syntax)
 ax datasets append DATASET_NAME --space SPACE --json '[{"question": "...", "answer": "..."}]'
 ax datasets append DATASET_NAME --space SPACE --file additional_examples.csv
@@ -338,9 +285,8 @@ ax datasets append DATASET_NAME --space SPACE --file additional_examples.csv
 
 ### Download dataset for offline analysis
 
-1. `ax datasets list --space SPACE` -- find the dataset name
-2. `ax datasets export DATASET_NAME --space SPACE` -- download to file
-3. Parse the JSON: `jq '.[] | .question' dataset_*/examples.json`
+1. `ax datasets export DATASET_NAME --space SPACE` -- download to file. When the name is unknown, resolve it first per **Find a dataset by name** above
+2. Parse the JSON: `jq '.[] | .question' dataset_*/examples.json`
 
 ### Export a specific version
 
