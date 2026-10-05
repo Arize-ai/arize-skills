@@ -199,6 +199,44 @@ SPECIFIC_PROMPTS = [
         ["arize-evaluator"],
         ["specific", "evaluator"],
     ),
+    # arize-align-evaluator
+    (
+        "Compare my LLM judge's labels against the human labels in my annotation queue",
+        ["arize-align-evaluator"],
+        ["specific", "align-evaluator"],
+    ),
+    (
+        "Align my hallucination evaluator with our human ground truth and measure agreement",
+        ["arize-align-evaluator"],
+        ["specific", "align-evaluator"],
+    ),
+    (
+        "Check inter-annotator agreement on my labeling queue before calibrating the evaluator",
+        ["arize-align-evaluator"],
+        ["specific", "align-evaluator"],
+    ),
+    # arize-align-queue-builder
+    (
+        "Build a labeling queue so I can get enough human labels to align my dashboard_metric_formula evaluator",
+        ["arize-align-queue-builder"],
+        ["specific", "align-queue-builder"],
+    ),
+    (
+        "Sample balanced sessions across my evaluator's labels into a new annotation queue for a gold set",
+        ["arize-align-queue-builder"],
+        ["specific", "align-queue-builder"],
+    ),
+    # arize-align-history-backfill
+    (
+        "Score sessions from before my evaluator's continuous task started so I can sample more metric_wrong examples",
+        ["arize-align-history-backfill"],
+        ["specific", "align-history-backfill"],
+    ),
+    (
+        "Backfill my L2 evaluator on last quarter's traces using the same admission filter as the production task",
+        ["arize-align-history-backfill"],
+        ["specific", "align-history-backfill"],
+    ),
     # arize-annotation
     (
         "Create an annotation config for correctness labels",
@@ -410,6 +448,23 @@ VAGUE_PROMPTS = [
         "Can you judge whether my model outputs are correct?",
         ["arize-evaluator"],
         ["vague", "evaluator"],
+    ),
+    # Should route to align-evaluator
+    (
+        "My eval keeps disagreeing with what our reviewers said",
+        ["arize-align-evaluator"],
+        ["vague", "align-evaluator"],
+    ),
+    (
+        "Is my judge actually trustworthy compared to human labels?",
+        ["arize-align-evaluator"],
+        ["vague", "align-evaluator"],
+    ),
+    # Should route to align-queue-builder
+    (
+        "My last labeling queue was mostly not-applicable records, help me build a better one for my eval",
+        ["arize-align-queue-builder"],
+        ["vague", "align-queue-builder"],
     ),
     # Should route to annotation
     (

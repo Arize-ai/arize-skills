@@ -159,6 +159,9 @@ For interactive setup, `ax profiles create` also offers **Advanced → Single en
 | [arize-dataset](skills/arize-dataset/SKILL.md) | Create, manage, and download datasets and examples. |
 | [arize-experiment](skills/arize-experiment/SKILL.md) | Run and analyze experiments against datasets. |
 | [arize-evaluator](skills/arize-evaluator/SKILL.md) | Create LLM-as-judge evaluators, run evaluation tasks, and set up continuous monitoring. |
+| [arize-align-evaluator](skills/arize-align-evaluator/SKILL.md) | Align an LLM-as-judge evaluator with human labels from annotation queues: fit and quality gates, annotator agreement, record-level disagreements, and an approval stop before any evaluator change. |
+| [arize-align-queue-builder](skills/arize-align-queue-builder/SKILL.md) | Build an annotation queue for aligning a specific evaluator: label config from its choices, records balanced across its labels and sized for expected exclusions, annotator instructions, approval before creation. |
+| [arize-align-history-backfill](skills/arize-align-history-backfill/SKILL.md) | Score sessions an evaluator never labeled, so alignment queues can sample labels the stored data lacks: history before a production task started (calibrated candidate copy), or everything for a new evaluator with no task (checked against an agreed admission rule). |
 | [arize-ai-provider-integration](skills/arize-ai-provider-integration/SKILL.md) | Create and manage LLM provider credentials (OpenAI, Anthropic, Azure, Bedrock, Vertex, and more). |
 | [arize-annotation](skills/arize-annotation/SKILL.md) | Create and manage annotation configs (categorical, continuous, freeform); bulk-annotate project spans via the Python SDK. |
 | [arize-prompt-optimization](skills/arize-prompt-optimization/SKILL.md) | Optimize prompts using trace data, experiments, and meta-prompting. |
