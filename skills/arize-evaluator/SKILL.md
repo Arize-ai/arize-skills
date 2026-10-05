@@ -4,7 +4,7 @@ description: Handles LLM-as-judge and code evaluator workflows on Arize includin
 metadata:
   author: arize
   version: "1.0"
-compatibility: Requires the ax CLI and a configured Arize profile with an AI integration.
+compatibility: Requires the ax CLI (≥ 0.38.0) and a configured Arize profile with an AI integration.
 ---
 
 # Arize Evaluator Skill
@@ -65,7 +65,7 @@ A **task** is how you run one or more evaluators against real data. Tasks are at
 
 ## Data Granularity
 
-Set `--data-granularity` when creating the evaluator (`ax evaluators create-template-evaluator` / `create-code-evaluator`), not on the task — it controls what unit of data that evaluator scores whenever it runs against a **project task** (not dataset/experiment tasks — those evaluate experiment runs directly). It defaults to `span`.
+Set `--data-granularity` when creating the evaluator (`ax evaluators create-evaluator template` / `create-evaluator code`), not on the task — it controls what unit of data that evaluator scores whenever it runs against a **project task** (not dataset/experiment tasks — those evaluate experiment runs directly). It defaults to `span`.
 
 | Level | What it evaluates | Use for | Result column prefix |
 |-------|-------------------|---------|---------------------|
@@ -146,7 +146,7 @@ If a suitable integration exists, note its ID. If not, create one using the **ar
 Use the template design best practices below. Keep the evaluator name and variables **generic** — the task (Step 6) handles project-specific wiring via `column_mappings`.
 
 ```bash
-ax evaluators create-template-evaluator \
+ax evaluators create-evaluator template \
   --name "Hallucination" \
   --space SPACE \
   --template-name "hallucination" \
@@ -424,7 +424,7 @@ The labels in `--classification-choices` must exactly match the labels reference
 | Scores look wrong | Add `--include-explanations` and inspect judge reasoning on a few samples |
 | Evaluator cancels on wrong span kind | Match `query_filter` and `column_mappings` to LLM vs CHAIN spans |
 | Time format error on `trigger-run` | Use `2026-03-21T09:00:00` — no trailing `Z` |
-| Run failed: "missing rails and classification choices" | Add `--classification-choices '{"label_a": 1, "label_b": 0}'` to `ax evaluators create-template-evaluator` — labels must match the template |
+| Run failed: "missing rails and classification choices" | Add `--classification-choices '{"label_a": 1, "label_b": 0}'` to `ax evaluators create-evaluator template` — labels must match the template |
 | Run `completed`, all spans skipped | Query filter matched spans but column mappings are wrong or template variables don't resolve — export a sample span and verify paths |
 | `query_filter` set but 0 spans scored, or `No data found` | Use `attributes.openinference.span.kind`, not `span_kind`. Custom attributes may not be indexed. Remove the filter to confirm spans exist in the window. |
 | Spans of the wrong kind scored | The per-evaluator `query_filter` is ignored ([Arize-ai/arize#89044](https://github.com/Arize-ai/arize/issues/89044)); move it to the task's `--query-filter` |
