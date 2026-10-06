@@ -292,7 +292,7 @@ def main():
     def z(t):
         return t.isoformat().replace("+00:00", "Z")
 
-    timed = sorted((parse_time(c["start_time"]), c) for c in picks if parse_time(c["start_time"]))
+    timed = sorted(((parse_time(c["start_time"]), c) for c in picks if parse_time(c["start_time"])), key=lambda tc: tc[0])
     groups = []
     for t, c in timed:
         if groups and t - groups[-1][0][0] <= timedelta(days=SOURCE_MAX_DAYS) - timedelta(minutes=10):
