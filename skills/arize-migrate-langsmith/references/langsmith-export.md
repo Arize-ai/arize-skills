@@ -38,10 +38,10 @@ Query runs (sample only): `POST /api/v2/runs/query` or SDK `list_runs` with a sh
 
 ## Historical runs → Arize AX
 
-Preferred path for AX UI history: from the arize-skills repo root run
+Preferred path for AX UI history: from this installed skill's root run
 `python scripts/migrate_vendor_traces.py --vendor langsmith --source-project PROJECT --arize-project DEST`.
-That exports recent runs via the LangSmith API/SDK and ingests OpenInference spans over OTLP
-(with `output.value`, `session.id`, and parent links mapped).
+That exports the most recent root runs (plus their children) via the LangSmith API/SDK and ingests OpenInference spans over OTLP
+(with `output.value`, `session.id`, and parent links mapped). Install [helper dependencies](../scripts/requirements.txt) first.
 
 LangSmith bulk export to S3/Parquet is for **customer archives**, not a turn-key AX importer.
 Do not promise Parquet → AX trace UI ingest. Keep the archive; use the migrate script for

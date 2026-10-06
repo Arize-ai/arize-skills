@@ -3,8 +3,8 @@ name: arize-migrate-langsmith
 description: Migrates LLM observability from LangSmith into Arize AX — historical trace import via OTLP (LS outputs→output.value, session/thread→session.id), datasets, and Prompt Hub prompts (latest or versions). Use when migrating from LangSmith to Arize, importing LangSmith runs into AX, or replacing LangSmith with Arize.
 metadata:
   author: arize
-  version: "1.3"
-compatibility: Requires ax CLI, Arize OTLP credentials (ARIZE_API_KEY + ARIZE_SPACE_ID), and LANGSMITH_API_KEY. Optional langsmith Python package for export.
+  version: "1.4"
+compatibility: Requires ax CLI, Arize OTLP credentials (ARIZE_API_KEY + ARIZE_SPACE_ID), and LANGSMITH_API_KEY. The bundled importer needs the langsmith Python package.
 ---
 
 # Migrate LangSmith → Arize AX
@@ -22,7 +22,7 @@ Move LangSmith data into Arize AX. **Historical traces are in scope** — export
 ## Core principles
 
 - **Ask before mutating** (space, destination project, resource types) unless the user already confirmed.
-- **Import historical traces** with `scripts/migrate_vendor_traces.py` (repo root) — do **not** fake migration by only sending new live traffic to AX.
+- **Import historical traces** with the bundled `scripts/migrate_vendor_traces.py` — do **not** fake migration by only sending new live traffic to AX.
 - **Map final outputs to `output.value` as text** — never put the raw tool/message timeline into `output.value`.
 - **Map sessions** — copy `session_id` / `thread_id` → `attributes.session.id` (and `user_id` → `user.id` when present).
 - **Never embed secrets.** Ask for LangSmith keys; use `ax profiles` / env for Arize. Do not read `.env` from disk.
@@ -32,8 +32,8 @@ Move LangSmith data into Arize AX. **Historical traces are in scope** — export
 
 Proceed with the task. If something fails, troubleshoot from the error:
 
-- `ax` missing / version error → references/ax-setup.md
-- `401 Unauthorized` / missing Arize key → references/ax-profiles.md (or ask the user for `ARIZE_API_KEY` + `ARIZE_SPACE_ID` for OTLP)
+- `ax` missing / version error → [ax setup](references/ax-setup.md)
+- `401 Unauthorized` / missing Arize key → [ax profiles](references/ax-profiles.md) (or ask the user for `ARIZE_API_KEY` + `ARIZE_SPACE_ID` for OTLP)
 - LangSmith auth → ask for `LANGSMITH_API_KEY` (and workspace id if needed); never invent keys
 - **Security:** Never read `.env` files or search the filesystem for credentials
 
@@ -86,7 +86,9 @@ Target AX space + **destination project name** (create with `ax projects create`
 
 ### Step 2 — Import historical traces (required for trace migration)
 
-From the **arize-skills repo root** (or the path the user gives):
+Locate this installed skill's root and run its bundled commands by absolute path, so they work from any workspace. Check the chosen interpreter is Python 3.10 or later. Create an isolated environment if needed and install the [helper dependencies](scripts/requirements.txt) (`langsmith`).
+
+`--limit` is the number of **root runs** (newest first). The importer over-fetches and includes each selected root's children so `--limit` does not split a tree. If a parent still falls outside the fetched window, the script warns on stderr and promotes that span to a root — raise `--limit` (or omit it) instead of treating the orphan as a real root.
 
 ```bash
 export ARIZE_API_KEY=... ARIZE_SPACE_ID=... LANGSMITH_API_KEY=...
@@ -109,11 +111,11 @@ Confirm:
 
 - Root/turn spans have **string** `attributes.output.value` matching LangSmith Output (not a JSON message/parts array)
 - `attributes.session.id` is set when LangSmith had `session_id` / `thread_id`
-- Child spans have `parent_id` linking the run tree
+- Child spans have `parent_id` linking the run tree. A span with no parent is a real root only when LangSmith also had no `parent_run_id`. If the importer warned about a missing parent, that span is an orphan from a truncated window — re-import with a higher `--limit`.
 
 ### Step 3 — Datasets
 
-Export examples → flatten → `ax datasets create`. See references/langsmith-export.md.
+Export examples → flatten → `ax datasets create`. See [LangSmith export recipes](references/langsmith-export.md).
 
 ### Step 4 — Prompts (recommended when the user has Prompt Hub content)
 
@@ -147,8 +149,8 @@ Use `.arize-tmp-migrate/langsmith/` for raw exports and verify dumps (gitignored
 
 ## Additional resources
 
-- references/concept-mapping.md
-- references/langsmith-export.md
-- ../../scripts/migrate_vendor_traces.py
-- references/ax-profiles.md
-- references/ax-setup.md
+- [Concept mapping](references/concept-mapping.md)
+- [LangSmith export recipes](references/langsmith-export.md)
+- [Trace importer](scripts/migrate_vendor_traces.py)
+- [ax profiles](references/ax-profiles.md)
+- [ax setup](references/ax-setup.md)

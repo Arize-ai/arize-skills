@@ -59,7 +59,7 @@ Map Langfuse `text` / `chat` prompts into AX messages, then `ax prompts create` 
 
 ## Historical observations → Arize AX
 
-Preferred path for AX UI history: from the arize-skills repo root run
+Preferred path for AX UI history: from this installed skill's root run
 `python scripts/migrate_vendor_traces.py --vendor langfuse --arize-project DEST`.
 Optional `--tag TAG` limits import to traces with that Langfuse tag.
 The script maps observation I/O → `input.value` / `output.value`, parents, and

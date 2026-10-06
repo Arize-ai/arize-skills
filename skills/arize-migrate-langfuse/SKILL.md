@@ -3,7 +3,7 @@ name: arize-migrate-langfuse
 description: Migrates LLM observability from Langfuse into Arize AX — historical trace import via OTLP (LF output→output.value, sessionId→session.id), datasets, and prompts (latest or versions + labels). Use when migrating from Langfuse to Arize or importing Langfuse observations into AX.
 metadata:
   author: arize
-  version: "1.3"
+  version: "1.4"
 compatibility: Requires ax CLI, Arize OTLP credentials (ARIZE_API_KEY + ARIZE_SPACE_ID), and LANGFUSE_PUBLIC_KEY / LANGFUSE_SECRET_KEY / LANGFUSE_BASE_URL.
 ---
 
@@ -22,7 +22,7 @@ Move Langfuse data into Arize AX. **Historical traces are in scope** — export 
 ## Core principles
 
 - **Ask before mutating** (space, destination project, resource types) unless the user already confirmed.
-- **Import historical traces** with `scripts/migrate_vendor_traces.py --vendor langfuse`. Do not fake migration with live-only AX traffic.
+- **Import historical traces** with the bundled `scripts/migrate_vendor_traces.py --vendor langfuse`. Do not fake migration with live-only AX traffic.
 - **`output.value` = observation output as text** — unwrap simple wrappers; do not place message/parts timelines in `output.value`.
 - **Map sessions** — Langfuse trace `sessionId` → `attributes.session.id`; `userId` → `user.id`.
 - **Never embed secrets.** Ask for Langfuse keys; use `ax profiles` / env for Arize. Do not read `.env` from disk.
@@ -33,8 +33,8 @@ Move Langfuse data into Arize AX. **Historical traces are in scope** — export 
 
 Proceed with the task. If something fails, troubleshoot from the error:
 
-- `ax` missing / version error → references/ax-setup.md
-- `401 Unauthorized` / missing Arize key → references/ax-profiles.md (or ask for `ARIZE_API_KEY` + `ARIZE_SPACE_ID` for OTLP)
+- `ax` missing / version error → [ax setup](references/ax-setup.md)
+- `401 Unauthorized` / missing Arize key → [ax profiles](references/ax-profiles.md) (or ask for `ARIZE_API_KEY` + `ARIZE_SPACE_ID` for OTLP)
 - Langfuse auth → ask for `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, and `LANGFUSE_BASE_URL`
 - **Security:** Never read `.env` files or search the filesystem for credentials
 
@@ -81,9 +81,11 @@ Target AX space + destination project name. Confirm Langfuse host/region.
 ### Step 1 — Preflight
 
 - `ax projects list --space SPACE` (or create destination project)
-- Smoke-test Langfuse auth (see references/langfuse-export.md)
+- Smoke-test Langfuse auth (see [Langfuse export recipes](references/langfuse-export.md))
 
 ### Step 2 — Import historical traces
+
+Locate this installed skill's root and run its bundled commands by absolute path, so they work from any workspace. Check the chosen interpreter is Python 3.10 or later. Create an isolated environment if needed; see [helper dependencies](scripts/requirements.txt) (Langfuse uses the public REST API, so extra packages are optional).
 
 ```bash
 export ARIZE_API_KEY=... ARIZE_SPACE_ID=...
@@ -109,7 +111,7 @@ Confirm string `output.value`, `parent_id` links, and `session.id` when Langfuse
 
 ### Step 3 — Datasets
 
-See references/langfuse-export.md → flatten → `ax datasets create`.
+See [Langfuse export recipes](references/langfuse-export.md) → flatten → `ax datasets create`.
 
 ### Step 4 — Prompts (recommended when the user manages prompts in Langfuse)
 
@@ -140,8 +142,8 @@ Summarize spans imported, sample `output.value`, session coverage, prompts/versi
 
 ## Additional resources
 
-- references/concept-mapping.md
-- references/langfuse-export.md
-- ../../scripts/migrate_vendor_traces.py
-- references/ax-profiles.md
-- references/ax-setup.md
+- [Concept mapping](references/concept-mapping.md)
+- [Langfuse export recipes](references/langfuse-export.md)
+- [Trace importer](scripts/migrate_vendor_traces.py)
+- [ax profiles](references/ax-profiles.md)
+- [ax setup](references/ax-setup.md)

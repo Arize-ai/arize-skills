@@ -3,7 +3,7 @@ name: arize-migrate-braintrust
 description: Migrates LLM observability from Braintrust into Arize AX — historical trace import via OTLP (BT output→output.value, span_parents, one AX trace per turn + session.id), datasets, and prompts (latest or versions). Use when migrating from Braintrust to Arize or importing Braintrust logs into AX.
 metadata:
   author: arize
-  version: "1.3"
+  version: "1.4"
 compatibility: Requires ax CLI, Arize OTLP credentials (ARIZE_API_KEY + ARIZE_SPACE_ID), and BRAINTRUST_API_KEY.
 ---
 
@@ -22,7 +22,7 @@ Move Braintrust data into Arize AX. **Historical traces are in scope** — expor
 ## Core principles
 
 - **Ask before mutating** (space, destination project, resource types) unless the user already confirmed.
-- **Import historical traces** with `scripts/migrate_vendor_traces.py --vendor braintrust`. Do not fake migration with live-only AX traffic.
+- **Import historical traces** with the bundled `scripts/migrate_vendor_traces.py --vendor braintrust`. Do not fake migration with live-only AX traffic.
 - **`output.value` = final text/JSON string** from Braintrust `output` — not a synthetic message timeline.
 - **Trace shape** — Braintrust often stores a whole conversation as one trace. On import, emit **one AX trace per turn** (`chat.request`) and group turns with `attributes.session.id`.
 - **Never embed secrets.** Ask for `BRAINTRUST_API_KEY`; use `ax profiles` / env for Arize. Do not read `.env` from disk.
@@ -32,8 +32,8 @@ Move Braintrust data into Arize AX. **Historical traces are in scope** — expor
 
 Proceed with the task. If something fails, troubleshoot from the error:
 
-- `ax` missing / version error → references/ax-setup.md
-- `401 Unauthorized` / missing Arize key → references/ax-profiles.md (or ask for `ARIZE_API_KEY` + `ARIZE_SPACE_ID` for OTLP)
+- `ax` missing / version error → [ax setup](references/ax-setup.md)
+- `401 Unauthorized` / missing Arize key → [ax profiles](references/ax-profiles.md) (or ask for `ARIZE_API_KEY` + `ARIZE_SPACE_ID` for OTLP)
 - Braintrust auth → ask for `BRAINTRUST_API_KEY` (and `BRAINTRUST_API_URL` if not US cloud)
 - **Security:** Never read `.env` files or search the filesystem for credentials
 
@@ -85,6 +85,8 @@ Target AX space + destination project name. Confirm Braintrust source project na
 
 ### Step 2 — Import historical traces
 
+Locate this installed skill's root and run its bundled commands by absolute path, so they work from any workspace. Check the chosen interpreter is Python 3.10 or later. Create an isolated environment if needed; see [helper dependencies](scripts/requirements.txt) (Braintrust uses the public REST API, so extra packages are optional).
+
 ```bash
 export ARIZE_API_KEY=... ARIZE_SPACE_ID=... BRAINTRUST_API_KEY=...
 python scripts/migrate_vendor_traces.py \
@@ -106,7 +108,7 @@ Confirm string `output.value`, parent links via `parent_id`, multiple traces per
 
 ### Step 3 — Datasets
 
-See references/braintrust-export.md → flatten → `ax datasets create`.
+See [Braintrust export recipes](references/braintrust-export.md) → flatten → `ax datasets create`.
 
 ### Step 4 — Prompts (recommended when the user has Braintrust prompts)
 
@@ -139,8 +141,8 @@ Summarize spans imported, trace/session counts, sample `output.value`, prompts/v
 
 ## Additional resources
 
-- references/concept-mapping.md
-- references/braintrust-export.md
-- ../../scripts/migrate_vendor_traces.py
-- references/ax-profiles.md
-- references/ax-setup.md
+- [Concept mapping](references/concept-mapping.md)
+- [Braintrust export recipes](references/braintrust-export.md)
+- [Trace importer](scripts/migrate_vendor_traces.py)
+- [ax profiles](references/ax-profiles.md)
+- [ax setup](references/ax-setup.md)

@@ -38,7 +38,7 @@ Paginate with cursors when the response includes a `cursor` field. Raise limits 
 
 ### Historical logs → Arize AX
 
-Preferred path for AX UI history: from the arize-skills repo root run
+Preferred path for AX UI history: from this installed skill's root run
 `python scripts/migrate_vendor_traces.py --vendor braintrust --source-project PROJECT --arize-project DEST`.
 The script uses BTQL (`span_parents`, `metadata`, etc.), maps `output` → `output.value`,
 splits conversations into **one AX trace per turn**, and sets `session.id` from Braintrust metadata.
