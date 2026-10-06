@@ -264,6 +264,13 @@ def evaluator_config(a, ref):
     return ev, (ev.get("version") or {}).get("template_config") or {}
 
 
+def model_params(params):
+    """Model parameters as one flat dict. Top-level keys (e.g. temperature) and additional_properties both count."""
+    flat = dict(params or {})
+    flat.update(flat.pop("additional_properties", None) or {})
+    return flat
+
+
 def model_of(tc):
     return (tc.get("llm_config") or {}).get("model_name")
 
@@ -330,8 +337,7 @@ def cmd_copy(a):
     src, tc = evaluator_config(a, a.source)
     v = src.get("version") or {}
     llm = tc.get("llm_config") or {}
-    inv = (llm.get("invocation_parameters") or {}).get("additional_properties") or {}
-    prov = (llm.get("provider_parameters") or {}).get("additional_properties") or {}
+    inv, prov = model_params(llm.get("invocation_parameters")), model_params(llm.get("provider_parameters"))
     args = ["evaluators", "create-evaluator", "template", "--name", a.name, "--space", a.space,
             "--commit-message", f"Backfill candidate copied from {src.get('name')} version {v.get('id')}",
             "--template-name", a.template_name, "--template", tc.get("template", ""),
@@ -356,6 +362,8 @@ def cmd_copy(a):
     made = run_ax(a.ax, args + ["-o", "json"])
     _, got = evaluator_config(a, made["id"])
     diffs = copy_diffs(tc, got)
+    if model_params((got.get("llm_config") or {}).get("invocation_parameters")) != inv:
+        diffs.append(f"invocation parameters (source {inv}; the API may drop some, such as temperature; set them in the UI)")
     print(f"\nCreated `{made.get('name')}` ({made.get('id')}).")
     print("Config matches the source." if not diffs else f"Differs from the source in: {diffs}")
 

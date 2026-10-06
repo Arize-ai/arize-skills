@@ -4,7 +4,8 @@
 Two subcommands, standard library only (Python 3.9+):
 
   fetch   Read-only. Calls `ax` to save a queue, all of its records (every
-          page), and an evaluator to a directory.
+          page), and an evaluator to a directory. With --count-turns, also
+          counts each session's turns so `report` can flag stale stored outputs.
   report  Joins the saved files and prints a Markdown pre-alignment report:
           queue/evaluator fit, label coverage, annotator agreement, quality
           gates, and human-vs-evaluator agreement on the gold subset.
@@ -18,10 +19,12 @@ Examples:
 import argparse
 import json
 import os
+import re
 import subprocess
 import sys
+import time
 from collections import Counter, defaultdict
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from itertools import combinations
 
 GRANULARITY_PREFIX = {"SPAN": "eval", "TRACE": "trace_eval", "SESSION": "session_eval"}
@@ -77,6 +80,39 @@ def cmd_fetch(a):
             json.dump(obj, f, indent=1)
     print(f"Saved queue '{queue['name']}', {len(records)} records, and evaluator "
           f"'{evaluator['name']}' to {a.out_dir}")
+    if a.count_turns:
+        turns = count_turns(a, records)
+        with open(os.path.join(a.out_dir, "turns.json"), "w") as f:
+            json.dump(turns, f, indent=1)
+        print(f"Counted turns for {len(turns)} sessions (turns.json)")
+
+
+def count_turns(a, records):
+    """Root spans (turns) per session, so the report can tell when a stored result graded fewer turns than exist."""
+    if not a.project:
+        sys.exit("--count-turns needs --project")
+    first = {}
+    for r in records:
+        d = r.get("data") or {}
+        sid, t = d.get("attributes.session.id"), parse_ms(d.get("start_time"))
+        if sid and t and (sid not in first or t < first[sid]):
+            first[sid] = t
+    turns = {}
+    for sid, t in first.items():
+        args = [a.ax, "spans", "export", a.project, "--space", a.space,
+                "--filter", f"({a.count_turns}) AND attributes.session.id = '{sid}'",
+                "--start-time", (t - timedelta(hours=1)).isoformat(),
+                "--end-time", (t + timedelta(days=3)).isoformat(), "-l", "500", "--stdout"]
+        for attempt in range(6):
+            proc = subprocess.run(args, capture_output=True, text=True)
+            if "429" not in proc.stderr + proc.stdout:
+                break
+            time.sleep(2 ** attempt)
+        try:
+            turns[sid] = len(json.loads(proc.stdout)) if proc.stdout.strip() else 0
+        except json.JSONDecodeError:
+            turns[sid] = None
+    return turns
 
 
 # ---------------------------------------------------------------------------
@@ -141,6 +177,8 @@ def build(a):
     records = load(os.path.join(a.dir, "records.json"))
     evaluator = load(os.path.join(a.dir, "evaluator.json"))
     adjudications = load(a.adjudications) if a.adjudications else {}
+    turns_path = os.path.join(a.dir, "turns.json")
+    turns = load(turns_path) if os.path.exists(turns_path) else {}
 
     version = evaluator.get("version") or {}
     tc = version.get("template_config") or {}
@@ -195,6 +233,10 @@ def build(a):
         for u in r.get("assigned_users") or []:
             completion[(u.get("user") or {}).get("email")][u.get("completion_status")] += 1
         stored = next((e for e in r.get("evaluations") or [] if e.get("name") == eval_column), None)
+        # A stored result that cites a last turn lower than the session's turn count was scored mid-session.
+        cited = [int(n) for n in re.findall(r"\bturn\s+(\d+)", (stored or {}).get("explanation") or "", re.I)]
+        n_turns = turns.get(data.get("attributes.session.id"))
+        stale = bool(stored and cited and n_turns and max(cited) < n_turns)
         rows.append({
             "record_id": r.get("id"),
             "granularity": r.get("granularity"),
@@ -204,6 +246,8 @@ def build(a):
             "start_time": parse_ms(data.get("start_time")),
             "votes": votes,
             "stored": stored,
+            "turns": n_turns,
+            "stale": stale,
         })
 
     # Resolve each record to a gold label (or a reason it has none).
@@ -272,7 +316,8 @@ def build(a):
     if (rows and rows[0]["granularity"] or "").upper() != granularity:
         fit.append(f"Queue records are `{rows[0]['granularity'] if rows else '?'}` but the evaluator scores "
                    f"`{granularity}`. Each record must map to exactly one {granularity.lower()}; "
-                   f"verify the evaluator's input (e.g. `{{conversation}}`) is the full {granularity.lower()} the labeler saw.")
+                   f"verify the evaluator's input (e.g. `{{conversation}}`) is the full {granularity.lower()} the labeler saw. "
+                   "A span record is often the session's first turn, so labelers may have graded that turn only.")
     missing_in_rubric = [c for c in choices if c not in rubric]
     if missing_in_rubric:
         fit.append(f"Evaluator choices missing from the human rubric: {missing_in_rubric}. Humans cannot produce these labels.")
@@ -282,6 +327,16 @@ def build(a):
     unseen = [c for c in choices if c not in vote_labels and c not in na]
     if unseen:
         fit.append(f"Evaluator classes with zero human examples: {unseen}. The queue cannot test whether the evaluator produces them correctly.")
+    template = tc.get("template") or ""
+    if "{turn_data}" in template:
+        fit.append("The evaluator template reads `{turn_data}` (per-turn data from the task's query mappings), not the "
+                   "whole session. If humans judged the whole session, the two sides graded different inputs.")
+    decisive = [c for c in choices if c not in na]
+    undefined = [c for c in decisive if c not in (queue.get("instructions") or "")]
+    if undefined:
+        fit.append(f"Queue instructions never mention {len(undefined)} of {len(decisive)} evaluator labels ({undefined}). "
+                   "Annotators who see label names only cannot apply the evaluator's definitions, so expect "
+                   "disagreements about what a label means. Put each label's definition in the instructions.")
     if other_configs:
         fit.append("Records also carry labels from other annotation configs "
                    + ", ".join(f"`{k}` ({v})" for k, v in other_configs.most_common())
@@ -406,6 +461,12 @@ def render(r):
         w(f"- {len(r['older'])} record(s) started before the current version was created. Stored outputs carry no version ID, "
           "so these may have been scored by an older version. A fresh run of the current version is needed before any "
           "agreement number is quoted as the baseline.")
+    stale = [row for row in rows if row["stale"]]
+    if stale:
+        w(f"- {len(stale)} stored result(s) cite a last turn lower than the session's turn count, so they were scored "
+          "before the session ended. Treat their disagreements as unverified until the current version is re-run.")
+    elif not any(row["turns"] for row in rows):
+        w("- Turn counts were not fetched (`fetch --count-turns`), so stale stored results cannot be detected.")
     if r["dup_sessions"]:
         w(f"- Sessions appearing on more than one record: {r['dup_sessions']}.")
     w("")
@@ -439,7 +500,8 @@ def render(r):
         w("|---|---|---|---|---|---|")
         for row in mism:
             w(f"| `{row['record_id']}` | {row['session_id']} | `{(row['trace_id'] or '')[:12]}` | `{row['consensus']}` "
-              f"({row['bucket']}) | `{row['stored'].get('label')}` | {clip(row['stored'].get('explanation'))} |")
+              f"({row['bucket']}) | `{row['stored'].get('label')}`{' (stale)' if row['stale'] else ''} | "
+              f"{clip(row['stored'].get('explanation'))} |")
         w("")
     return "\n".join(out)
 
@@ -452,11 +514,21 @@ def cmd_report(a):
             "verdict": r["verdict"], "eval_column": r["eval_column"], "config": r["config_name"],
             "gates": [{"gate": g, "pass": ok, "value": val} for g, ok, val in r["gates"]],
             "fit": r["fit"],
+            "summary": {
+                "records": len(r["rows"]), "gold": len(r["gold"]), "gold_scored": len(r["gold_scored"]),
+                "agree": r["agree"], "buckets": dict(Counter(row["bucket"] for row in r["rows"])),
+                "gold_classes": dict(Counter(row["consensus"] for row in r["gold"])),
+                "stale": sum(1 for row in r["rows"] if row["stale"]),
+                "annotators_with_votes": sorted({w for row in r["rows"] for w in row["votes"]}),
+                "disagreements": sum(1 for row in r["rows"] if row["stored"] and row["consensus"]
+                                     and row["stored"].get("label") != row["consensus"]),
+            },
             "records": [{
                 "record_id": row["record_id"], "session_id": row["session_id"], "trace_id": row["trace_id"],
                 "votes": row["votes"], "consensus": row["consensus"], "status": row["status"],
                 "bucket": row["bucket"], "eval_label": (row["stored"] or {}).get("label"),
                 "eval_explanation": (row["stored"] or {}).get("explanation"),
+                "turns": row["turns"], "stale": row["stale"],
             } for row in r["rows"]],
         }
         with open(a.json_out, "w") as f:
@@ -473,6 +545,9 @@ def main():
     f.add_argument("--evaluator", required=True, help="Evaluator name or ID")
     f.add_argument("--out-dir", required=True)
     f.add_argument("--ax", default="ax", help="Path to the ax binary")
+    f.add_argument("--count-turns", metavar="ROOT_FILTER",
+                   help="Also count each session's turns (root spans matching this filter) to detect stale stored outputs")
+    f.add_argument("--project", help="Project name or ID; required with --count-turns")
     f.set_defaults(func=cmd_fetch)
 
     r = sub.add_parser("report", help="Print the pre-alignment report (Markdown)")
