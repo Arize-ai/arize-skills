@@ -13,14 +13,14 @@ The report's discrepancy table lists records where the human label and the store
 
 Export the whole session, not just the record's span: `ax spans export PROJECT --space SPACE --filter "attributes.session.id = 'SID'" --start-time … --end-time … -l 500 --stdout`. Use a window from shortly before the record's `start_time` to a few days after. Run exports one at a time, because parallel exports hit rate limits.
 
-For each record, decide **human right**, **evaluator right** or **ambiguous**, and quote the decisive evidence in a sentence or two: the turn, the tool call or the block. If the evaluator is wrong, name the template rule it misapplied, quoting its wording. If the evaluator's explanation cites fewer turns than the session has, say the result is stale.
+For each record, decide **human right**, **evaluator right** or **ambiguous**, and quote the decisive evidence in a sentence or two: the turn, the tool call or the block. If the evaluator is wrong, name the template rule it misapplied, quoting its wording. If the explanation reports the last turn it saw (for example `LAST_TURN_CHECK: Turn 4`) and the session has more, say the result is stale. A "Turn N" elsewhere in the explanation is usually only the decisive turn.
 
 With many queues (dozens of discrepancies), group the records by evaluator and give each group to a read-only subagent. Pass it the template, the queue instructions, the record and session IDs, and the stored explanations. Ask for a table of record, session, human label, evaluator label, verdict and evidence, plus any pattern seen in 2 or more records. Tell it not to change anything in Arize.
 
 ## Patterns that point at the labels, not the evaluator
 
 - **Labels without definitions.** If the queue instructions only say "apply the labels", the labeler never saw the evaluator's definitions. Expect labels that contradict the template, for example `no_answer` for a session where a tool ran successfully. The report's fit section flags instructions that never mention the labels.
-- **Span records for a session evaluator.** A queue record is usually one span, often the session's first turn. A labeler who grades what the record shows can miss the rest of the session. If the human label matches turn 1 and the evaluator's matches the final state, this is the cause.
+- **Span records for a session evaluator** ([background](queue-records.md#unit-mismatch-span-records-session-evaluators)). If the human label matches the record's turn and the evaluator's matches the session's final state, the labeler graded the span.
 - **A single annotator.** Nothing catches slips, such as a queue labeled `no_queue_produced` when the session shows it was created.
 
 ## Adjudicating

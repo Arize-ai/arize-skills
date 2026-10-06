@@ -56,8 +56,6 @@ For each disputed record:
 3. Write the result to an adjudications file `{ "RECORD_ID": "label", ... }` and pass it with `--adjudications`. Do not overwrite the original votes in the queue. The report keeps them.
 4. If many disputes involve the same pair of labels, the rubric is ambiguous. Fix the label definitions and relabel before aligning.
 
-The same policy applies when the session shows a human label is wrong in a human-vs-evaluator disagreement. See [disagreement-review.md](disagreement-review.md#adjudicating) for the worksheet and the bias to note.
-
 ## Target thresholds
 
 Apply these only to a USABLE gold set re-run on the current version.

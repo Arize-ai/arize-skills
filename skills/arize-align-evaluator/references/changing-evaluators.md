@@ -6,7 +6,7 @@ Phase 6 creates candidate copies and, after approval, new versions of production
 
 Start from the current version's full `template_config` and change only what was approved. Pass every field explicitly: template name, template, classification choices, direction, granularity, include explanations, function calling, structured output, model and integration, and the model parameters. Then read the new version back with `ax evaluators get` and compare every field with the old one. Report any difference to the user.
 
-Model parameters such as `temperature` can sit at the top level of `invocation_parameters`, outside `additional_properties`. Copying only `additional_properties` drops them.
+Model parameters such as `temperature` sit at the top level of `invocation_parameters`, outside `additional_properties`, so copy both. Even then the API may drop some (below); the read-back shows which.
 
 ## What the CLI and API cannot set
 

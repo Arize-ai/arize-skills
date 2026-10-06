@@ -46,10 +46,20 @@ MIN_KAPPA = 0.60
 # fetch
 # ---------------------------------------------------------------------------
 
-def run_ax(ax, args):
-    proc = subprocess.run([ax] + args + ["-o", "json"], capture_output=True, text=True)
-    if proc.returncode != 0:
+def run_ax(ax, args, json_flag=True, retries=5):
+    for attempt in range(retries + 1):
+        proc = subprocess.run([ax] + args + (["-o", "json"] if json_flag else []), capture_output=True, text=True)
+        if proc.returncode == 0:
+            break
+        msg = proc.stderr + proc.stdout
+        if ("429" in msg or "Too Many Requests" in msg) and attempt < retries:
+            time.sleep(2 ** attempt)
+            continue
+        if "No spans found" in msg:
+            return []
         sys.exit(f"ax {' '.join(args)} failed:\n{proc.stderr.strip() or proc.stdout.strip()}")
+    if not json_flag and not proc.stdout.strip():
+        return []  # spans export prints nothing when no spans match
     try:
         return json.loads(proc.stdout)
     except json.JSONDecodeError:
@@ -80,15 +90,34 @@ def cmd_fetch(a):
             json.dump(obj, f, indent=1)
     print(f"Saved queue '{queue['name']}', {len(records)} records, and evaluator "
           f"'{evaluator['name']}' to {a.out_dir}")
+    turns_path = os.path.join(a.out_dir, "turns.json")
+    if os.path.exists(turns_path):
+        os.remove(turns_path)  # counts belong to the records just fetched
     if a.count_turns:
+        if LAST_TURN_MARKER not in ((evaluator.get("version") or {}).get("template_config") or {}).get("template", ""):
+            print(f"Skipping --count-turns: the template has no {LAST_TURN_MARKER} marker, so stored results "
+                  "don't say how many turns the judge saw.")
+            return
         turns = count_turns(a, records)
-        with open(os.path.join(a.out_dir, "turns.json"), "w") as f:
+        with open(turns_path, "w") as f:
             json.dump(turns, f, indent=1)
         print(f"Counted turns for {len(turns)} sessions (turns.json)")
 
 
+# Templates that ask the judge to name the highest turn it saw, e.g. "LAST_TURN_CHECK: Turn 7". Without the
+# marker, a "Turn N" in an explanation is only the decisive turn, so staleness can't be read from it.
+LAST_TURN_MARKER = "LAST_TURN_CHECK"
+SESSIONS_PER_EXPORT = 50
+
+
+def last_turn_seen(explanation):
+    """The highest turn the judge says it saw, or None when the explanation doesn't say."""
+    m = re.search(LAST_TURN_MARKER + r"\D{0,40}?(\d+)", explanation or "", re.I)
+    return int(m.group(1)) if m else None
+
+
 def count_turns(a, records):
-    """Root spans (turns) per session, so the report can tell when a stored result graded fewer turns than exist."""
+    """Root spans (turns) per session, for records whose stored result can be checked for staleness."""
     if not a.project:
         sys.exit("--count-turns needs --project")
     first = {}
@@ -97,21 +126,27 @@ def count_turns(a, records):
         sid, t = d.get("attributes.session.id"), parse_ms(d.get("start_time"))
         if sid and t and (sid not in first or t < first[sid]):
             first[sid] = t
-    turns = {}
-    for sid, t in first.items():
-        args = [a.ax, "spans", "export", a.project, "--space", a.space,
-                "--filter", f"({a.count_turns}) AND attributes.session.id = '{sid}'",
-                "--start-time", (t - timedelta(hours=1)).isoformat(),
-                "--end-time", (t + timedelta(days=3)).isoformat(), "-l", "500", "--stdout"]
-        for attempt in range(6):
-            proc = subprocess.run(args, capture_output=True, text=True)
-            if "429" not in proc.stderr + proc.stdout:
-                break
-            time.sleep(2 ** attempt)
-        try:
-            turns[sid] = len(json.loads(proc.stdout)) if proc.stdout.strip() else 0
-        except json.JSONDecodeError:
-            turns[sid] = None
+    turns, todo = {}, sorted(first, key=first.get)
+
+    def export(batch):
+        ids = ", ".join("'" + str(x).replace("'", "''") + "'" for x in batch)
+        spans = run_ax(a.ax, ["spans", "export", a.project, "--space", a.space,
+                              "--filter", f"({a.count_turns}) AND attributes.session.id IN ({ids})",
+                              "--start-time", (first[batch[0]] - timedelta(hours=1)).isoformat(),
+                              "--end-time", (first[batch[-1]] + timedelta(days=3)).isoformat(),
+                              "-l", "500", "--stdout"], json_flag=False)
+        if len(spans) >= 500 and len(batch) > 1:
+            # Page cap hit; split so no session's count is truncated.
+            export(batch[:len(batch) // 2])
+            export(batch[len(batch) // 2:])
+            return
+        if len(spans) >= 500:
+            print(f"Warning: session {batch[0]} has 500+ turns matching the root filter; its count is a lower bound.")
+        counts = Counter((sp.get("attributes") or {}).get("session.id") for sp in spans)
+        turns.update({sid: counts.get(sid, 0) for sid in batch})
+
+    for i in range(0, len(todo), SESSIONS_PER_EXPORT):
+        export(todo[i:i + SESSIONS_PER_EXPORT])
     return turns
 
 
@@ -233,10 +268,10 @@ def build(a):
         for u in r.get("assigned_users") or []:
             completion[(u.get("user") or {}).get("email")][u.get("completion_status")] += 1
         stored = next((e for e in r.get("evaluations") or [] if e.get("name") == eval_column), None)
-        # A stored result that cites a last turn lower than the session's turn count was scored mid-session.
-        cited = [int(n) for n in re.findall(r"\bturn\s+(\d+)", (stored or {}).get("explanation") or "", re.I)]
+        # A stored result whose last turn seen is lower than the session's turn count was likely scored mid-session.
         n_turns = turns.get(data.get("attributes.session.id"))
-        stale = bool(stored and cited and n_turns and max(cited) < n_turns)
+        seen = last_turn_seen((stored or {}).get("explanation"))
+        stale = bool(n_turns and seen and seen < n_turns)
         rows.append({
             "record_id": r.get("id"),
             "granularity": r.get("granularity"),
@@ -246,7 +281,6 @@ def build(a):
             "start_time": parse_ms(data.get("start_time")),
             "votes": votes,
             "stored": stored,
-            "turns": n_turns,
             "stale": stale,
         })
 
@@ -316,8 +350,7 @@ def build(a):
     if (rows and rows[0]["granularity"] or "").upper() != granularity:
         fit.append(f"Queue records are `{rows[0]['granularity'] if rows else '?'}` but the evaluator scores "
                    f"`{granularity}`. Each record must map to exactly one {granularity.lower()}; "
-                   f"verify the evaluator's input (e.g. `{{conversation}}`) is the full {granularity.lower()} the labeler saw. "
-                   "A span record is often the session's first turn, so labelers may have graded that turn only.")
+                   f"verify the evaluator's input (e.g. `{{conversation}}`) is the full {granularity.lower()} the labeler saw.")
     missing_in_rubric = [c for c in choices if c not in rubric]
     if missing_in_rubric:
         fit.append(f"Evaluator choices missing from the human rubric: {missing_in_rubric}. Humans cannot produce these labels.")
@@ -332,11 +365,14 @@ def build(a):
         fit.append("The evaluator template reads `{turn_data}` (per-turn data from the task's query mappings), not the "
                    "whole session. If humans judged the whole session, the two sides graded different inputs.")
     decisive = [c for c in choices if c not in na]
-    undefined = [c for c in decisive if c not in (queue.get("instructions") or "")]
+    instructions = queue.get("instructions") or ""
+    undefined = [c for c in decisive
+                 if not re.search(r"(?<![\w-])" + r"[_ ]".join(map(re.escape, re.split(r"[_ ]", c))) + r"(?![\w-])",
+                                  instructions, re.I)]
     if undefined:
-        fit.append(f"Queue instructions never mention {len(undefined)} of {len(decisive)} evaluator labels ({undefined}). "
-                   "Annotators who see label names only cannot apply the evaluator's definitions, so expect "
-                   "disagreements about what a label means. Put each label's definition in the instructions.")
+        fit.append(f"Queue instructions never mention {len(undefined)} of {len(decisive)} evaluator labels ({undefined}), "
+                   "and annotation configs carry no label definitions. If labelers saw label names only, expect "
+                   "disagreements about what a label means (Phase 4 step 2 compares the definitions).")
     if other_configs:
         fit.append("Records also carry labels from other annotation configs "
                    + ", ".join(f"`{k}` ({v})" for k, v in other_configs.most_common())
@@ -371,6 +407,8 @@ def build(a):
          or "single annotator; not measured"),
         ("No unresolved disputes", not disputed, f"{len(disputed)} disputed"),
     ]
+    mismatches = [row for row in rows if row["stored"] and row["consensus"] and row["stored"].get("label") != row["consensus"]]
+    stale = [row for row in rows if row["stale"]]
     if all(ok for _, ok, _ in gates):
         verdict = "USABLE"
     elif len(gold) >= MIN_GOLD_EXPLORATORY and len(gold_classes) >= 2:
@@ -386,6 +424,8 @@ def build(a):
         "with_stored": with_stored, "older": older, "gold": gold, "gold_scored": gold_scored,
         "confusion": confusion, "per_label": per_label, "agree": agree, "na_rows": na_rows,
         "applicability": applicability, "fit": fit, "gates": gates, "verdict": verdict,
+        "gold_classes": gold_classes, "annotators": annotators, "mismatches": mismatches, "stale": stale,
+        "turns_fetched": bool(turns), "marker": LAST_TURN_MARKER in template,
     }
 
 
@@ -461,12 +501,12 @@ def render(r):
         w(f"- {len(r['older'])} record(s) started before the current version was created. Stored outputs carry no version ID, "
           "so these may have been scored by an older version. A fresh run of the current version is needed before any "
           "agreement number is quoted as the baseline.")
-    stale = [row for row in rows if row["stale"]]
-    if stale:
-        w(f"- {len(stale)} stored result(s) cite a last turn lower than the session's turn count, so they were scored "
-          "before the session ended. Treat their disagreements as unverified until the current version is re-run.")
-    elif not any(row["turns"] for row in rows):
-        w("- Turn counts were not fetched (`fetch --count-turns`), so stale stored results cannot be detected.")
+    if r["stale"]:
+        w(f"- {len(r['stale'])} stored result(s) say the judge saw fewer turns than the session has "
+          f"(`{LAST_TURN_MARKER}`), so they were likely scored before the session ended. A hint, not proof: "
+          "re-run the current version before relying on their disagreements.")
+    elif r["marker"] and not r["turns_fetched"]:
+        w(f"- The template reports `{LAST_TURN_MARKER}`; run `fetch --count-turns` to check for results scored mid-session.")
     if r["dup_sessions"]:
         w(f"- Sessions appearing on more than one record: {r['dup_sessions']}.")
     w("")
@@ -493,7 +533,7 @@ def render(r):
             fmt = lambda x: "—" if x is None else f"{x:.2f}"
             w(f"- `{lbl}`: precision {fmt(m['precision'])}, recall {fmt(m['recall'])}, support {m['support']}")
         w("")
-    mism = [row for row in rows if row["stored"] and row["consensus"] and row["stored"].get("label") != row["consensus"]]
+    mism = r["mismatches"]
     if mism:
         w("### Record-level discrepancies\n")
         w("| Record | Session | Trace | Human | Evaluator | Evaluator explanation |")
@@ -515,20 +555,16 @@ def cmd_report(a):
             "gates": [{"gate": g, "pass": ok, "value": val} for g, ok, val in r["gates"]],
             "fit": r["fit"],
             "summary": {
-                "records": len(r["rows"]), "gold": len(r["gold"]), "gold_scored": len(r["gold_scored"]),
-                "agree": r["agree"], "buckets": dict(Counter(row["bucket"] for row in r["rows"])),
-                "gold_classes": dict(Counter(row["consensus"] for row in r["gold"])),
-                "stale": sum(1 for row in r["rows"] if row["stale"]),
-                "annotators_with_votes": sorted({w for row in r["rows"] for w in row["votes"]}),
-                "disagreements": sum(1 for row in r["rows"] if row["stored"] and row["consensus"]
-                                     and row["stored"].get("label") != row["consensus"]),
+                "gold": len(r["gold"]), "gold_scored": len(r["gold_scored"]), "agree": r["agree"],
+                "gold_classes": dict(r["gold_classes"]), "annotators": r["annotators"],
+                "disagreements": len(r["mismatches"]), "stale": len(r["stale"]),
             },
             "records": [{
                 "record_id": row["record_id"], "session_id": row["session_id"], "trace_id": row["trace_id"],
                 "votes": row["votes"], "consensus": row["consensus"], "status": row["status"],
                 "bucket": row["bucket"], "eval_label": (row["stored"] or {}).get("label"),
                 "eval_explanation": (row["stored"] or {}).get("explanation"),
-                "turns": row["turns"], "stale": row["stale"],
+                "stale": row["stale"],
             } for row in r["rows"]],
         }
         with open(a.json_out, "w") as f:
@@ -546,7 +582,8 @@ def main():
     f.add_argument("--out-dir", required=True)
     f.add_argument("--ax", default="ax", help="Path to the ax binary")
     f.add_argument("--count-turns", metavar="ROOT_FILTER",
-                   help="Also count each session's turns (root spans matching this filter) to detect stale stored outputs")
+                   help="Also count each session's turns (root spans matching this filter) so the report can flag stored "
+                        f"results scored mid-session. Only for templates that report {LAST_TURN_MARKER}.")
     f.add_argument("--project", help="Project name or ID; required with --count-turns")
     f.set_defaults(func=cmd_fetch)
 

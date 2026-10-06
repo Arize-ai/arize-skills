@@ -166,7 +166,7 @@ def task_filters(task):
 
 def eval_expression(expr, sets):
     """Evaluate an expression like 'A AND (B OR NOT C)' over sets of unit IDs."""
-    tokens = re.findall(r"\(|\)|AND|OR|NOT|[A-Za-z0-9_]+", expr)
+    tokens = [t.upper() if t.upper() in ("AND", "OR", "NOT") else t for t in re.findall(r"\(|\)|[A-Za-z0-9_]+", expr)]
     universe = set().union(*sets.values()) if sets else set()
     pos = 0
 
@@ -246,12 +246,25 @@ def admitted_units(a, clauses, expr, gran, quiet=False):
     if complete:
         t0, t1 = parse_time(a.start_time), parse_time(a.end_time)
         for cid in sorted(truncated):
-            ids, found = sorted(complete - sets[cid]), set()
-            for i in range(0, len(ids), ID_BATCH):
-                batch = ", ".join(quote(x) for x in ids[i:i + ID_BATCH])
-                page, _ = export_page(a, f"({clauses[cid]}) AND {id_attr} IN ({batch})", t0, t1, PAGE)
+            ids, found, capped = sorted(complete - sets[cid]), set(), False
+
+            def check(batch):
+                nonlocal found, capped
+                page, _ = export_page(a, f"({clauses[cid]}) AND {id_attr} IN ({', '.join(quote(x) for x in batch)})",
+                                      t0, t1, PAGE)
+                if len(page) >= PAGE and len(batch) > 1:
+                    # Page cap hit; split so no unit is missed.
+                    check(batch[:len(batch) // 2])
+                    check(batch[len(batch) // 2:])
+                    return
+                capped |= len(page) >= PAGE
                 found |= units(page, gran)
+
+            for i in range(0, len(ids), ID_BATCH):
+                check(ids[i:i + ID_BATCH])
             sets[cid] |= found
+            if capped:
+                continue  # a single unit still hit the cap; leave the clause marked truncated
             truncated.discard(cid)
             say(f"  - Clause {cid} re-checked against {len(ids)} more {gran.lower()}(s): {len(found)} match")
     # The re-check is exact only when clauses are ANDed; OR/NOT can admit units outside the complete clauses.
@@ -278,7 +291,16 @@ def model_of(tc):
 def copy_diffs(src_tc, tc):
     """Fields where tc is not a copy of src_tc."""
     diffs = [k for k in COPY_FIELDS if src_tc.get(k) != tc.get(k)]
-    return diffs + (["model_name"] if model_of(src_tc) != model_of(tc) else [])
+    if model_of(src_tc) != model_of(tc):
+        diffs.append("model_name")
+    return diffs
+
+
+def param_note(src_tc, tc):
+    """Model parameters that differ. Reported, not refused: the API drops some (e.g. temperature) on copy."""
+    params = [model_params((t.get("llm_config") or {}).get("invocation_parameters")) for t in (src_tc, tc)]
+    return None if params[0] == params[1] else (f"Model parameters differ ({params[0]} → {params[1]}); the API "
+                                                 "drops some, such as temperature. Set them in the UI if they matter.")
 
 
 def granularity(tc):
@@ -361,18 +383,18 @@ def cmd_copy(a):
         return
     made = run_ax(a.ax, args + ["-o", "json"])
     _, got = evaluator_config(a, made["id"])
-    diffs = copy_diffs(tc, got)
-    if model_params((got.get("llm_config") or {}).get("invocation_parameters")) != inv:
-        diffs.append(f"invocation parameters (source {inv}; the API may drop some, such as temperature; set them in the UI)")
+    diffs, note = copy_diffs(tc, got), param_note(tc, got)
     print(f"\nCreated `{made.get('name')}` ({made.get('id')}).")
     print("Config matches the source." if not diffs else f"Differs from the source in: {diffs}")
+    if note:
+        print(note)
 
 
 def labels_by_unit(a, column, labels, gran, require=True):
     """Every unit with a stored label for `column` (a template name) in the window, exported in full."""
     filt = f"{GRANULARITY_PREFIX.get(gran, 'eval')}.{column}.label IN ({', '.join(quote(l) for l in labels)})"
     if a.root_filter:
-        filt = f"{a.root_filter} AND {filt}"
+        filt = f"({a.root_filter}) AND {filt}"
     spans, trunc = export_all(a, filt, a.start_time, a.end_time, require=require)
     out = {}
     for s in spans:
@@ -403,6 +425,8 @@ def cmd_calibrate(a):
     ok = union and p_only / len(union) <= a.tolerance and c_only / len(union) <= a.tolerance
     print(f"# Calibration on {a.start_time} → {a.end_time}\n")
     print(f"- Candidate `{cand_ev.get('name')}` is a copy of `{prod_ev.get('name')}` (same {', '.join(COPY_FIELDS)}, model)")
+    if param_note(prod_tc, cand_tc):
+        print(f"- {param_note(prod_tc, cand_tc)} Label disagreements may partly reflect that.")
     if prod_tc.get("use_structured_output") != cand_tc.get("use_structured_output"):
         print("- Structured output differs (the CLI cannot set it); label disagreements may partly reflect that.")
     print(f"- Scored by production `{prod_name}`: {len(prod)}; by candidate `{cand_name}`: {len(cand)}"

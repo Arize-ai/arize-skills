@@ -78,7 +78,6 @@ If the user is unsure, list the queues: `ax annotation-queues list --space SPACE
    - `version.template_config.data_granularity`, `classification_choices` and `template` (note its `{variables}`).
    - `version.id`, `version.created_at` and `version.commit_message`.
 3. **Read the queue:** `ax annotation-queues get QUEUE --space SPACE -o json`. Record its `annotation_configs` (the rubric labels), its `annotators` and its `instructions`. If the queue has more than one config, ask which one is the ground truth for this evaluator.
-4. **Check size and balance before reading anything.** Count the records and look at the label mix (`ax annotation-queues list-records QUEUE --limit 100`). A queue of about 10 records, or one where a single label dominates, cannot clear the gates no matter how carefully it is reviewed: the "≥2 classes with ≥3 gold each" gate fails after exclusions. Say so up front and offer **arize-align-queue-builder**; review the existing queue only for failure patterns.
 
 ## Phase 2: Fetch the records
 
@@ -87,7 +86,7 @@ python3 SKILL_ROOT/scripts/align_report.py fetch \
   --space SPACE --queue QUEUE --evaluator EVALUATOR --out-dir WORK_DIR
 ```
 
-Use `--ax PATH` if the right `ax` is not first on `PATH`. For session evaluators, add `--count-turns "ROOT_SPAN_FILTER" --project PROJECT`: the script counts each session's turns, and the report then flags stored results that cite a last turn lower than the session has (scored before the session ended). It costs one export per session. To fetch by hand instead, page through `ax annotation-queues list-records QUEUE --space SPACE --limit 100 -o json` using `--cursor` until `pagination.has_more` is false.
+Use `--ax PATH` if the right `ax` is not first on `PATH`. If the template asks the judge to report `LAST_TURN_CHECK: Turn N`, add `--count-turns "ROOT_SPAN_FILTER" --project PROJECT`. The script counts each session's turns, and the report flags stored results that saw fewer turns than the session has, which suggests they were scored mid-session. To fetch by hand instead, page through `ax annotation-queues list-records QUEUE --space SPACE --limit 100 -o json` using `--cursor` until `pagination.has_more` is false.
 
 Before trusting the join, read [references/queue-records.md](references/queue-records.md). Queue records have three traps that the script handles, and that you must handle yourself if you join by hand:
 - Votes can be at span, trace or session level (`annotations`, `trace_annotations`, `session_annotations`). They are keyed by **annotation config name**, and a record can carry labels from other queues' configs.
@@ -117,6 +116,8 @@ It then applies the quality gates and gives one verdict:
 | **EXPLORATORY** | At least 5 gold records in 2 or more classes, but some gate fails | Patterns worth investigating. No accuracy figure is evidence of alignment. |
 | **NOT USABLE** | Too few gold records, or only one class | Do not propose evaluator changes from this queue. Fix the queue first. |
 
+If the gold-count or class gates fail, say so before reading any sessions: no amount of review or adjudication adds records or classes. Offer **arize-align-queue-builder**, and review the existing queue only for failure patterns.
+
 The gates cover gold count, classes, exclusions, join coverage, stored-output coverage, annotator agreement and open disputes. Their thresholds, why each exists, how κ is computed and how to adjudicate are in [references/gates-and-agreement.md](references/gates-and-agreement.md).
 
 ## Phase 4: Check fit, then present the report and STOP
@@ -126,8 +127,8 @@ The script checks the structure: label sets, granularity, other configs and cove
 1. **Is the unit the same?** Queue records are usually `SPAN` records, while many evaluators score the whole `SESSION`. Confirm that each record's `attributes.session.id` identifies the session the labeler judged, and that the evaluator's input variable (for example `{conversation}`) covers that whole session. A label on one span in a multi-turn session can disagree with a correct session-level verdict.
 2. **Does the rubric mean the same thing?** Read the evaluator template next to the queue instructions and label definitions. Watch for one label meaning different things on each side. A common case is `no_output_produced` vs `wrong`, where one side treats "the agent didn't produce an artifact" as a failure and the other treats it as a separate class.
 3. **Read the not-applicable records.** If humans marked records `not_applicable` and the evaluator gave a substantive label, the disagreement is about applicability, not grading quality. Check the evaluator's `not_applicable` instruction and the task's admission filter before touching the grading criteria.
-4. **Read every discrepancy.** For each row in the report's discrepancy table, open the session (use **arize-trace** to export it, and **arize-link** for a UI link). Decide whether the human or the evaluator is right, or whether the record is ambiguous. Quote the specific evidence. With many queues, group the discrepancies by evaluator and hand each group to a read-only subagent with the template, the queue instructions and the session IDs; ask for record, verdict (human, judge or ambiguous) and quoted evidence. See [references/disagreement-review.md](references/disagreement-review.md).
-5. **When the evidence favors the evaluator, adjudicate; don't edit the template.** A human label contradicted by the session is a labeling problem. Common causes: the labeler saw label names without definitions, graded only the record's span (often turn 1), or slipped. Prepare an adjudication worksheet (record, both labels, evidence, suggested resolution, a blank decision column) for the named adjudicator, and a proposed adjudications file covering only the evaluator-favored records. Never write the adjudicated labels yourself, and keep the original votes. See [references/disagreement-review.md](references/disagreement-review.md).
+4. **Read every discrepancy.** For each row in the report's discrepancy table, open the session (use **arize-trace** to export it, and **arize-link** for a UI link). Decide whether the human or the evaluator is right, or whether the record is ambiguous. Quote the specific evidence. For many discrepancies, see [references/disagreement-review.md](references/disagreement-review.md).
+5. **When the session supports the evaluator, adjudicate the human label; don't edit the template.** Follow [references/disagreement-review.md](references/disagreement-review.md#adjudicating).
 
 Then **present the report to the user and stop.** Use the structure in [references/report-template.md](references/report-template.md). It must include:
 - the verdict and every failed gate, in plain language
@@ -142,9 +143,8 @@ End by asking the user to approve, edit or reject the proposal. **Do not continu
 
 **Do not propose a template change when:**
 - the verdict is NOT USABLE
-- the discrepancy is explained by applicability, the admission filter, a unit mismatch or a stale version
-- the session shows the evaluator was right; adjudicate the human label instead (step 5)
-- the stored result is stale (the report marks it); re-run the current version first
+- the discrepancy is explained by applicability, the admission filter, a unit mismatch, a stale version, or a result scored mid-session
+- the session shows the evaluator was right (step 5)
 - the only evidence is a class the queue has no examples of
 - the change would turn `cannot_judge` into an evaluator class
 
@@ -163,7 +163,7 @@ Approval must name the change: "approve the proposed edit to the not_applicable 
 5. **Report before and after on the same gold set.** Give per-class precision and recall, list the records that flipped in each direction, and say whether the gain is larger than the noise for this sample size.
 6. **Promoting to production is a separate decision.** Present the candidate's results and the exact diff. Create a new version of the production evaluator only after the user explicitly approves promotion.
 
-If the user asks to change production directly and skip the candidate, that is their call, but name the cost first: there is no before-and-after measurement, and the production column will mix scores from the old and new versions. Before writing any version, read [references/changing-evaluators.md](references/changing-evaluators.md). The API silently drops some settings, `{turn_data}` templates cannot be versioned through it, and provider copies (for example `*_anthropic`) with the same template must change together or the comparison breaks.
+Before writing any version, and before agreeing to skip the candidate, read [references/changing-evaluators.md](references/changing-evaluators.md): the API drops or can't set some settings, and provider copies must change together.
 
 **When to stop iterating:** stop when the target threshold is met on a gold set that passes the gates, when agreement plateaus between iterations, when the remaining disagreements are ones reasonable annotators also dispute, or after 3–4 iterations. Further gains are rarely available from template edits alone. For targets by evaluator type, see [references/gates-and-agreement.md](references/gates-and-agreement.md#target-thresholds).
 
@@ -180,7 +180,6 @@ If the user asks to change production directly and skip the candidate, that is t
 | A human label isn't in the evaluator's choices | It is bucketed `off_rubric` or `unscorable`. Discuss the rubric mismatch in the report; never coerce the label. |
 | Agreement is 0% | Label spellings differ, such as `correct` vs `Correct`, or the wrong column was joined. Check the fit section. |
 | Agreement looks high but the queue has one class | Accuracy is meaningless with one class. The gates mark this NOT USABLE or EXPLORATORY. |
-| Many discrepancies, and the session supports the evaluator | Labeling problem, not a judge problem: check the fit section for undefined labels and span-vs-session records, then adjudicate (Phase 4 step 5). |
 | `Turn data mode requires a Turn Definition` when creating a version | The template uses `{turn_data}`. See [references/changing-evaluators.md](references/changing-evaluators.md#turn-data-templates). |
 
 ---

@@ -186,7 +186,7 @@ def main():
     empty_slices = set()
 
     def with_root(filt):
-        return f"{a.root_filter} AND {filt}" if a.root_filter else filt
+        return f"({a.root_filter}) AND {filt}" if a.root_filter else filt
 
     def export_slices(filt):
         """Draw evenly across the window; a single export returns only the newest spans. A slice where an eval
