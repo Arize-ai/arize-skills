@@ -1,9 +1,9 @@
 ---
 name: arize-migrate-langfuse
-description: Migrates LLM observability from Langfuse into Arize AX — historical trace import via OTLP (LF output→output.value, sessionId→session.id), dataset export/import, prompt recreation, and live cutover. Use when migrating from Langfuse to Arize or importing Langfuse observations into AX.
+description: Migrates LLM observability from Langfuse into Arize AX — historical trace import via OTLP (LF output→output.value, sessionId→session.id), datasets, and prompts (latest or versions + labels). Use when migrating from Langfuse to Arize or importing Langfuse observations into AX.
 metadata:
   author: arize
-  version: "1.2"
+  version: "1.3"
 compatibility: Requires ax CLI, Arize OTLP credentials (ARIZE_API_KEY + ARIZE_SPACE_ID), and LANGFUSE_PUBLIC_KEY / LANGFUSE_SECRET_KEY / LANGFUSE_BASE_URL.
 ---
 
@@ -44,8 +44,9 @@ Proceed with the task. If something fails, troubleshoot from the error:
 |------|-------|------|
 | Historical observations / traces | **Yes** | `scripts/migrate_vendor_traces.py --vendor langfuse` |
 | Datasets | Yes | Public API → `ax datasets create` |
-| Live traffic going forward | Yes | Cut over after import verified |
-| Prompts / evaluators / experiments | Recreate / re-run | Do not import old scores as AX experiment truth |
+| Prompts | **Yes** | `GET /api/public/v2/prompts` → `ax prompts create` / `create_version` + labels |
+| Live traffic going forward | Separate | Point new traffic at AX after import (not part of this skill) |
+| Evaluators / experiments | Recreate / re-run for now | Do not import old scores as AX experiment truth |
 
 ## Attribute mapping (traces)
 
@@ -110,17 +111,24 @@ Confirm string `output.value`, `parent_id` links, and `session.id` when Langfuse
 
 See references/langfuse-export.md → flatten → `ax datasets create`.
 
-### Step 4 — Prompts / evaluators
+### Step 4 — Prompts (recommended when the user manages prompts in Langfuse)
 
-Recreate / re-run in AX.
+Ask **production/latest only** vs **all versions**. Then:
 
-### Step 5 — Live cutover (optional)
+1. `GET /api/public/v2/prompts` to list names, versions, and labels
+1. `GET /api/public/v2/prompts/{name}?version=N` (or `label=`) for each version to import
+1. Map Langfuse `text` prompts → a single AX message; map `chat` prompts → role/content arrays (`SYSTEM` / `USER` / `ASSISTANT`)
+1. Infer `F_STRING` vs `MUSTACHE`; ask if mixed
+1. Create the prompt, then `create_version` in version order; apply Langfuse labels (`production`, `staging`, …) with `set_labels`
+1. Copy model/config from Langfuse prompt config when present; otherwise ask
 
-Only after import looks right. Live cutover does not replace Step 2.
+### Step 5 — Evaluators / experiments
+
+Recreate or re-run in AX for now.
 
 ### Step 6 — Verify
 
-Summarize spans imported, sample `output.value`, session coverage, and gaps.
+Summarize spans imported, sample `output.value`, session coverage, prompts/versions/labels, and gaps.
 
 ## Working directory
 

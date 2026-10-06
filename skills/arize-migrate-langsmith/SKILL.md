@@ -1,9 +1,9 @@
 ---
 name: arize-migrate-langsmith
-description: Migrates LLM observability from LangSmith into Arize AX — historical trace import via OTLP (LS outputs→output.value, session/thread→session.id), dataset export/import, prompt recreation, and live cutover. Use when migrating from LangSmith to Arize, importing LangSmith runs into AX, or replacing LangSmith with Arize.
+description: Migrates LLM observability from LangSmith into Arize AX — historical trace import via OTLP (LS outputs→output.value, session/thread→session.id), datasets, and Prompt Hub prompts (latest or versions). Use when migrating from LangSmith to Arize, importing LangSmith runs into AX, or replacing LangSmith with Arize.
 metadata:
   author: arize
-  version: "1.2"
+  version: "1.3"
 compatibility: Requires ax CLI, Arize OTLP credentials (ARIZE_API_KEY + ARIZE_SPACE_ID), and LANGSMITH_API_KEY. Optional langsmith Python package for export.
 ---
 
@@ -43,9 +43,9 @@ Proceed with the task. If something fails, troubleshoot from the error:
 |------|-------|------|
 | Historical runs / traces | **Yes** | `scripts/migrate_vendor_traces.py --vendor langsmith` → Arize OTLP |
 | Datasets | Yes | LangSmith export → `ax datasets create` |
-| Live traffic going forward | Yes | Cut over instrumentation after import verified |
-| Prompts | Recreate | Export Prompt Hub → AX prompt hub |
-| Evaluators / experiments | Recreate / re-run | Do not import old scores as AX experiment truth |
+| Prompts | **Yes** | LangSmith Prompt Hub API → `ax prompts create` / `create_version` + labels |
+| Live traffic going forward | Separate | Point new traffic at AX after import (not part of this skill) |
+| Evaluators / experiments | Recreate / re-run for now | Do not import old scores as AX experiment truth |
 
 ## Attribute mapping (traces)
 
@@ -115,17 +115,27 @@ Confirm:
 
 Export examples → flatten → `ax datasets create`. See references/langsmith-export.md.
 
-### Step 4 — Prompts / evaluators
+### Step 4 — Prompts (recommended when the user has Prompt Hub content)
 
-Recreate; do not treat historical scores as AX experiment results.
+Ask whether to import **latest only** or **all commits**. Then:
 
-### Step 5 — Live cutover (optional)
+1. `client.list_prompts()` (or REST) to inventory repos
+1. For each prompt: `list_prompt_commits` / pull commit (or `latest` / tag)
+1. Map LangChain-style messages → AX `LLMMessageRequest` roles (`SYSTEM` / `USER` / `ASSISTANT` / `TOOL`)
+1. Infer `input_variable_format`: `{var}` → `F_STRING`, `{{var}}` → `MUSTACHE`; ask if mixed
+1. `ax prompts create` (or Python `client.prompts.create`) for the oldest commit, then `create_version` for newer commits in chronological order
+1. Map LangSmith tags (e.g. `prod`) → AX labels via `set_labels` when present
+1. Provider/model: copy from the manifest when available; otherwise ask or use a sensible default the user confirms
 
-Only after import looks right: point app exporters at Arize for **new** traffic. Live cutover does **not** replace Step 2.
+Do not invent prompt text. If a commit is a non-chat / tool-heavy manifest the agent cannot flatten, import the readable message template and note what was skipped.
+
+### Step 5 — Evaluators / experiments
+
+Recreate or re-run in AX for now; do not treat historical LangSmith feedback as AX experiment truth.
 
 ### Step 6 — Verify
 
-Summarize: spans imported, sample `output.value`, session coverage, datasets, what was left behind.
+Summarize: spans imported, sample `output.value`, session coverage, datasets, prompts/versions/labels created, what was left behind.
 
 ## Working directory
 

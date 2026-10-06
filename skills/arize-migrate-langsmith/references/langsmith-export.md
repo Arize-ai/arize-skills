@@ -47,13 +47,21 @@ LangSmith bulk export to S3/Parquet is for **customer archives**, not a turn-key
 Do not promise Parquet → AX trace UI ingest. Keep the archive; use the migrate script for
 API-accessible history, then cut over live tracing for new traffic.
 
-## Prompts
+## Prompts → Arize AX Prompt Hub
 
-Use LangSmith Prompt Hub APIs / SDK to list and pull prompt templates and commit hashes. Save under `.arize-tmp-migrate/langsmith/prompts/`.
+LangSmith exposes prompts programmatically (docs: https://docs.langchain.com/langsmith/manage-prompts-programmatically):
 
-## Transform checklist
+- List: `client.list_prompts()`
+- Versions: `client.list_prompt_commits("owner/repo")` or `GET /api/v1/commits/{owner}/{repo}`
+- One version: pull / `GET /api/v1/commits/{owner}/{repo}/{commit}` where `{commit}` can be a hash, tag, or `latest`
+
+Map into AX with `ax prompts create` / `ax prompts create-version` (or Python `client.prompts.create` / `create_version`), then `set_labels` for tags such as production.
+
+Chat manifests → AX `messages` with roles `SYSTEM` / `USER` / `ASSISTANT` / `TOOL`. Prefer importing readable chat templates; note tool-only / non-chat commits the agent cannot flatten.
+
+## Transform checklist (datasets)
 
 1. Flatten `inputs` / `outputs` into example fields
-2. Drop LangSmith example UUIDs and system timestamps from create payloads
-3. Batch ≤1000 for `ax datasets create`; append the rest
-4. Record a `manifest.json` (source id/name, counts, AX dataset id)
+1. Drop LangSmith example UUIDs and system timestamps from create payloads
+1. Batch ≤1000 for `ax datasets create`; append the rest
+1. Record a `manifest.json` (source id/name, counts, AX dataset id)

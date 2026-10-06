@@ -1,9 +1,9 @@
 ---
 name: arize-migrate-braintrust
-description: Migrates LLM observability from Braintrust into Arize AX — historical trace import via OTLP (BT output→output.value, span_parents, one AX trace per turn + session.id), dataset export/import, prompt recreation, and live cutover. Use when migrating from Braintrust to Arize or importing Braintrust logs into AX.
+description: Migrates LLM observability from Braintrust into Arize AX — historical trace import via OTLP (BT output→output.value, span_parents, one AX trace per turn + session.id), datasets, and prompts (latest or versions). Use when migrating from Braintrust to Arize or importing Braintrust logs into AX.
 metadata:
   author: arize
-  version: "1.2"
+  version: "1.3"
 compatibility: Requires ax CLI, Arize OTLP credentials (ARIZE_API_KEY + ARIZE_SPACE_ID), and BRAINTRUST_API_KEY.
 ---
 
@@ -43,8 +43,9 @@ Proceed with the task. If something fails, troubleshoot from the error:
 |------|-------|------|
 | Historical project logs / spans | **Yes** | `scripts/migrate_vendor_traces.py --vendor braintrust` |
 | Datasets | Yes | BTQL / API → `ax datasets create` |
-| Live traffic going forward | Yes | Cut over after import verified |
-| Prompts / scorers / experiments | Recreate / re-run | Do not import old scores as AX experiment truth |
+| Prompts | **Yes** | `GET /v1/prompt` → `ax prompts create` / `create_version` + labels |
+| Live traffic going forward | Separate | Point new traffic at AX after import (not part of this skill) |
+| Scorers / experiments | Recreate / re-run for now | Do not import old scores as AX experiment truth |
 
 ## Attribute mapping (traces)
 
@@ -107,17 +108,26 @@ Confirm string `output.value`, parent links via `parent_id`, multiple traces per
 
 See references/braintrust-export.md → flatten → `ax datasets create`.
 
-### Step 4 — Prompts / evaluators
+### Step 4 — Prompts (recommended when the user has Braintrust prompts)
 
-Recreate / re-run in AX.
+Ask **latest only** vs versions / environments. Then:
 
-### Step 5 — Live cutover (optional)
+1. `GET /v1/prompt` (filter by `project_name` / `slug` as needed)
+1. For each prompt, fetch by id; use `version` / `environment` query params when importing history
+1. Map `prompt_data.prompt` messages → AX roles; flatten text blocks to `content` strings
+1. Infer `F_STRING` vs `MUSTACHE` from template syntax; ask if unclear
+1. `ax prompts create` then `create_version` oldest→newest; map Braintrust environments to AX labels when the user wants them
+1. Copy model/provider from prompt options when present; otherwise ask
 
-Only after import looks right. Live cutover does not replace Step 2.
+Skip non-prompt functions (tools/scorers) unless the user explicitly wants those recreated separately.
+
+### Step 5 — Scorers / experiments
+
+Recreate or re-run in AX for now.
 
 ### Step 6 — Verify
 
-Summarize spans imported, trace/session counts, sample `output.value`, and gaps.
+Summarize spans imported, trace/session counts, sample `output.value`, prompts/versions/labels, and gaps.
 
 ## Working directory
 
