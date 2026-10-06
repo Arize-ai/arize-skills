@@ -12,11 +12,10 @@ ax spans annotate --help
 
 ## Export rules not covered by `--help`
 
-- **The project argument is required on all three commands, and a project *name* also requires `--space`.** There is no default project and no environment variable that supplies one; the CLI reads only `ARIZE_API_KEY` and `ARIZE_REGION` plus the profile. Resolve the space first (see [ax-profiles.md](ax-profiles.md#space)), or pass a base64 project ID, which needs no space.
+- **A project *name* requires `--space` on `ax spans export` too.** That command's own `--space` help names only `--all` as the trigger, so it reads as optional for a name; it is not, and the call fails with `project '<name>' not found. Provide 'space' so the project name can be resolved`. `ax traces export` and `ax spans annotate` both state the rule. There is no default project and no environment variable supplying one — the CLI reads only `ARIZE_API_KEY` and `ARIZE_REGION` plus the profile. Resolve the space first (see [ax-profiles.md](ax-profiles.md#space)), or pass a base64 project ID, which needs no space.
 - **`--trace-id`, `--span-id` and `--session-id` are mutually exclusive** on `ax spans export`. Pass one. `--filter` combines with any of them.
-- **`--all` switches `ax spans export` and `ax traces export` to Arrow Flight**, which streams every matching row and ignores `--limit`. Flight needs `--space`.
-- **Pass `--output-dir` explicitly.** It defaults to the working directory, so an omitted flag writes export files into the user's repo. The SKILL.md workflow uses `--output-dir .arize-tmp-traces`.
-- **`--days` is ignored once `--start-time` is set.** With `--end-time` alone, the lookback runs backwards from `--end-time`.
+- **`--days` is ignored once `--start-time` is set**, on both export commands. Only `ax spans annotate --help` states this; the two exports describe `--start-time` as a plain override. With `--end-time` alone, the lookback runs backwards from `--end-time`.
+- **Pass `--output-dir` explicitly** rather than relying on its default, which writes export files into whatever directory the agent is working in — usually the user's repo. The SKILL.md workflow uses `--output-dir .arize-tmp-traces`.
 
 ---
 
