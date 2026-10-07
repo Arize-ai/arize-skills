@@ -11,13 +11,20 @@ Two subcommands, standard library only (Python 3.9+):
           gates, and human-vs-evaluator agreement on the gold subset.
           Writes nothing to Arize.
 
+  compare Read-only. Compares two `report --json-out` files from the same gold
+          set (before and after a change): agreement with intervals, records
+          that flipped each way, and the shift in the evaluator's label mix.
+
 Examples:
   align_report.py fetch --space SPACE --queue QUEUE --evaluator EVALUATOR --out-dir align/
   align_report.py report --dir align/ --json-out align/report.json > align/report.md
+  align_report.py compare align/baseline.json align/candidate_v2.json
 """
 
 import argparse
+import hashlib
 import json
+import math
 import os
 import re
 import subprocess
@@ -31,15 +38,23 @@ GRANULARITY_PREFIX = {"SPAN": "eval", "TRACE": "trace_eval", "SESSION": "session
 DEFAULT_NOT_APPLICABLE = ["not_applicable"]
 DEFAULT_UNSCORABLE = ["cannot_judge", "unclear"]
 
-# Gate defaults. A queue must clear every "usable" gate before its agreement
-# numbers are treated as evidence; otherwise results are exploratory at best.
+# Gate defaults; see references/research.md for where each comes from. Clearing every gate makes the
+# queue DIRECTIONAL: enough to start aligning, not to claim alignment. VALIDATED also needs the class
+# sizes below, because at 10 gold records a 90% agreement has a 95% interval of about 60-98%.
 # A single annotator is allowed; agreement is gated only when records overlap.
 MIN_GOLD_USABLE = 10
 MIN_GOLD_EXPLORATORY = 5
 MIN_PER_CLASS = 3
+MIN_GOLD_VALIDATED = 50
+MIN_PER_CLASS_VALIDATED = 30
 MAX_EXCLUDED_RATE = 0.30
 MIN_JOIN_RATE = 0.90
 MIN_KAPPA = 0.60
+# When one label holds this share of an annotator pair's votes, κ is low even at high raw agreement
+# (the kappa paradox), so the gate also accepts Gwet's AC1.
+SKEW_SHARE = 0.80
+MIN_SHARED_FOR_KAPPA = 20
+SPLIT = {"train": 0.15, "dev": 0.425}  # the rest is test, scored once at the end
 
 
 # ---------------------------------------------------------------------------
@@ -180,8 +195,62 @@ def cohen_kappa(pairs):
     return (po - pe) / (1 - pe)
 
 
+def gwet_ac1(pairs):
+    """Gwet's AC1 for two raters; stable when one label dominates, where κ collapses."""
+    n = len(pairs)
+    if n == 0:
+        return None
+    labels = {x for p in pairs for x in p}
+    q = max(2, len(labels))
+    po = sum(1 for x, y in pairs if x == y) / n
+    share = Counter(x for p in pairs for x in p)
+    pe = sum((share[k] / (2 * n)) * (1 - share[k] / (2 * n)) for k in labels) / (q - 1)
+    return 1.0 if pe == 1 else (po - pe) / (1 - pe)
+
+
+def pabak(pairs):
+    """Prevalence- and bias-adjusted κ: (q·p_o − 1) / (q − 1)."""
+    if not pairs:
+        return None
+    q = max(2, len({x for p in pairs for x in p}))
+    po = sum(1 for x, y in pairs if x == y) / len(pairs)
+    return (q * po - 1) / (q - 1)
+
+
+def wilson(x, n, z=1.96):
+    """95% Wilson score interval for a proportion, as (low, high)."""
+    if not n:
+        return None
+    p = x / n
+    centre = (p + z * z / (2 * n)) / (1 + z * z / n)
+    half = z * math.sqrt(p * (1 - p) / n + z * z / (4 * n * n)) / (1 + z * z / n)
+    return max(0.0, centre - half), min(1.0, centre + half)
+
+
 def pct(x, n):
     return f"{x}/{n} ({100 * x / n:.0f}%)" if n else f"{x}/0"
+
+
+def pct_ci(x, n):
+    """Count, percentage and 95% interval, e.g. '9/10 (90%, 95% CI 60–98%)'."""
+    if not n:
+        return f"{x}/0"
+    lo, hi = wilson(x, n)
+    return f"{x}/{n} ({100 * x / n:.0f}%, 95% CI {100 * lo:.0f}–{100 * hi:.0f}%)"
+
+
+def split_of(record_id, label, counts):
+    """Stable train/dev/test assignment: a record's rank within its human label, by hash of its ID."""
+    ranked = counts[label]
+    i = ranked.index(record_id)
+    n = len(ranked)
+    n_train = int(n * SPLIT["train"])
+    n_dev = int(round(n * SPLIT["dev"]))
+    return "train" if i < n_train else "dev" if i < n_train + n_dev else "test"
+
+
+def stable_order(ids):
+    return sorted(ids, key=lambda r: hashlib.sha256(str(r).encode()).hexdigest())
 
 
 def parse_ms(v):
@@ -315,8 +384,13 @@ def build(a):
     for x, y in combinations(annotators, 2):
         pairs = [(row["votes"][x], row["votes"][y]) for row in rows if x in row["votes"] and y in row["votes"]]
         if pairs:
-            iaa.append({"a": x, "b": y, "n": len(pairs),
-                        "agree": sum(1 for p, q in pairs if p == q), "kappa": cohen_kappa(pairs)})
+            top = Counter(v for p in pairs for v in p).most_common(1)[0][1] / (2 * len(pairs))
+            kappa, ac1 = cohen_kappa(pairs), gwet_ac1(pairs)
+            skewed = top >= SKEW_SHARE
+            iaa.append({"a": x, "b": y, "n": len(pairs), "agree": sum(1 for p, q in pairs if p == q),
+                        "kappa": kappa, "ac1": ac1, "pabak": pabak(pairs), "majority_share": top,
+                        "skewed": skewed,
+                        "ok": kappa >= MIN_KAPPA or (skewed and ac1 is not None and ac1 >= MIN_KAPPA)})
     multi = [row for row in rows if len(row["votes"]) >= 2]
     disputed = [row for row in rows if row["status"] == "disputed"]
 
@@ -339,8 +413,23 @@ def build(a):
         fp = sum(c for (h, e), c in confusion.items() if e == lbl and h != lbl)
         fn = sum(c for (h, e), c in confusion.items() if h == lbl and e != lbl)
         per_label[lbl] = {"precision": tp / (tp + fp) if tp + fp else None,
-                          "recall": tp / (tp + fn) if tp + fn else None, "support": tp + fn}
+                          "recall": tp / (tp + fn) if tp + fn else None, "support": tp + fn,
+                          "tp": tp, "predicted": tp + fp}
     agree = sum(c for (h, e), c in confusion.items() if h == e)
+    # Mean recall over the human labels: the TPR/TNR average for a binary judge, robust to class imbalance.
+    recalls = [m["recall"] for m in per_label.values() if m["recall"] is not None]
+    balanced = sum(recalls) / len(recalls) if recalls else None
+
+    # Held-out split of the gold records, by human label, stable across runs.
+    by_label = defaultdict(list)
+    for row in gold:
+        by_label[row["consensus"]].append(row["record_id"])
+    ranked = {lbl: stable_order(ids) for lbl, ids in by_label.items()}
+    for row in rows:
+        row["split"] = split_of(row["record_id"], row["consensus"], ranked) if row["bucket"] == "gold" else None
+    split_counts = {s: Counter(row["consensus"] for row in gold if row["split"] == s) for s in ("train", "dev", "test")}
+
+    weighted = weight_by_plan(load(a.plan), rows, gold_scored) if getattr(a, "plan", None) else None
     na_rows = [row for row in rows if row["bucket"] == "not_applicable" and row["stored"]]
     applicability = Counter(row["stored"].get("label") for row in na_rows)
 
@@ -401,16 +490,22 @@ def build(a):
          f"{pct(len(joined), n)} with a session ID; {len(dup_sessions)} duplicated session(s)"),
         ("Stored evaluator output on gold records", bool(gold) and len(gold_scored) / len(gold) >= MIN_JOIN_RATE,
          pct(len(gold_scored), len(gold))),
-        (f"Annotator agreement κ ≥ {MIN_KAPPA} (when records have 2+ votes)",
-         all(p["kappa"] is not None and p["kappa"] >= MIN_KAPPA for p in iaa),
-         "; ".join(f"{short_email(p['a'])}/{short_email(p['b'])} κ={p['kappa']:.2f} on {p['n']}" for p in iaa)
+        (f"Annotator agreement κ ≥ {MIN_KAPPA}, or AC1 ≥ {MIN_KAPPA} when one label holds ≥{SKEW_SHARE:.0%} "
+         "(when records have 2+ votes)",
+         all(p["ok"] for p in iaa),
+         "; ".join(f"{short_email(p['a'])}/{short_email(p['b'])} κ={p['kappa']:.2f}"
+                   + (f", AC1={p['ac1']:.2f} (top label {p['majority_share']:.0%})" if p["skewed"] else "")
+                   + f" on {p['n']}" for p in iaa)
          or "single annotator; not measured"),
         ("No unresolved disputes", not disputed, f"{len(disputed)} disputed"),
     ]
     mismatches = [row for row in rows if row["stored"] and row["consensus"] and row["stored"].get("label") != row["consensus"]]
     stale = [row for row in rows if row["stale"]]
+    big_classes = [c for c, k in gold_classes.items() if k >= MIN_PER_CLASS_VALIDATED]
+    small_classes = sorted(c for c in gold_classes if c not in big_classes)
     if all(ok for _, ok, _ in gates):
-        verdict = "USABLE"
+        validated = len(gold) >= MIN_GOLD_VALIDATED and len(big_classes) >= 2
+        verdict = "VALIDATED" if validated else "DIRECTIONAL"
     elif len(gold) >= MIN_GOLD_EXPLORATORY and len(gold_classes) >= 2:
         verdict = "EXPLORATORY"
     else:
@@ -426,7 +521,49 @@ def build(a):
         "applicability": applicability, "fit": fit, "gates": gates, "verdict": verdict,
         "gold_classes": gold_classes, "annotators": annotators, "mismatches": mismatches, "stale": stale,
         "turns_fetched": bool(turns), "marker": LAST_TURN_MARKER in template,
+        "balanced": balanced, "split_counts": split_counts, "weighted": weighted, "small_classes": small_classes,
     }
+
+
+def weight_by_plan(plan, rows, gold_scored):
+    """Production-weighted agreement and per-label recall, from the queue builder's strata.
+
+    The queue oversamples rare stored labels and provider disagreements, so raw agreement on it is
+    not a production rate. Each stratum's gold records stand in for its production units (strata
+    without gold are reported as uncovered). Assumes exclusions are random within a stratum."""
+    strata = {s["stratum"]: s for s in plan.get("strata") or [] if s.get("population")}
+    if not strata:
+        return {"error": "plan.json has no strata with production counts (re-plan with a current plan_queue.py)"}
+    by_span = {r.get("span_id"): r.get("stratum") for r in plan.get("records") or []}
+    groups = defaultdict(list)
+    for row in gold_scored:
+        h = by_span.get(row["span_id"])
+        if h in strata:
+            groups[h].append(row)
+    covered = {h: s["population"] for h, s in strata.items() if groups.get(h)}
+    total = sum(s["population"] for s in strata.values())
+    if not covered:
+        return {"error": "no gold record maps to a plan stratum (check the plan and queue match)"}
+    pop = sum(covered.values())
+    agree = sum(n * sum(1 for r in groups[h] if r["stored"].get("label") == r["consensus"]) / len(groups[h])
+                for h, n in covered.items()) / pop
+    recall = {}
+    for lbl in sorted({r["consensus"] for g in groups.values() for r in g}):
+        has = sum(n * sum(1 for r in groups[h] if r["consensus"] == lbl) / len(groups[h]) for h, n in covered.items())
+        hit = sum(n * sum(1 for r in groups[h] if r["consensus"] == lbl and r["stored"].get("label") == lbl)
+                  / len(groups[h]) for h, n in covered.items())
+        recall[lbl] = hit / has if has else None
+    return {"agreement": agree, "recall": recall, "covered_share": pop / total if total else None,
+            "uncovered": sorted(h for h in strata if h not in covered),
+            "lower_bound": any(s.get("population_lower_bound") for s in strata.values())}
+
+
+VERDICT_MEANING = {
+    "VALIDATED": "Every gate passes and two or more classes have enough gold records to support an agreement claim.",
+    "DIRECTIONAL": "Every gate passes, so it is enough to start aligning, but too small to confirm a target.",
+    "EXPLORATORY": "Some gates fail; disagreements show patterns worth investigating, nothing more.",
+    "NOT USABLE": "Too few gold records or classes; fix the queue before reading agreement.",
+}
 
 
 def render(r):
@@ -434,7 +571,11 @@ def render(r):
     rows, out = r["rows"], []
     w = out.append
     w(f"# Pre-alignment report: `{ev.get('name')}` vs queue \"{q.get('name')}\"\n")
-    w(f"**Verdict: {r['verdict']}.** No evaluator, task, or queue was changed to produce this report.\n")
+    w(f"**Verdict: {r['verdict']}.** {VERDICT_MEANING[r['verdict']]} "
+      "No evaluator, task, or queue was changed to produce this report.\n")
+    if r["verdict"] == "DIRECTIONAL" and r["small_classes"]:
+        w(f"Classes with fewer than {MIN_PER_CLASS_VALIDATED} gold records, where agreement is not validated: "
+          f"{r['small_classes']}.\n")
 
     w("## What is being compared\n")
     w(f"- Queue `{q.get('id')}`: {len(rows)} records, annotation config `{r['config_name']}`")
@@ -478,7 +619,15 @@ def render(r):
           "Every gold label rests on a single annotator; say so when quoting results.\n")
     else:
         for p in r["iaa"]:
-            w(f"- {short_email(p['a'])} vs {short_email(p['b'])}: {pct(p['agree'], p['n'])} agree, Cohen's κ = {p['kappa']:.2f}")
+            w(f"- {short_email(p['a'])} vs {short_email(p['b'])}: {pct_ci(p['agree'], p['n'])} agree, "
+              f"Cohen's κ = {p['kappa']:.2f}, AC1 = {p['ac1']:.2f}, PABAK = {p['pabak']:.2f}; "
+              f"most common label {p['majority_share']:.0%} of votes")
+            if p["skewed"]:
+                w(f"  - One label holds ≥{SKEW_SHARE:.0%} of the votes, so κ understates agreement (the kappa "
+                  "paradox). The gate accepts AC1 for this pair.")
+            if p["n"] < MIN_SHARED_FOR_KAPPA:
+                w(f"  - Only {p['n']} shared records; κ from fewer than {MIN_SHARED_FOR_KAPPA} is noisy. "
+                  "Treat this as a rough check.")
         if r["disputed"]:
             w("\nDisputed records (excluded from gold until adjudicated):\n")
             w("| Record | Session | Votes |")
@@ -523,15 +672,57 @@ def render(r):
     if not gs:
         w("No gold record has a stored evaluator output, so agreement cannot be computed from stored results.\n")
     else:
-        w(f"Exact agreement: {pct(r['agree'], len(gs))}. Descriptive only unless the verdict is USABLE.\n")
+        w("Per human label, the share the evaluator caught (recall; TPR and TNR for a binary evaluator):\n")
+        for lbl, m in r["per_label"].items():
+            w(f"- `{lbl}`: {pct_ci(m['tp'], m['support'])}")
+        if r["balanced"] is not None:
+            w(f"- Balanced accuracy (mean of the above): {100 * r['balanced']:.0f}%")
+        w("")
+        w(f"Exact agreement: {pct_ci(r['agree'], len(gs))}. "
+          + ("Evidence of alignment on this gold set." if r["verdict"] == "VALIDATED"
+             else "Directional only: the interval is too wide to confirm a target." if r["verdict"] == "DIRECTIONAL"
+             else "Descriptive only.")
+          + " The queue may oversample rare labels, so this is not a production-wide rate"
+          + (" (see the weighted estimate below).\n" if r["weighted"] else ".\n"))
         w("| Human \\ Evaluator | " + " | ".join(f"`{c}`" for c in r["choices"]) + " |")
         w("|---|" + "---:|" * len(r["choices"]))
         for h in sorted({row["consensus"] for row in gs}):
             w(f"| `{h}` | " + " | ".join(str(r["confusion"].get((h, c), 0)) for c in r["choices"]) + " |")
         w("")
+        w("Per evaluator label, the share humans confirmed (precision):\n")
         for lbl, m in r["per_label"].items():
-            fmt = lambda x: "—" if x is None else f"{x:.2f}"
-            w(f"- `{lbl}`: precision {fmt(m['precision'])}, recall {fmt(m['recall'])}, support {m['support']}")
+            w(f"- `{lbl}`: {pct_ci(m['tp'], m['predicted'])}")
+        w("")
+    wt = r["weighted"]
+    if wt:
+        w("### Production-weighted estimates\n")
+        if wt.get("error"):
+            w(f"Not computed: {wt['error']}.\n")
+        else:
+            w("Each queue stratum's gold records are weighted by that stratum's production count from the queue "
+              "plan, which undoes the oversampling of rare labels and provider disagreements. Exclusions are "
+              "assumed random within a stratum.\n")
+            w(f"- Agreement: {100 * wt['agreement']:.0f}%")
+            for lbl, rec in wt["recall"].items():
+                w(f"- Recall for `{lbl}`: {'—' if rec is None else f'{100 * rec:.0f}%'}")
+            w(f"- Strata with gold records cover {100 * (wt['covered_share'] or 0):.0f}% of the planned production "
+              "units" + (f"; no gold in: {wt['uncovered']}" if wt["uncovered"] else "")
+              + (". Some production counts are lower bounds." if wt["lower_bound"] else "."))
+            w("")
+    sc = r["split_counts"]
+    if r["gold"]:
+        w("### Held-out split\n")
+        w("Gold records are split by human label, stably by record ID: **train** may supply few-shot examples, "
+          "**dev** is for reading disagreements and iterating, **test** is scored once, after the last revision. "
+          "`--json-out` records each record's split.\n")
+        w("| Human label | Train | Dev | Test |")
+        w("|---|---:|---:|---:|")
+        for lbl in sorted(r["gold_classes"]):
+            w(f"| `{lbl}` | {sc['train'][lbl]} | {sc['dev'][lbl]} | {sc['test'][lbl]} |")
+        thin = sorted(lbl for lbl in r["gold_classes"] if sc["test"][lbl] < MIN_PER_CLASS_VALIDATED)
+        if thin:
+            w(f"\nTest records per label below {MIN_PER_CLASS_VALIDATED} for {thin}: a test result on them is "
+              "directional only.")
         w("")
     mism = r["mismatches"]
     if mism:
@@ -558,17 +749,44 @@ def cmd_report(a):
                 "gold": len(r["gold"]), "gold_scored": len(r["gold_scored"]), "agree": r["agree"],
                 "gold_classes": dict(r["gold_classes"]), "annotators": r["annotators"],
                 "disagreements": len(r["mismatches"]), "stale": len(r["stale"]),
+                "balanced_accuracy": r["balanced"], "weighted": r["weighted"],
+                "split_counts": {k: dict(v) for k, v in r["split_counts"].items()},
             },
             "records": [{
                 "record_id": row["record_id"], "session_id": row["session_id"], "trace_id": row["trace_id"],
                 "votes": row["votes"], "consensus": row["consensus"], "status": row["status"],
                 "bucket": row["bucket"], "eval_label": (row["stored"] or {}).get("label"),
                 "eval_explanation": (row["stored"] or {}).get("explanation"),
-                "stale": row["stale"],
+                "stale": row["stale"], "split": row["split"],
             } for row in r["rows"]],
         }
         with open(a.json_out, "w") as f:
             json.dump(slim, f, indent=1)
+
+
+def cmd_compare(a):
+    """Before/after on the same gold set: agreement with intervals, flipped records, label-mix shift."""
+    before, after = load(a.before), load(a.after)
+    if a.split:
+        keep = {x["record_id"] for x in before["records"] if x.get("split") == a.split}
+    else:
+        keep = None
+    b = {x["record_id"]: x for x in before["records"] if x["bucket"] == "gold" and (keep is None or x["record_id"] in keep)}
+    c = {x["record_id"]: x for x in after["records"] if x["record_id"] in b}
+    both = [rid for rid in b if b[rid].get("eval_label") and c.get(rid, {}).get("eval_label")]
+    hit = lambda x: x["eval_label"] == x["consensus"]
+    fixed = [rid for rid in both if not hit(b[rid]) and hit(c[rid])]
+    broke = [rid for rid in both if hit(b[rid]) and not hit(c[rid])]
+    print(f"# Before/after on {len(both)} gold records" + (f" ({a.split} split)" if a.split else "") + "\n")
+    print(f"- Before: {pct_ci(sum(hit(b[r]) for r in both), len(both))}")
+    print(f"- After: {pct_ci(sum(hit(c[r]) for r in both), len(both))}")
+    print(f"- Fixed (wrong before, right after): {len(fixed)}" + (f" — {fixed}" if fixed else ""))
+    print(f"- Broken (right before, wrong after): {len(broke)}" + (f" — {broke}" if broke else ""))
+    mix_b, mix_a = Counter(b[r]["eval_label"] for r in both), Counter(c[r]["eval_label"] for r in both)
+    print("- Evaluator label mix: " + ", ".join(f"`{k}` {mix_b.get(k, 0)}→{mix_a.get(k, 0)}"
+                                               for k in sorted(set(mix_b) | set(mix_a))))
+    print("\nA change smaller than the run-to-run noise floor is not an improvement. Re-run the unchanged "
+          "candidate once and compare it with itself to measure that floor.")
 
 
 def main():
@@ -595,7 +813,14 @@ def main():
     r.add_argument("--unscorable", nargs="*", default=DEFAULT_UNSCORABLE)
     r.add_argument("--adjudications", help='JSON file mapping record_id to the adjudicated label')
     r.add_argument("--json-out", help="Also write per-record results as JSON")
+    r.add_argument("--plan", help="plan.json from arize-align-queue-builder; adds production-weighted estimates")
     r.set_defaults(func=cmd_report)
+
+    c = sub.add_parser("compare", help="Compare two report --json-out files from the same gold set")
+    c.add_argument("before")
+    c.add_argument("after")
+    c.add_argument("--split", choices=["train", "dev", "test"], help="Only records in this split of the BEFORE file")
+    c.set_defaults(func=cmd_compare)
 
     a = p.parse_args()
     a.func(a)

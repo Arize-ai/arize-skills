@@ -2,7 +2,7 @@
 
 Use this prompt only in Phase 6, after the user has approved changing the evaluator, to draft a revision of the **candidate** evaluator's template. The input must be gold records only, from a fresh run of the current version, with adjudicated labels. Never feed it not-applicable, unscorable, off-rubric or disputed records as if they were grading errors.
 
-Keep a held-out slice of the gold records out of the disagreement list, so the revision can be checked against records it never saw.
+Use only **dev** records from the report's held-out split (`split` in `--json-out`) as disagreements. **Train** records may appear in the template as few-shot examples. **Test** records stay out of this prompt and the template, and are scored once, after the last revision.
 
 ````
 You are calibrating an LLM-as-judge evaluator to match human judgment. Given the
@@ -19,9 +19,9 @@ DATA GRANULARITY: {SPAN|TRACE|SESSION}
 HUMAN RUBRIC (label definitions given to annotators):
 {RUBRIC_AND_QUEUE_INSTRUCTIONS}
 
-BASELINE ON GOLD SET: {AGREE}/{TOTAL}; per-class precision/recall: {PER_CLASS}
+BASELINE ON THE DEV SPLIT: {AGREE}/{TOTAL}; recall per human label: {PER_CLASS}
 
-DISAGREEMENTS (gold records only)
+DISAGREEMENTS (dev-split gold records only)
 =================================
 For each: record/session ID, the evidence excerpt that decides it, the human label,
 the evaluator label, and the evaluator's explanation.
@@ -43,6 +43,8 @@ RULES FOR THE REVISION
 - Keep the classification choice labels exactly (spelling, casing), and the final
   response instruction.
 - State general rules. Do not copy, paraphrase, or name specific records.
+- Do not raise or lower how often the evaluator gives a label overall unless the
+  patterns call for it; general rules can shift the pass rate on records you did not see.
 - Change only what the identified patterns require. Leave the rest verbatim.
 
 OUTPUT
@@ -55,4 +57,6 @@ OUTPUT
 
 1. Fill the placeholders from `ax evaluators get` (template and choices), the queue (rubric and instructions), and the Phase 6 report (baseline and disagreements). For each disagreement, include the session excerpt that decides it, not the whole transcript.
 2. Review the output. Every placeholder and label must be preserved, and no record may be named.
-3. Show the user the diff. Apply it as a new version of the candidate evaluator only, re-run on the gold set, and report the before/after numbers for both the revised set and the held-out set.
+3. Show the user the diff. Apply it as a new version of the candidate evaluator only, re-run on the gold set, and compare with `align_report.py compare BEFORE.json AFTER.json --split dev`. It prints both rates with intervals, the records that flipped each way, and the shift in the label mix.
+4. Treat a gain smaller than run-to-run noise as no gain: re-run the unchanged candidate once and compare it with itself to see the noise floor.
+5. After the last revision, score the test split once (`--split test`) and report it separately.

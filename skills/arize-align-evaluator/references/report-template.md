@@ -5,7 +5,7 @@ Start from the Markdown the script prints, then add the parts that require readi
 ```markdown
 # Aligning <evaluator name> against "<queue name>"
 
-**Verdict: EXPLORATORY.** <One sentence: what can and cannot be concluded.>
+**Verdict: DIRECTIONAL.** <One sentence: what can and cannot be concluded.>
 **Decision needed:** <approve / edit / reject the proposal below, or "fix the queue first">.
 Nothing has been changed in Arize.
 
@@ -44,7 +44,8 @@ OR
 ```
 
 Rules:
-- Give counts next to every percentage ("8/10", not "80%").
+- Give counts and the 95% interval next to every percentage ("8/10 (80%, 95% CI 49–94%)", not "80%"). The script prints them.
+- Lead with recall per human label (TPR and TNR for a binary evaluator), then exact agreement.
 - One discrepancy is an anecdote, not a pattern. Propose a template change only for a pattern seen in at least 2 gold records, or for one unambiguous instruction bug you can quote.
 - Use **arize-link** to add UI links for the queue, the evaluator and each discrepancy's session if the user will review in the UI.
 - End with the question and stop. Do not create the candidate evaluator in the same turn.
