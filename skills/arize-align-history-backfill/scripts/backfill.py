@@ -7,11 +7,14 @@ Subcommands (standard library only, Python 3.9+):
                    --admission file for an evaluator with no production task) and estimates
                    how many units in a window it admits.
   copy-evaluator   Prints the candidate evaluator that would be created. With --execute,
-                   creates it and diffs its config against the source.
+                   creates it, diffs its config against the source, and writes a manifest
+                   of the exact model and settings it runs with.
   calibrate        Read-only. Copy mode only. After a calibration run on a window production
                    already scored, compares which units the candidate and the evaluator it was
-                   copied from each scored, and how their labels agree. Refuses to compare
-                   evaluators that are not copies of each other.
+                   copied from each scored, and how their labels agree (raw and Cohen's κ).
+                   With --repeat-evaluator (a second copy run on the same window), first
+                   measures the run-to-run noise floor. Refuses to compare evaluators that
+                   are not copies of each other.
   check-admission  Read-only. New-evaluator mode. After a test run, compares the units the
                    candidate scored with the units its admission rule should admit. No other
                    evaluator is involved.
@@ -21,6 +24,7 @@ Nothing is written to Arize except by `copy-evaluator --execute`.
 """
 
 import argparse
+import hashlib
 import json
 import math
 import re
@@ -38,6 +42,11 @@ ID_BATCH = 100  # unit IDs per `IN (...)` filter
 # use_structured_output, so a difference there is reported but does not refuse calibration.
 COPY_FIELDS = ("template", "classification_choices", "data_granularity", "direction",
                "include_explanations", "use_function_calling")
+# Templates that ask the judge to name the highest turn it saw, e.g. "LAST_TURN_CHECK: Turn 7".
+LAST_TURN_MARKER = "LAST_TURN_CHECK"
+# A model name with a date or version stamp is a pinned snapshot; anything else may be an alias that
+# the provider re-points, so labels scored months apart may come from different models.
+SNAPSHOT = re.compile(r"\d{4}-?\d{2}-?\d{2}|\d{8}|@\d|-\d{3,}$|:\d+$")
 
 
 class ColumnMissing(Exception):
@@ -303,6 +312,35 @@ def param_note(src_tc, tc):
                                                  "drops some, such as temperature. Set them in the UI if they matter.")
 
 
+def cohen_kappa(pairs):
+    n = len(pairs)
+    if n == 0:
+        return None
+    po = sum(1 for x, y in pairs if x == y) / n
+    ca, cb = Counter(x for x, _ in pairs), Counter(y for _, y in pairs)
+    pe = sum(ca[k] * cb.get(k, 0) for k in ca) / (n * n)
+    if pe == 1:
+        return 1.0 if po == 1 else 0.0
+    return (po - pe) / (1 - pe)
+
+
+def last_turn_seen(explanation):
+    m = re.search(LAST_TURN_MARKER + r"\D{0,40}?(\d+)", explanation or "", re.I)
+    return int(m.group(1)) if m else None
+
+
+def looks_like_alias(model):
+    return bool(model) and not SNAPSHOT.search(model)
+
+
+def agreement(a, b):
+    """Raw agreement and κ between two {unit: label} maps on the units both scored."""
+    both = sorted(set(a) & set(b))
+    pairs = [(a[u], b[u]) for u in both]
+    return {"n": len(both), "agree": sum(1 for x, y in pairs if x == y), "kappa": cohen_kappa(pairs),
+            "confusion": Counter(pairs)}
+
+
 def granularity(tc):
     return (tc.get("data_granularity") or "SPAN").upper()
 
@@ -388,10 +426,31 @@ def cmd_copy(a):
     print("Config matches the source." if not diffs else f"Differs from the source in: {diffs}")
     if note:
         print(note)
+    path = a.manifest or f"{a.template_name}.manifest.json"
+    got_llm = got.get("llm_config") or {}
+    manifest = {
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "source": {"evaluator": src.get("name"), "evaluator_id": src.get("id"), "version_id": v.get("id")},
+        "candidate": {"evaluator": made.get("name"), "evaluator_id": made.get("id"), "template_name": a.template_name},
+        "model_name": got_llm.get("model_name"), "model_is_alias": looks_like_alias(got_llm.get("model_name")),
+        "invocation_parameters": model_params(got_llm.get("invocation_parameters")),
+        "provider_parameters": model_params(got_llm.get("provider_parameters")),
+        "use_structured_output": {"source": tc.get("use_structured_output"), "candidate": got.get("use_structured_output")},
+        "use_function_calling": got.get("use_function_calling"),
+        "template_sha256": hashlib.sha256((got.get("template") or "").encode()).hexdigest(),
+        "differs_from_source": diffs, "parameter_note": note,
+    }
+    with open(path, "w") as f:
+        json.dump(manifest, f, indent=1)
+    print(f"Wrote {path}: the exact model and settings the backfilled labels come from. Keep it with the queue plan.")
+    if manifest["model_is_alias"]:
+        print(f"Warning: `{manifest['model_name']}` looks like an alias, not a pinned snapshot. If the provider "
+              "re-points it, production's history and this backfill were scored by different models.")
 
 
-def labels_by_unit(a, column, labels, gran, require=True):
-    """Every unit with a stored label for `column` (a template name) in the window, exported in full."""
+def labels_by_unit(a, column, labels, gran, require=True, explanations=None):
+    """Every unit with a stored label for `column` (a template name) in the window, exported in full.
+    Pass a dict as `explanations` to also collect each unit's explanation."""
     filt = f"{GRANULARITY_PREFIX.get(gran, 'eval')}.{column}.label IN ({', '.join(quote(l) for l in labels)})"
     if a.root_filter:
         filt = f"({a.root_filter}) AND {filt}"
@@ -401,6 +460,8 @@ def labels_by_unit(a, column, labels, gran, require=True):
         for e in s.get("evaluations") or []:
             if e.get("name") == column and e.get("label") is not None:
                 out[unit_of(s, gran)] = e.get("label")
+                if explanations is not None:
+                    explanations[unit_of(s, gran)] = e.get("explanation")
     return out, trunc
 
 
@@ -415,27 +476,70 @@ def cmd_calibrate(a):
                  "nor its admission are a reference. For an evaluator with no production task, use `check-admission` "
                  "against the admission rule agreed with the user. If production changed after the copy was made, "
                  "make a fresh copy with `copy-evaluator`.")
+    rep_tc = None
+    if a.repeat_evaluator:
+        rep_ev, rep_tc = evaluator_config(a, a.repeat_evaluator)
+        if copy_diffs(cand_tc, rep_tc):
+            sys.exit(f"`{rep_ev.get('name')}` is not a copy of `{cand_ev.get('name')}`: they differ in "
+                     f"{copy_diffs(cand_tc, rep_tc)}. The noise floor needs two identical copies.")
     gran, labels = granularity(cand_tc), list(cand_tc.get("classification_choices") or {})
     prod_name, cand_name = prod_tc.get("name"), cand_tc.get("name")
-    prod, t1 = labels_by_unit(a, prod_name, labels, gran)
-    cand, t2 = labels_by_unit(a, cand_name, labels, gran)
+    prod_expl, cand_expl = {}, {}
+    prod, t1 = labels_by_unit(a, prod_name, labels, gran, explanations=prod_expl)
+    cand, t2 = labels_by_unit(a, cand_name, labels, gran, explanations=cand_expl)
     both, union = set(prod) & set(cand), set(prod) | set(cand)
-    agree = sum(1 for u in both if prod[u] == cand[u])
     p_only, c_only = len(set(prod) - set(cand)), len(set(cand) - set(prod))
     ok = union and p_only / len(union) <= a.tolerance and c_only / len(union) <= a.tolerance
+
+    # Disagreements where the two runs saw different turn counts are not label noise: production scored
+    # the session before it ended (or the backfill did). Set them aside before comparing with the noise floor.
+    turns_differ = {u for u in both if prod[u] != cand[u]
+                    and None not in (last_turn_seen(prod_expl.get(u)), last_turn_seen(cand_expl.get(u)))
+                    and last_turn_seen(prod_expl.get(u)) != last_turn_seen(cand_expl.get(u))}
+    raw = agreement(prod, cand)
+    same_input = agreement({u: prod[u] for u in both - turns_differ}, cand)
+
     print(f"# Calibration on {a.start_time} → {a.end_time}\n")
     print(f"- Candidate `{cand_ev.get('name')}` is a copy of `{prod_ev.get('name')}` (same {', '.join(COPY_FIELDS)}, model)")
+    models = {model_of(prod_tc), model_of(cand_tc)}
+    print(f"- Model: `{model_of(cand_tc)}`" + (" (looks like an alias, not a pinned snapshot: history and this run may "
+                                                "come from different model versions)" if any(map(looks_like_alias, models)) else ""))
     if param_note(prod_tc, cand_tc):
         print(f"- {param_note(prod_tc, cand_tc)} Label disagreements may partly reflect that.")
     if prod_tc.get("use_structured_output") != cand_tc.get("use_structured_output"):
-        print("- Structured output differs (the CLI cannot set it); label disagreements may partly reflect that.")
+        print("- Structured output differs (the CLI cannot set it). Output mode can shift the label distribution, "
+              "not just add noise; compare the label mix below.")
     print(f"- Scored by production `{prod_name}`: {len(prod)}; by candidate `{cand_name}`: {len(cand)}"
           + (" (export truncated; raise --slices)" if t1 or t2 else ""))
     print(f"- Both: {len(both)}; production only: {p_only}; candidate only: {c_only}")
-    print(f"- Label agreement where both scored: {agree}/{len(both)}")
+    print(f"- Label agreement where both scored: {raw['agree']}/{raw['n']}"
+          + (f", κ = {raw['kappa']:.2f}" if raw["kappa"] is not None else ""))
+    if turns_differ:
+        print(f"- {len(turns_differ)} disagreement(s) saw different turn counts ({LAST_TURN_MARKER}); one side scored "
+              f"the session before it ended. Excluding them: {same_input['agree']}/{same_input['n']}"
+              + (f", κ = {same_input['kappa']:.2f}" if same_input["kappa"] is not None else ""))
     if both:
         print("- Confusion (production → candidate): " + ", ".join(
-            f"{p}→{c}: {n}" for (p, c), n in Counter((prod[u], cand[u]) for u in both).most_common()))
+            f"{p}→{c}: {n}" for (p, c), n in raw["confusion"].most_common()))
+        mix_p, mix_c = Counter(prod[u] for u in both), Counter(cand[u] for u in both)
+        print("- Label mix (production → candidate): " + ", ".join(
+            f"`{k}` {mix_p.get(k, 0)}→{mix_c.get(k, 0)}" for k in sorted(set(mix_p) | set(mix_c))))
+    if rep_tc is not None:
+        rep, _ = labels_by_unit(a, rep_tc.get("name"), labels, gran)
+        floor = agreement(cand, rep)
+        print(f"- Noise floor (candidate vs repeat copy `{rep_tc.get('name')}`): {floor['agree']}/{floor['n']}"
+              + (f", κ = {floor['kappa']:.2f}" if floor["kappa"] is not None else ""))
+        if floor["n"] and same_input["n"]:
+            gap = floor["agree"] / floor["n"] - same_input["agree"] / same_input["n"]
+            if gap > a.noise_margin:
+                print(f"  - Production agreement is {gap:.0%} below the noise floor, more than run-to-run noise "
+                      f"(margin {a.noise_margin:.0%}). Check settings that didn't copy, model version and output mode "
+                      "before using the backfill.")
+            else:
+                print("  - The gap to production is within run-to-run noise.")
+    else:
+        print("- Noise floor not measured. Without `--repeat-evaluator`, the label gap can't be attributed to "
+              "run-to-run noise; it may come from settings that didn't copy or a model change.")
     print(f"\n**Admission {'MATCHES' if ok else 'DOES NOT MATCH'}** (tolerance {a.tolerance:.0%} each way).")
     if not ok:
         print("Do not run the historical window. See the skill's 'If the admission check fails' section.")
@@ -511,6 +615,7 @@ def main():
     c.add_argument("--name", required=True, help="New evaluator name, e.g. <source>-backfill")
     c.add_argument("--template-name", required=True, help="New output column name, e.g. <template_name>_backfill")
     c.add_argument("--execute", action="store_true")
+    c.add_argument("--manifest", help="Where to write the model/settings manifest (default TEMPLATE_NAME.manifest.json)")
     c.set_defaults(func=cmd_copy)
 
     cal = sub.add_parser("calibrate")
@@ -518,6 +623,10 @@ def main():
     cal.add_argument("--prod-evaluator", required=True, help="The production evaluator the candidate was copied from")
     cal.add_argument("--cand-evaluator", required=True, help="The candidate copy (name or ID)")
     cal.add_argument("--tolerance", type=float, default=0.05)
+    cal.add_argument("--repeat-evaluator", help="A second copy of the candidate run on the same window, to measure "
+                     "the run-to-run noise floor")
+    cal.add_argument("--noise-margin", type=float, default=0.05,
+                     help="How far production agreement may sit below the noise floor before it is flagged")
     cal.set_defaults(func=cmd_calibrate)
 
     ck = sub.add_parser("check-admission")

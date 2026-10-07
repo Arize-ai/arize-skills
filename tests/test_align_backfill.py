@@ -24,7 +24,7 @@ START, END = "2026-09-01T00:00:00Z", "2026-09-02T00:00:00Z"
 
 def args(**kw):
     base = dict(ax="ax", space="S", project="P", start_time=START, end_time=END, slices=2, pool=100,
-                broad=[], root_filter=None, tolerance=0.05)
+                broad=[], root_filter=None, tolerance=0.05, repeat_evaluator=None, noise_margin=0.05)
     base.update(kw)
     return argparse.Namespace(**base)
 
@@ -119,11 +119,12 @@ def test_calibrate_compares_admission_and_labels(monkeypatch, capsys):
     labels = {"my_eval": {f"s{i}": "good" for i in range(20)},
               "my_eval_backfill": {**{f"s{i}": "good" for i in range(19)}, "s0": "bad", "s99": "good"}}
     monkeypatch.setattr(backfill, "evaluator_config", lambda a, ref: ({"name": ref}, configs[ref]))
-    monkeypatch.setattr(backfill, "labels_by_unit", lambda a, col, lbls, gran, require=True: (labels[col], False))
+    monkeypatch.setattr(backfill, "labels_by_unit", lambda a, col, lbls, gran, require=True, explanations=None: (labels[col], False))
     backfill.cmd_calibrate(args(prod_evaluator="prod", cand_evaluator="cand", root_filter="parent_id IS NULL"))
     out = capsys.readouterr().out
     assert "Both: 19; production only: 1; candidate only: 1" in out
-    assert "Label agreement where both scored: 18/19" in out
+    assert "Label agreement where both scored: 18/19, κ = " in out
+    assert "Noise floor not measured" in out
     assert "**Admission MATCHES**" in out
     labels["my_eval_backfill"] = {f"s{i}": "good" for i in range(10)}
     backfill.cmd_calibrate(args(prod_evaluator="prod", cand_evaluator="cand", root_filter="parent_id IS NULL"))
@@ -229,3 +230,80 @@ def test_run_ax_treats_no_spans_as_empty_only_when_allowed(monkeypatch):
     assert backfill.run_ax("ax", ["spans", "export"], allow_empty=True) == []
     with pytest.raises(SystemExit):
         backfill.run_ax("ax", ["spans", "export"])
+
+
+# ---------------------------------------------------------------------------
+# noise floor, turn counts, model pinning
+# ---------------------------------------------------------------------------
+
+def fake_labels(monkeypatch, labels, expl=None):
+    def fake(a, col, lbls, gran, require=True, explanations=None):
+        if explanations is not None:
+            explanations.update((expl or {}).get(col, {}))
+        return labels[col], False
+    monkeypatch.setattr(backfill, "labels_by_unit", fake)
+
+
+def test_calibrate_flags_a_gap_beyond_the_noise_floor(monkeypatch, capsys):
+    configs = {"prod": tc(), "cand": tc(name="c"), "rep": tc(name="r")}
+    monkeypatch.setattr(backfill, "evaluator_config", lambda a, ref: ({"name": ref}, configs[ref]))
+    units = [f"s{i}" for i in range(20)]
+    labels = {"my_eval": {u: "good" for u in units},
+              "c": {u: ("bad" if i < 6 else "good") for i, u in enumerate(units)},
+              "r": {u: ("bad" if i < 6 else "good") for i, u in enumerate(units)}}
+    fake_labels(monkeypatch, labels)
+    backfill.cmd_calibrate(args(prod_evaluator="prod", cand_evaluator="cand", repeat_evaluator="rep"))
+    out = capsys.readouterr().out
+    assert "Noise floor (candidate vs repeat copy `r`): 20/20" in out
+    assert "30% below the noise floor" in out
+    labels["r"] = {u: ("bad" if i < 5 else "good") for i, u in enumerate(units)}
+    labels["c"] = {u: ("bad" if i < 1 else "good") for i, u in enumerate(units)}
+    backfill.cmd_calibrate(args(prod_evaluator="prod", cand_evaluator="cand", repeat_evaluator="rep"))
+    assert "within run-to-run noise" in capsys.readouterr().out
+
+
+def test_calibrate_refuses_a_repeat_that_is_not_a_copy(monkeypatch):
+    configs = {"prod": tc(), "cand": tc(name="c"), "rep": tc(template="Other", name="r")}
+    monkeypatch.setattr(backfill, "evaluator_config", lambda a, ref: ({"name": ref}, configs[ref]))
+    fake_labels(monkeypatch, {"my_eval": {}, "c": {}, "r": {}})
+    with pytest.raises(SystemExit, match="noise floor needs two identical copies"):
+        backfill.cmd_calibrate(args(prod_evaluator="prod", cand_evaluator="cand", repeat_evaluator="rep"))
+
+
+def test_disagreements_with_different_turn_counts_are_set_aside(monkeypatch, capsys):
+    configs = {"prod": tc(), "cand": tc(name="c")}
+    monkeypatch.setattr(backfill, "evaluator_config", lambda a, ref: ({"name": ref}, configs[ref]))
+    labels = {"my_eval": {"s1": "bad", "s2": "bad", "s3": "good"}, "c": {"s1": "good", "s2": "good", "s3": "good"}}
+    expl = {"my_eval": {"s1": "LAST_TURN_CHECK: Turn 2", "s2": "LAST_TURN_CHECK: Turn 5"},
+            "c": {"s1": "LAST_TURN_CHECK: Turn 5", "s2": "LAST_TURN_CHECK: Turn 5"}}
+    fake_labels(monkeypatch, labels, expl)
+    backfill.cmd_calibrate(args(prod_evaluator="prod", cand_evaluator="cand"))
+    out = capsys.readouterr().out
+    assert "Label agreement where both scored: 1/3" in out
+    assert "1 disagreement(s) saw different turn counts" in out and "Excluding them: 1/2" in out
+
+
+@pytest.mark.parametrize("model, alias", [
+    ("gpt-4o", True), ("claude-sonnet-4-5", True), ("gpt-4o-2024-08-06", False),
+    ("claude-3-5-sonnet-20241022", False), ("gemini-1.5-pro-002", False), (None, False),
+])
+def test_alias_detection(model, alias):
+    assert backfill.looks_like_alias(model) is alias
+
+
+def test_copy_evaluator_writes_a_manifest(monkeypatch, tmp_path, capsys):
+    src = tc(invocation_parameters={"temperature": 0}, ai_integration_id="int-1")
+    src["use_structured_output"] = True
+    got = tc(name="my_eval_backfill", invocation_parameters={})
+    monkeypatch.setattr(backfill, "evaluator_config", lambda a, ref: (
+        ({"name": "prod", "id": "ev-1", "version": {"id": "v-1"}}, src) if ref == "prod" else ({"id": ref}, got)))
+    monkeypatch.setattr(backfill, "run_ax", lambda ax, argv, **kw: {"id": "ev-2", "name": "prod-backfill"})
+    path = tmp_path / "m.json"
+    backfill.cmd_copy(argparse.Namespace(ax="ax", space="S", source="prod", name="prod-backfill",
+                                         template_name="my_eval_backfill", execute=True, manifest=str(path)))
+    m = json.loads(path.read_text())
+    assert m["model_name"] == "gpt-4o" and m["model_is_alias"]
+    assert m["use_structured_output"] == {"source": True, "candidate": None}
+    assert m["candidate"]["evaluator_id"] == "ev-2" and len(m["template_sha256"]) == 64
+    assert "temperature" in m["parameter_note"]
+    assert "looks like an alias" in capsys.readouterr().out

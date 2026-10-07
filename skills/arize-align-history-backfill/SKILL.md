@@ -19,7 +19,9 @@ This skill scores those sessions so the planner can sample from them.
 
 The scoring runs as an evaluation **task on the project**, not as an experiment. Arize builds each session's input the same way a production evaluator sees it, and the task applies the admission filter itself. A dataset and experiment would need a hand-built transcript and a rebuilt filter, and neither would match production exactly.
 
-The backfilled labels are used **only to choose records**. Humans label those records blind, so the backfilled labels never become ground truth.
+The backfilled labels are used **only to choose records**. Humans label those records blind, so the backfilled labels never become ground truth. That protects the labels, not the metrics: agreement measured on records chosen this way needs each record's selection rate, which **arize-align-queue-builder** records in its plan.
+
+The research behind each step, and which steps are Arize heuristics, is in [references/research.md](references/research.md).
 
 ---
 
@@ -108,13 +110,15 @@ Show the user:
 - the window, the estimated number of admitted sessions, and the judge calls that implies
 - copy mode: the candidate evaluator name and output column, from the dry run `backfill.py copy-evaluator --space SPACE --source PROD_EVALUATOR --name PROD_EVALUATOR-backfill --template-name TEMPLATE_backfill`. Report any setting the dry run says the CLI can't copy.
 - the task (non-continuous, same project, the single-string filter) and the **check window**: about one day, costing about that day's admitted sessions. In copy mode, production must already have scored it.
+- copy mode: a **repeat copy** (a second identical candidate, e.g. `TEMPLATE_backfill_repeat`, with its own task) run on the check window only, to measure the run-to-run noise floor. It doubles the check day's cost, and nothing else.
+- if the window reaches more than 14 days back: Arize's online-evals docs say evals apply to spans up to 14 days old. The test slice in Phase 5 shows whether older spans accept results.
 - what becomes visible: a new task in the space, a new evaluator in copy mode, and the evaluator's output column on the project's sessions
 
 Ask for approval to create the task (and the candidate copy, in copy mode) and to run the check. **Do not create anything in the same turn.**
 
 ## Phase 3: Create the task
 
-1. **Copy mode only:** create the candidate with `backfill.py copy-evaluator ... --execute`. This copies the production version verbatim: template, choices, model, integration, granularity, explanations and function calling. It then reads the result back and reports any field that differs.
+1. **Copy mode only:** create the candidate with `backfill.py copy-evaluator ... --execute`. This copies the production version verbatim: template, choices, model, integration, granularity, explanations and function calling. It then reads the result back, reports any field that differs, and writes `TEMPLATE_NAME.manifest.json` with the exact model, parameters and output mode. Keep the manifest with the queue plan. If it warns that the model name looks like an alias, check that it still points at the snapshot production used; if production's snapshot is gone, treat the copy as a new evaluator (new-evaluator mode). Create the repeat copy the same way, with `--name ...-backfill-repeat --template-name TEMPLATE_backfill_repeat`.
 2. **Create the task:**
 
    ```bash
@@ -143,10 +147,15 @@ After the first run, results reach the spans before the filter index sees the ne
 ```bash
 python3 SKILL_ROOT/scripts/backfill.py calibrate --space SPACE --project PROJECT \
   --start-time CHECK_START --end-time CHECK_END --root-filter "ROOT_SPAN_FILTER" \
-  --prod-evaluator PROD_EVALUATOR --cand-evaluator CANDIDATE
+  --prod-evaluator PROD_EVALUATOR --cand-evaluator CANDIDATE --repeat-evaluator REPEAT_CANDIDATE
 ```
 
-It first confirms the candidate is a copy of the production evaluator, meaning the same template, label choices and granularity, and exits otherwise. Then it compares which sessions each scored and how their labels agree. **Admission must match**: by default, at most 5% of sessions scored by only one side. Label agreement is reported separately. It mostly reflects run-to-run noise in the judge, plus any setting the CLI couldn't copy. A gap is acceptable, because backfilled labels only choose records, but give the number when presenting the queue plan.
+It first confirms the candidate is a copy of the production evaluator, meaning the same template, label choices and granularity, and exits otherwise. Then it compares which sessions each scored and how their labels agree. **Admission must match**: by default, at most 5% of sessions scored by only one side.
+
+Label agreement is reported separately, as a count and as Cohen's κ, with the label mix on each side:
+- **Noise floor.** With `--repeat-evaluator`, it compares the candidate with the repeat copy on the same sessions. Run-to-run noise differs a lot by task and model, so this measures it instead of assuming it. If production agreement sits more than `--noise-margin` (default 5 points) below the floor, the gap is more than noise: check settings that didn't copy, the model version and the output mode before backfilling. Without a repeat copy, the report says the gap can't be attributed to noise.
+- **Different turn counts.** For templates that report `LAST_TURN_CHECK`, disagreements where the two sides saw different turn counts are counted separately: one side scored the session before it ended. Agreement is also shown without them.
+- A gap that remains is acceptable, because backfilled labels only choose records, but give the numbers when presenting the queue plan. After the check, delete the repeat copy's task (`ax tasks delete`) once the user confirms.
 
 **New-evaluator mode: `check-admission`.**
 
@@ -203,7 +212,7 @@ Present the admission check and test results, plus the remaining cost, and **ask
      --exclude-queue EXISTING_QUEUES
    ```
 
-   In copy mode, `TEMPLATE` is the candidate's `*_backfill` name; add `--labels SHORT_LABEL --per-label N` to fill only the shortfall. In new-evaluator mode, it is the evaluator's own template name, and the planner samples every label.
+   In copy mode, `TEMPLATE` is the candidate's `*_backfill` name; add `--labels SHORT_LABEL --per-label N` to fill only the shortfall. In new-evaluator mode, it is the evaluator's own template name, and the planner samples every label. Backfill only sessions that have ended: leave out the most recent hours of a window that runs up to now, so no session is scored mid-conversation.
 3. **Clean up.** The task is non-continuous, so it does not run again on its own. Keep the evaluator, its column, and in copy mode the candidate copy, because the queue's records were selected from them. Delete them (`ax tasks delete`, `ax evaluators delete`) only if the user asks, after confirming. Deletion can't be undone.
 
 ---
