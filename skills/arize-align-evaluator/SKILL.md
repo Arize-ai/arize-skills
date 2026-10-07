@@ -122,7 +122,7 @@ The two passing tiers exist because 10 gold records can start an alignment but c
 
 If the gold-count or class gates fail, say so before reading any sessions: no amount of review or adjudication adds records or classes. Offer **arize-align-queue-builder**, and review the existing queue only for failure patterns.
 
-The gates cover gold count, classes, exclusions, join coverage, stored-output coverage, annotator agreement and open disputes. Their thresholds, why each exists, how κ and AC1 are computed and how to adjudicate are in [references/gates-and-agreement.md](references/gates-and-agreement.md). The research behind each default, and which defaults are Arize heuristics, is in [references/research.md](references/research.md).
+The gates cover gold count, classes, exclusions, join coverage, stored-output coverage, annotator agreement and open disputes. Their thresholds, why each exists, how κ and AC1 are computed and how to adjudicate are in [references/gates-and-agreement.md](references/gates-and-agreement.md).
 
 ## Phase 4: Check fit, then present the report and STOP
 

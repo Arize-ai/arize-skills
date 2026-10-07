@@ -15,8 +15,6 @@ If the evaluator has its own `not_applicable` class, also check **applicability 
 
 ## Gates
 
-Every default here is sourced or labeled as an Arize heuristic in [Where the defaults come from](research.md).
-
 | Gate | Default | Why |
 |---|---|---|
 | Gold records | ≥ 10 | Below 10, one record moves accuracy by more than 10 points. Even at 10, the 95% interval on 9/10 is about 60–98%, so this is a floor for starting, not for a claim. |

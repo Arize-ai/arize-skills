@@ -38,7 +38,7 @@ GRANULARITY_PREFIX = {"SPAN": "eval", "TRACE": "trace_eval", "SESSION": "session
 DEFAULT_NOT_APPLICABLE = ["not_applicable"]
 DEFAULT_UNSCORABLE = ["cannot_judge", "unclear"]
 
-# Gate defaults; see references/research.md for where each comes from. Clearing every gate makes the
+# Gate defaults. Clearing every gate makes the
 # queue DIRECTIONAL: enough to start aligning, not to claim alignment. VALIDATED also needs the class
 # sizes below, because at 10 gold records a 90% agreement has a 95% interval of about 60-98%.
 # A single annotator is allowed; agreement is gated only when records overlap.
