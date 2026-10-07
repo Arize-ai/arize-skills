@@ -21,8 +21,6 @@ The scoring runs as an evaluation **task on the project**, not as an experiment.
 
 The backfilled labels are used **only to choose records**. Humans label those records blind, so the backfilled labels never become ground truth. That protects the labels, not the metrics: agreement measured on records chosen this way needs each record's selection rate, which **arize-align-queue-builder** records in its plan.
 
-The research behind each step, and which steps are Arize heuristics, is in [references/research.md](references/research.md).
-
 ---
 
 ## Hard rules
