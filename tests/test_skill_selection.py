@@ -199,6 +199,22 @@ SPECIFIC_PROMPTS = [
         ["arize-evaluator"],
         ["specific", "evaluator"],
     ),
+    # arize-align-evaluator
+    (
+        "Compare my LLM judge's labels against the human labels in my annotation queue",
+        ["arize-align-evaluator"],
+        ["specific", "align-evaluator"],
+    ),
+    (
+        "Align my hallucination evaluator with our human ground truth and measure agreement",
+        ["arize-align-evaluator"],
+        ["specific", "align-evaluator"],
+    ),
+    (
+        "Check inter-annotator agreement on my labeling queue before calibrating the evaluator",
+        ["arize-align-evaluator"],
+        ["specific", "align-evaluator"],
+    ),
     # arize-annotation
     (
         "Create an annotation config for correctness labels",
@@ -410,6 +426,17 @@ VAGUE_PROMPTS = [
         "Can you judge whether my model outputs are correct?",
         ["arize-evaluator"],
         ["vague", "evaluator"],
+    ),
+    # Should route to align-evaluator
+    (
+        "My eval keeps disagreeing with what our reviewers said",
+        ["arize-align-evaluator"],
+        ["vague", "align-evaluator"],
+    ),
+    (
+        "Is my judge actually trustworthy compared to human labels?",
+        ["arize-align-evaluator"],
+        ["vague", "align-evaluator"],
     ),
     # Should route to annotation
     (
