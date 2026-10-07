@@ -215,6 +215,17 @@ SPECIFIC_PROMPTS = [
         ["arize-annotation"],
         ["specific", "annotation"],
     ),
+    # arize-align-queue-builder
+    (
+        "Build a labeling queue so I can get enough human labels to align my dashboard_metric_formula evaluator",
+        ["arize-align-queue-builder"],
+        ["specific", "align-queue-builder"],
+    ),
+    (
+        "Sample balanced sessions across my evaluator's labels into a new annotation queue for a gold set",
+        ["arize-align-queue-builder"],
+        ["specific", "align-queue-builder"],
+    ),
     # arize-ai-provider-integration
     (
         "Register my OpenAI API key as an Arize AI integration",
@@ -421,6 +432,12 @@ VAGUE_PROMPTS = [
         "Set up a labeling schema so my team can rate responses",
         ["arize-annotation"],
         ["vague", "annotation"],
+    ),
+    # Should route to align-queue-builder
+    (
+        "My last labeling queue was mostly not-applicable records, help me build a better one for my eval",
+        ["arize-align-queue-builder"],
+        ["vague", "align-queue-builder"],
     ),
     # Should route to ai-provider-integration
     (
