@@ -261,6 +261,8 @@ Examples:
         "ARIZE_SPACE": arize_space,
         "ARIZE_DEFAULT_PROJECT": os.environ.get("TEST_PROJECT_NAME", "skill-tests"),
         "PATH": os.environ.get("PATH", "") + ":" + os.path.expanduser("~/.local/bin"),
+        # Keep HOME so ax profiles / Claude Code config resolve when env is replaced.
+        "HOME": os.environ.get("HOME", ""),
     }
 
     # Workspace: use the provided path or a temporary directory
