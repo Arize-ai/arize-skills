@@ -82,12 +82,16 @@ python3 SKILL_ROOT/scripts/plan_queue.py \
 - `--compare-eval` is the `template_config.name` of another copy of the evaluator. Disagreements between the copies are picked first, up to 40% of each label's quota.
 - `--na-probe-eval` is the template name of another evaluator that grades the same sessions, for example the version this one replaces. It adds `--na-probe-count` records (default 5) that this evaluator called not applicable but the other graded decisively. Use it when a label comes up empty because the new scope rule moved those sessions to not applicable. If humans label the probes decisively, the scope rule is too strict. The other evaluator only chooses records; labelers stay blind to it.
 - `--expected-exclusion` is the share of records you expect humans to mark not applicable or cannot judge. The default is 0.30. If an earlier queue for this evaluator exists, use its actual excluded rate from the **arize-align-evaluator** report.
+- `--mode` sets the size. `directional` (default) aims for about 10 gold records, enough to start aligning. `validation` aims for 30 per label and 50 in all, enough for the evaluator's VALIDATED verdict. Ask the user which they need; validation queues are several times larger.
 
 How it picks (details and reasoning in [references/sampling.md](references/sampling.md)):
 1. For each evaluator label, it exports candidates whose stored label is that label, drawn evenly across the time window.
 2. It deduplicates to one span per unit and drops units already in excluded queues.
 3. It sizes each decisive label's quota so the queue should clear the gates after exclusions (5 per label at the defaults; formula in [Sizing](references/sampling.md#sizing)), and adds 2 records with a stored `not_applicable` label to test applicability.
 4. Within each label, it spreads picks across entry points (span names), and puts provider disagreements first.
+5. It counts each stratum's production units and records every record's stratum and selection rate, so the evaluator report can weight results back to production ([Strata and weights](references/sampling.md#strata-and-weights)).
+
+The research behind each choice, and which choices are Arize heuristics, is in [references/research.md](references/research.md).
 
 It writes `plan.md`, `plan.json`, `config_values.json` and the record sources. Arize accepts at most 7 days per record source and at most 2 sources per call, so the script splits the records into `record_sources.create.json` (for `create`) and `record_sources.add_N.json` (for `add-records`). `record_sources.json` holds all of them. Periods where the evaluator's column has no values are skipped and listed in `plan.md`. The script retries rate limits itself; run one evaluator at a time rather than several in parallel.
 
@@ -102,7 +106,8 @@ Show the user:
 - annotators and assignment. A single annotator is fine. With two or more, use `ALL` if they want agreement measured.
 - the queue name, for example `<evaluator> alignment gold (YYYY-MM-DD)`, and the config name from `plan.md` (Arize caps it at 40 characters)
 - when the records came from a backfill, the column **arize-align-evaluator** will compare against: the backfill copy's `*_backfill` column, not the live one, because the live task never scored these sessions
-- the caveats: records are stratified by the evaluator's own labels, and labelers must stay blind to them
+- the sizing mode and the expected gold per label; at the default size, say that the queue can start an alignment but not validate one
+- the caveats: records are stratified by the evaluator's own labels, so agreement within a label is its precision; recall and production rates need `report --plan plan.json`; labelers must stay blind to the labels
 
 Then ask the user to approve or adjust. **Do not create anything in the same turn.**
 
@@ -135,10 +140,12 @@ Then ask the user to approve or adjust. **Do not create anything in the same tur
 
 After annotators have labeled about a third of the records, run the **arize-align-evaluator** report on the queue. Check the bucket counts against the plan:
 - **Excluded rate well above expected:** the admission population is wider than the evaluator's scope. Raise `--expected-exclusion`, or tighten `--root-filter`, before topping up.
+Top up only on counts: a label short of gold records, or exclusions above plan. Never top up because agreement so far looks low or high; that biases the result.
+
 - **A label is short of gold records:** run the script again with `--labels THAT_LABEL --per-label N --exclude-queue THIS_QUEUE`, and add each new `record_sources.create.json` / `record_sources.add_N.json` file with `ax annotation-queues add-records QUEUE --space SPACE --record-sources FILE`. That still requires the user's approval.
 - **Annotators disagree:** clarify the label definitions in the instructions with `ax annotation-queues update --instructions` before more labeling.
 
-When labeling is complete, hand off to **arize-align-evaluator**. Name the column it should compare against (the `*_backfill` column when the records came from a backfill).
+When labeling is complete, hand off to **arize-align-evaluator**. Name the column it should compare against (the `*_backfill` column when the records came from a backfill), and pass it `plan.json` (`report --plan`) for production-weighted estimates. For a topped-up queue, merge the strata of every plan run into one `plan.json` first.
 
 ---
 

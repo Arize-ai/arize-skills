@@ -13,6 +13,10 @@ finished queue should clear the arize-align-evaluator gates. Writes:
                        `ax annotation-queues create`, the rest to `add-records`
   config_values.json   Proposed categorical label values for the annotation config
 
+plan.json also records each sampling stratum (stored label, split into provider agree/disagree
+when --compare-eval is set) with its production unit count and selection rate, and each record's
+stratum, so arize-align-evaluator can weight results back to production (`report --plan`).
+
 Standard library only (Python 3.9+). Creates nothing in Arize.
 
 Example:
@@ -35,9 +39,10 @@ from datetime import datetime, timedelta, timezone
 GRANULARITY_PREFIX = {"SPAN": "eval", "TRACE": "trace_eval", "SESSION": "session_eval"}
 UNSCORABLE = ["cannot_judge"]
 
-# Keep in step with the arize-align-evaluator gates.
-TARGET_GOLD = 10
-MIN_PER_CLASS = 3
+# Keep in step with the arize-align-evaluator gates. "directional" sizes for the DIRECTIONAL verdict
+# (enough to start aligning); "validation" for VALIDATED (enough to support an agreement claim).
+SIZING = {"directional": {"target_gold": 10, "min_per_class": 3},
+          "validation": {"target_gold": 50, "min_per_class": 30}}
 EXPECTED_EXCLUSION = 0.30
 
 
@@ -106,6 +111,31 @@ def queue_units(ax, space, queue):
             return seen
 
 
+def count_units(ax, project_id, space, filt, lo, hi, unit_key, min_span=timedelta(minutes=30)):
+    """Distinct units matching filt in [lo, hi), splitting any period that fills an export page.
+    Returns (count, lower_bound). A period where the eval column has no values counts as empty."""
+    def fetch(lo, hi):
+        try:
+            page = run_ax(ax, ["spans", "export", project_id, "--space", space, "--filter", filt,
+                               "--start-time", lo.isoformat(), "--end-time", hi.isoformat(),
+                               "-l", str(PAGE), "--stdout"], allow_empty=True)
+        except ColumnMissing:
+            return set(), False
+        if len(page) < PAGE or hi - lo <= min_span:
+            return {unit_of(s, unit_key) for s in page} - {None}, len(page) >= PAGE
+        mid = lo + (hi - lo) / 2
+        (a, t1), (b, t2) = fetch(lo, mid), fetch(mid, hi)
+        return a | b, t1 or t2
+    found, capped = fetch(lo, hi)
+    return len(found), capped
+
+
+def unit_of(span, unit_key):
+    if unit_key == "session_id":
+        return (span.get("attributes") or {}).get("session.id")
+    return (span.get("context") or {}).get(unit_key)
+
+
 def spread_pick(items, n, rng):
     """Pick n items, round-robin across span names so no one entry point dominates."""
     groups = defaultdict(list)
@@ -139,8 +169,13 @@ def main():
                    help="Split the window into this many time slices and draw the pool evenly from each")
     p.add_argument("--max-disagreement-share", type=float, default=0.4,
                    help="Cap on the share of each label's picks taken from provider disagreements")
-    p.add_argument("--target-gold", type=int, default=TARGET_GOLD)
-    p.add_argument("--min-per-class", type=int, default=MIN_PER_CLASS)
+    p.add_argument("--mode", choices=sorted(SIZING), default="directional",
+                   help="directional: size for the evaluator's DIRECTIONAL verdict (start aligning); "
+                        "validation: size for VALIDATED (support an agreement claim)")
+    p.add_argument("--target-gold", type=int, help="Override the mode's target gold records")
+    p.add_argument("--min-per-class", type=int, help="Override the mode's minimum gold records per label")
+    p.add_argument("--skip-population", action="store_true",
+                   help="Don't count each stratum's production units (no production-weighted estimates later)")
     p.add_argument("--expected-exclusion", type=float, default=EXPECTED_EXCLUSION,
                    help="Expected share of records humans will mark not applicable or cannot judge")
     p.add_argument("--per-label", type=int, help="Override the computed per-label quota")
@@ -157,6 +192,8 @@ def main():
     p.add_argument("--seed", type=int, default=0)
     p.add_argument("--ax", default="ax")
     a = p.parse_args()
+    a.target_gold = a.target_gold or SIZING[a.mode]["target_gold"]
+    a.min_per_class = a.min_per_class or SIZING[a.mode]["min_per_class"]
     rng = random.Random(a.seed)
     os.makedirs(a.out_dir, exist_ok=True)
 
@@ -237,6 +274,7 @@ def main():
     def take(chosen, tag, label, quota, pool, dup, **extra):
         for c in chosen:
             c["sampled_as"] = tag(c)
+            c.setdefault("stratum", f"probe:{label}")
             used.add(str(c[unit_key]))
         picks.extend(chosen)
         summary.append({"label": label, "pool_units": pool, "quota": quota, "picked": len(chosen),
@@ -244,7 +282,7 @@ def main():
                         "span_names": len({c["span_name"] for c in chosen}), "skipped_dupes_or_excluded": dup,
                         "shortfall": max(0, quota - len(chosen)), **extra})
 
-    picks, summary, used = [], [], set(excluded_units)
+    picks, summary, strata, used = [], [], [], set(excluded_units)
     decisive_picked = 0
     for label in wanted:
         items, dup = candidates(f"{column} = {quote(label)}", label)
@@ -259,7 +297,22 @@ def main():
             # Not enough other candidates; fall back to the remaining disagreements.
             ids = {c["span_id"] for c in chosen}
             chosen += spread_pick([d for d in disagree if d["span_id"] not in ids], quota - len(chosen), rng)
+        # Strata: the stored label, split by provider agreement when a comparison copy is given. Disagreements
+        # are oversampled, so they are their own stratum and get their own weight.
+        subgroups = {"disagree": disagree, "agree": rest} if a.compare_eval else {"all": items}
+        for c in chosen:
+            c["stratum"] = label if not a.compare_eval else f"{label}|{'disagree' if c['disagree'] else 'agree'}"
         take(chosen, lambda c, l=label: l, label, quota, len(items), dup)
+        population, lower = (None, False) if a.skip_population else count_units(
+            a.ax, project["id"], a.space, with_root(f"{column} = {quote(label)}"), start, end, unit_key)
+        for sub, group in subgroups.items():
+            name = label if sub == "all" else f"{label}|{sub}"
+            picked = sum(1 for c in chosen if c["stratum"] == name)
+            share = len(group) / len(items) if items else 0
+            pop = population if sub == "all" or population is None else round(population * share)
+            strata.append({"stratum": name, "label": label, "subgroup": sub, "population": pop,
+                           "population_lower_bound": lower, "population_estimated": sub != "all",
+                           "picked": picked, "selection_rate": picked / pop if pop else None})
         if label not in na:
             decisive_picked += len(chosen)
 
@@ -309,7 +362,8 @@ def main():
     with open(os.path.join(a.out_dir, "plan.json"), "w") as f:
         json.dump({"evaluator": ev.get("name"), "evaluator_id": ev.get("id"), "version_id": (ev.get("version") or {}).get("id"),
                    "column": column, "granularity": gran, "project_id": project["id"], "per_label_quota": per,
-                   "config_name": config_name, "summary": summary, "records": picks}, f, indent=1)
+                   "config_name": config_name, "mode": a.mode, "summary": summary, "strata": strata,
+                   "records": picks}, f, indent=1)
     for old in os.listdir(a.out_dir):
         if old.startswith("record_sources."):
             os.remove(os.path.join(a.out_dir, old))
@@ -330,13 +384,24 @@ def main():
         f"- Evaluator version `{(ev.get('version') or {}).get('id')}`, granularity `{gran}`, stored column `{column}`",
         f"- Project `{project.get('name')}`, {window}" + (f", root filter `{a.root_filter}`" if a.root_filter else ""),
         f"- One record per {unit_key.replace('_id', '')}; {excluded}",
-        f"- Per-label quota {per}: max({a.min_per_class}, {a.target_gold}/{k}) / (1 − {a.expected_exclusion:.0%} expected exclusions)\n",
+        f"- Sizing mode `{a.mode}`: per-label quota {per} = max({a.min_per_class}, {a.target_gold}/{k}) / "
+        f"(1 − {a.expected_exclusion:.0%} expected exclusions), about {per * (1 - a.expected_exclusion):.1f} gold "
+        "records per label" + (" (enough to start aligning, not to validate; use `--mode validation` for that)"
+                                if a.mode == "directional" else "") + "\n",
         "| Stored label | Candidates | Picked | Provider disagreements | Distinct entry points | Shortfall |",
         "|---|---:|---:|---:|---:|---:|",
     ]
     for s in summary:
         out.append(f"| `{s['label']}` | {s['pool_units']} | {s['picked']} | {s['provider_disagreements']} | "
                    f"{s['span_names']} | {s['shortfall'] or ''} |")
+    if strata and not a.skip_population:
+        out += ["", "Strata, for weighting results back to production (`report --plan plan.json`):\n",
+                "| Stratum | Production units | Picked | Selection rate |", "|---|---:|---:|---:|"]
+        for st in strata:
+            pop = "—" if st["population"] is None else (f"{st['population']}{'+' if st['population_lower_bound'] else ''}"
+                                                        f"{' (est.)' if st['population_estimated'] else ''}")
+            rate = "—" if not st["selection_rate"] else f"{st['selection_rate']:.1%}"
+            out.append(f"| `{st['stratum']}` | {pop} | {st['picked']} | {rate} |")
     out += [
         "",
         f"**Total records: {len(picks)}.** If humans exclude {a.expected_exclusion:.0%} of the decisive picks, "
@@ -344,7 +409,8 @@ def main():
         f"Proposed annotation config: `{config_name}` with values {config_values}\n",
         "Caveats:",
         "- Records were stratified by the evaluator's own stored label, so the sample over-represents rare labels "
-        "relative to production. Report agreement per label, not as one production-wide rate.",
+        "relative to production. Agreement within a stored label is that label's precision, not recall; pass "
+        "`--plan plan.json` to the evaluator report for production-weighted recall and agreement.",
         "- Stored labels choose which records are included; labelers must not see them (say so in the queue instructions).",
     ]
     if probe:

@@ -8,6 +8,8 @@
 | `not_applicable` (if the evaluator does not already have it) | Lets humans flag records outside the evaluator's scope instead of forcing a grade |
 | `cannot_judge` | Lets humans flag records where the evidence is missing or truncated. Excluded from agreement, never mapped onto an evaluator label. |
 
+An abstain option such as `cannot_judge` improves the accuracy of the labels people do give, and annotators who see a model's answer tend to agree with it, so the instructions keep labelers blind. Sources are in [Where the defaults come from](research.md).
+
 Leave out:
 - **Labels the evaluator cannot output.** Every human use of one becomes an off-rubric record that can't be compared.
 - **Near-duplicates of `cannot_judge`** such as `unclear`. Two "I can't tell" labels split the same records and add nothing.
@@ -48,4 +50,5 @@ If two labels seem to fit, <tie-break rule from the template>.
 - The instructions name the unit, and for session evaluators, say to label the session.
 - The blindness line is present.
 - The length is under 5000 characters: `wc -c instructions.txt`.
+- The instructions carry a version line (for example `Instructions v2, 2026-10-06`). Change it whenever a definition changes, so labels made under older definitions can be found.
 - Spot-check 2–3 planned records with **arize-trace**: open the session and confirm an annotator could reach a label from what is visible. If not, the unit or the instructions need adjusting before creation.

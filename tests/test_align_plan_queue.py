@@ -42,6 +42,7 @@ class FakeAx:
         self.queues = queues or {}
         self.missing_before = missing_before
         self.filters = []
+        self.limits = []
 
     def __call__(self, ax, args, allow_empty=False, retries=5):
         if args[:2] == ["evaluators", "get"]:
@@ -64,6 +65,7 @@ class FakeAx:
                 raise plan.ColumnMissing("session_eval.my_eval.label")
             label = re.search(r"my_eval\.label = '([^']*)'", filt).group(1)
             limit = int(args[args.index("-l") + 1])
+            self.limits.append(limit)
             hits = [s for s in self.spans if lo <= datetime.fromisoformat(s["start_time"]) < hi
                     and s["evaluations"][0]["label"] == label]
             if "v1_eval.label IS NOT NULL" in filt:
@@ -81,12 +83,12 @@ def run(monkeypatch, tmp_path, fake, *extra):
     return json.loads((tmp_path / "plan.json").read_text())
 
 
-def plentiful(per_label=20, labels=("good", "bad", "wrong", "not_applicable")):
+def plentiful(per_label=20, labels=("good", "bad", "wrong", "not_applicable"), hours=30):
     """per_label spans for each label, spread over the window at distinct times."""
     out = []
     for li, label in enumerate(labels):
         for i in range(per_label):
-            t = START + timedelta(hours=i * 30 + li)
+            t = START + timedelta(hours=i * hours + li)
             out.append(span(i, label, t, name="ROUTER-CHAT" if i % 2 else "ROUTER-SEARCH"))
     return out
 
@@ -156,7 +158,7 @@ def test_root_filter_is_parenthesized_before_the_label_filter(monkeypatch, tmp_p
 
 def test_window_is_drawn_from_every_slice(monkeypatch, tmp_path):
     fake = FakeAx(plentiful())
-    run(monkeypatch, tmp_path, fake)
+    run(monkeypatch, tmp_path, fake, "--skip-population")
     assert len(fake.filters) == 4 * 4  # 4 labels x 4 slices
 
 
@@ -255,3 +257,59 @@ def test_run_ax_maps_missing_column_and_retries_rate_limits(monkeypatch):
     monkeypatch.setattr(plan.time, "sleep", lambda _: None)
     with pytest.raises(plan.ColumnMissing):
         plan.run_ax("ax", ["spans", "export"])
+
+
+# ---------------------------------------------------------------------------
+# strata and sizing modes
+# ---------------------------------------------------------------------------
+
+def test_strata_record_production_counts_and_selection_rates(monkeypatch, tmp_path):
+    p = run(monkeypatch, tmp_path, FakeAx(plentiful()))
+    strata = {s["stratum"]: s for s in p["strata"]}
+    assert strata["good"]["population"] == 20 and strata["good"]["picked"] == 5
+    assert strata["good"]["selection_rate"] == 0.25
+    assert strata["not_applicable"]["picked"] == 2
+    assert all(r["stratum"] in strata for r in p["records"])
+    assert "Strata, for weighting results back to production" in (tmp_path / "plan.md").read_text()
+
+
+def test_provider_disagreements_are_their_own_stratum(monkeypatch, tmp_path):
+    spans = []
+    for label in ("good", "bad", "wrong", "not_applicable"):
+        for i in range(20):
+            t = START + timedelta(hours=i * 30, minutes=len(label))
+            spans.append(span(i, label, t, compare="bad" if (label == "good" and i < 5) else label))
+    p = run(monkeypatch, tmp_path, FakeAx(spans), "--compare-eval", "my_eval_anthropic")
+    strata = {s["stratum"]: s for s in p["strata"]}
+    assert strata["good|disagree"]["population"] == 5 and strata["good|disagree"]["population_estimated"]
+    assert strata["good|agree"]["population"] == 15
+    assert strata["good|disagree"]["picked"] == 2 and strata["good|agree"]["picked"] == 3
+    assert {r["stratum"] for r in by_label(p)["good"]} == {"good|disagree", "good|agree"}
+
+
+def test_population_count_splits_periods_that_fill_a_page(monkeypatch, tmp_path):
+    spans = plentiful(per_label=6)
+    spans += [span(1000 + i, "good", START + timedelta(minutes=30 * i + 1)) for i in range(1200)]
+    fake = FakeAx(spans)
+    p = run(monkeypatch, tmp_path, fake)
+    good = next(s for s in p["strata"] if s["stratum"] == "good")
+    assert good["population"] == 1206 and not good["population_lower_bound"]
+    assert fake.limits.count(plan.PAGE) > 4  # the count bisected at least once
+
+
+def test_validation_mode_sizes_for_the_validated_tier(monkeypatch, tmp_path):
+    p = run(monkeypatch, tmp_path, FakeAx(plentiful(per_label=60, hours=10)), "--mode", "validation", "--pool", "400")
+    # ceil(max(30, 50/3) / 0.7) = 43 per decisive label
+    assert p["per_label_quota"] == 43 and p["mode"] == "validation"
+    assert len(by_label(p)["good"]) == 43
+    assert "about 30.1 gold records per label" in (tmp_path / "plan.md").read_text()
+
+
+def test_probes_are_kept_out_of_weighting_strata(monkeypatch, tmp_path):
+    spans = plentiful()
+    for i, s in enumerate(x for x in spans if x["evaluations"][0]["label"] == "not_applicable"):
+        s["evaluations"].append({"name": "v1_eval", "label": "wrong"})
+    p = run(monkeypatch, tmp_path, FakeAx(spans), "--na-probe-eval", "v1_eval", "--na-probe-count", "3")
+    probes = [r for r in p["records"] if "probe" in r["sampled_as"]]
+    assert {r["stratum"] for r in probes} == {"probe:not_applicable probe vs v1_eval"}
+    assert not any(s["stratum"].startswith("probe:") for s in p["strata"])
