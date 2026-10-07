@@ -91,8 +91,6 @@ How it picks (details and reasoning in [references/sampling.md](references/sampl
 4. Within each label, it spreads picks across entry points (span names), and puts provider disagreements first.
 5. It counts each stratum's production units and records every record's stratum and selection rate, so the evaluator report can weight results back to production ([Strata and weights](references/sampling.md#strata-and-weights)).
 
-The research behind each choice, and which choices are Arize heuristics, is in [references/research.md](references/research.md).
-
 It writes `plan.md`, `plan.json`, `config_values.json` and the record sources. Arize accepts at most 7 days per record source and at most 2 sources per call, so the script splits the records into `record_sources.create.json` (for `create`) and `record_sources.add_N.json` (for `add-records`). `record_sources.json` holds all of them. Periods where the evaluator's column has no values are skipped and listed in `plan.md`. The script retries rate limits itself; run one evaluator at a time rather than several in parallel.
 
 If a label is short of candidates, widen `--days` first. If the continuous task hasn't been running long enough to have them, use **arize-align-history-backfill** (copy mode) to score older sessions with a candidate copy of the evaluator, then re-plan with `--eval-name` and `--start-time`/`--end-time` pointing at the backfilled column. Low-volume topics are cheap to backfill further back. A label the evaluator almost never gives (none in hundreds of sessions) usually won't come from more backfill; use `--na-probe-eval` instead. Otherwise accept the shortfall and say so. Don't fill the gap with records from other labels.

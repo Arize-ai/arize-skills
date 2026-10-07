@@ -8,7 +8,7 @@
 | `not_applicable` (if the evaluator does not already have it) | Lets humans flag records outside the evaluator's scope instead of forcing a grade |
 | `cannot_judge` | Lets humans flag records where the evidence is missing or truncated. Excluded from agreement, never mapped onto an evaluator label. |
 
-An abstain option such as `cannot_judge` improves the accuracy of the labels people do give, and annotators who see a model's answer tend to agree with it, so the instructions keep labelers blind. Sources are in [Where the defaults come from](research.md).
+An abstain option such as `cannot_judge` improves the accuracy of the labels people do give, and annotators who see a model's answer tend to agree with it, so the instructions keep labelers blind.
 
 Leave out:
 - **Labels the evaluator cannot output.** Every human use of one becomes an off-rubric record that can't be compared.

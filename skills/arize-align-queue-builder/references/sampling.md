@@ -1,7 +1,5 @@
 # Sampling records for an alignment queue
 
-The research behind each choice, and which choices are Arize heuristics, is in [Where the defaults come from](research.md).
-
 ## Why stratify by the evaluator's stored label
 
 A random sample of production mirrors production's label mix. If 90% of sessions are `target_retrieved`, a 10-record random queue holds about 9 of them and maybe no `wrong_target` at all. Agreement on that queue cannot show whether the evaluator recognizes the rare, important failures. Sampling each stored label separately guarantees every label gets records.
