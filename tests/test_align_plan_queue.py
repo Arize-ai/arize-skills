@@ -313,3 +313,138 @@ def test_probes_are_kept_out_of_weighting_strata(monkeypatch, tmp_path):
     probes = [r for r in p["records"] if "probe" in r["sampled_as"]]
     assert {r["stratum"] for r in probes} == {"probe:not_applicable probe vs v1_eval"}
     assert not any(s["stratum"].startswith("probe:") for s in p["strata"])
+
+
+# ---------------------------------------------------------------------------
+# intake
+# ---------------------------------------------------------------------------
+
+def later(per_label=6, labels=("good", "bad", "wrong", "not_applicable")):
+    """per_label spans for each label in the 3 days after END."""
+    return [span(100 + i, label, END + timedelta(hours=i * 10 + li + 1))
+            for li, label in enumerate(labels) for i in range(per_label)]
+
+
+class FakeAdd:
+    """Stands in for `ax annotation-queues add-records`; fails on the call numbers in fail_on."""
+
+    def __init__(self, fail_on=()):
+        self.calls, self.fail_on = [], set(fail_on)
+
+    def __call__(self, cmd, **_):
+        self.calls.append(cmd)
+        if len(self.calls) in self.fail_on:
+            return subprocess.CompletedProcess(cmd, 1, "", "500 Internal Server Error")
+        return subprocess.CompletedProcess(cmd, 0, "{}", "")
+
+
+def first_plan(monkeypatch, tmp_path, spans, *extra):
+    fake = FakeAx(spans)
+    p = run(monkeypatch, tmp_path, fake, *extra)
+    fake.queues["Q"] = [r["session_id"] for r in p["records"]]
+    return fake, p
+
+
+def intake(monkeypatch, tmp_path, fake, *extra, add=None, end=END + timedelta(days=3)):
+    monkeypatch.setattr(plan, "run_ax", fake)
+    monkeypatch.setattr(plan.subprocess, "run", add or FakeAdd())
+    argv = ["plan_queue.py", "--space", "S", "--intake", str(tmp_path / "plan.json"), "--queue", "Q", *extra]
+    if end:
+        argv += ["--end-time", end.isoformat()]
+    monkeypatch.setattr("sys.argv", argv)
+    plan.main()
+    return json.loads((tmp_path / "plan.json").read_text())
+
+
+def test_intake_samples_only_units_since_the_plan_with_their_own_strata(monkeypatch, tmp_path):
+    fake, first = first_plan(monkeypatch, tmp_path, plentiful() + later())
+    add = FakeAdd()
+    p = intake(monkeypatch, tmp_path, fake, "--per-label", "2", "--execute", add=add)
+    new = p["records"][len(first["records"]):]
+    assert new and all(datetime.fromisoformat(r["start_time"]) >= END for r in new)
+    assert {r["stratum"] for r in new} == {"good@intake-1", "bad@intake-1", "wrong@intake-1",
+                                            "not_applicable@intake-1"}
+    good = next(s for s in p["strata"] if s["stratum"] == "good@intake-1")
+    assert good["population"] == 6 and good["picked"] == 2 and good["intake"] == "intake-1"
+    assert p["strata"][:len(first["strata"])] == first["strata"]
+    assert p["intake_cursor"] == plan.parse_time((END + timedelta(days=3)).isoformat()).isoformat().replace(
+        "+00:00", "Z")
+    assert all(c[:4] == ["ax", "annotation-queues", "add-records", "Q"] for c in add.calls)
+    assert all(f"({ROOT_FILTER}) AND" in f for f in fake.filters)  # settings carried from the plan
+    assert (tmp_path / "intake-1" / "record_sources.add_1.json").exists()
+    assert not (tmp_path / "intake-1" / "record_sources.create.json").exists()
+
+
+def test_intake_dry_run_leaves_the_plan_unchanged(monkeypatch, tmp_path):
+    fake, first = first_plan(monkeypatch, tmp_path, plentiful() + later())
+    add = FakeAdd()
+    p = intake(monkeypatch, tmp_path, fake, add=add)
+    assert p == first and not add.calls
+    assert "Nothing has been created" in (tmp_path / "intake-1" / "plan.md").read_text()
+
+
+def test_a_second_intake_starts_at_the_cursor_and_skips_queued_units(monkeypatch, tmp_path):
+    fake, _ = first_plan(monkeypatch, tmp_path, plentiful() + later())
+    p1 = intake(monkeypatch, tmp_path, fake, "--execute", end=END + timedelta(days=1))
+    fake.queues["Q"] += [r["session_id"] for r in p1["records"]]
+    p2 = intake(monkeypatch, tmp_path, fake, "--execute")
+    assert [i["id"] for i in p2["intakes"]] == ["intake-1", "intake-2"]
+    assert p2["intakes"][1]["window"]["start"] == p1["intake_cursor"]
+    sessions = [r["session_id"] for r in p2["records"]]
+    assert len(sessions) == len(set(sessions))
+    second = [r for r in p2["records"] if r["stratum"].endswith("@intake-2")]
+    assert second and all(datetime.fromisoformat(r["start_time"]) >= END + timedelta(days=1) for r in second)
+
+
+def test_intake_without_end_time_leaves_the_settle_period(monkeypatch, tmp_path):
+    fake, _ = first_plan(monkeypatch, tmp_path, plentiful())
+    now = datetime.now(timezone.utc)
+    p = intake(monkeypatch, tmp_path, fake, "--execute", "--settle-hours", "6", end=None)
+    cursor = plan.parse_time(p["intake_cursor"])
+    assert timedelta(hours=5.9) < now - cursor < timedelta(hours=6.1)
+
+
+def test_intake_with_nothing_new_does_nothing(monkeypatch, tmp_path, capsys):
+    fake, first = first_plan(monkeypatch, tmp_path, plentiful())
+    assert intake(monkeypatch, tmp_path, fake, "--execute", end=END) == first
+    assert "Nothing to take in" in capsys.readouterr().out
+
+
+def test_intake_refuses_a_new_evaluator_version(monkeypatch, tmp_path):
+    fake, _ = first_plan(monkeypatch, tmp_path, plentiful() + later())
+    original = fake.__call__
+
+    class Bumped(FakeAx):
+        def __call__(self, ax, args, allow_empty=False, retries=5):
+            out = original(ax, args, allow_empty, retries)
+            if args[:2] == ["evaluators", "get"]:
+                out["version"]["id"] = "v-2"
+            return out
+
+    bumped = Bumped(fake.spans, fake.queues)
+    with pytest.raises(SystemExit, match="plan a new queue"):
+        intake(monkeypatch, tmp_path, bumped, "--execute")
+
+
+def test_a_failed_batch_records_only_the_added_records(monkeypatch, tmp_path):
+    fake, first = first_plan(monkeypatch, tmp_path, plentiful() + later(per_label=12, labels=("good",)) + [
+        span(500 + i, "bad", END + timedelta(days=2, hours=i)) for i in range(3)])
+    # Spans 8+ days apart land in separate sources, two per call, so this run needs two add-records calls.
+    fake.spans += [span(600 + d, "wrong", END + timedelta(days=10 * d)) for d in (1, 2, 3)]
+    add = FakeAdd(fail_on={2})
+    p = intake(monkeypatch, tmp_path, fake, "--per-label", "3", "--execute", add=add,
+               end=END + timedelta(days=32))
+    assert len(add.calls) == 2
+    run_ = p["intakes"][0]
+    assert run_["failed"] and run_["picked"] < run_["planned"]
+    new = p["records"][len(first["records"]):]
+    assert len(new) == run_["picked"] and p["intake_cursor"] == run_["window"]["end"]
+    for st in (s for s in p["strata"] if s.get("intake")):
+        assert st["picked"] == sum(1 for r in new if r["stratum"] == st["stratum"])
+    assert "add-records` failed" in (tmp_path / "intake-1" / "plan.md").read_text()
+
+
+def test_intake_needs_a_current_plan(monkeypatch, tmp_path):
+    (tmp_path / "plan.json").write_text(json.dumps({"evaluator_id": "ev-1", "project_id": "proj-1"}))
+    with pytest.raises(SystemExit, match="re-plan"):
+        intake(monkeypatch, tmp_path, FakeAx([]))

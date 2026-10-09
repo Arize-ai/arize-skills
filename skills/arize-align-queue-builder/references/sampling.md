@@ -43,6 +43,15 @@ With `--compare-eval`, each label splits into `LABEL|disagree` and `LABEL|agree`
 
 `--skip-population` skips the counts, for example on a very large window. The evaluator report then can't give production-weighted estimates.
 
+## Continuous intake
+
+Arize's own "run continuously" option on a queue samples new spans at random, and the CLI and public API can't set it. An intake run instead repeats this plan on new data:
+- **Window.** It starts at the plan's `intake_cursor` (the end of the last run, or of the first plan) and ends `--settle-hours` (default 2) before now. The gap gives evaluator tasks time to score the newest units; a unit counted before it is scored would be missed for good. For a session evaluator, set it at least as long as a session usually stays open.
+- **Same design.** It reuses the plan's saved `settings` (root filter, compare copy, sizing, labels) and quota per label (`--per-label` overrides it for each run). Scope probes are left out. Units already in the queue are excluded.
+- **Its own strata.** Each run's strata are tagged `@intake-N` and counted over that run's window only. Pooling them with earlier strata would mix different selection rates, so each period carries its own weight in `report --plan`. A low-volume label simply has fewer picks that run.
+- **Recording.** `--execute` adds the records, then appends the records, the strata, an `intakes` entry and the new cursor to `plan.json`, writing it atomically. If a batch fails, the records already added are recorded, the strata's picked counts match them, and the cursor still moves, so no period is counted twice. Without `--execute`, nothing changes.
+- **Version guard.** If the evaluator's version no longer matches the plan, the run stops. A new version is a different evaluator and needs its own queue.
+
 
 ## Candidate pool
 

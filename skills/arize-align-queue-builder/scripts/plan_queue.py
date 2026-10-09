@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Plan an annotation queue for aligning one Arize evaluator. Read-only.
+"""Plan an annotation queue for aligning one Arize evaluator, or its ongoing intake.
 
 Pulls candidate records from a project, grouped by the label the evaluator
 already stored on them, and picks a balanced, deduplicated set sized so the
@@ -17,11 +17,18 @@ plan.json also records each sampling stratum (stored label, split into provider 
 when --compare-eval is set) with its production unit count and selection rate, and each record's
 stratum, so arize-align-evaluator can weight results back to production (`report --plan`).
 
-Standard library only (Python 3.9+). Creates nothing in Arize.
+Intake (--intake plan.json --queue QUEUE): sample only the units that arrived since the last run, with
+the same strata and settings, into a new directory beside plan.json (intake-N/). Each run's strata are
+counted and stored separately, so the weighting stays exact. Without --execute this is a dry run. With
+--execute it adds the records to the queue and appends them, the strata and the new cursor to plan.json;
+run it on a schedule for continuous intake.
+
+Standard library only (Python 3.9+). Creates nothing in Arize, except `--intake --execute`.
 
 Example:
   plan_queue.py --space SPACE --project PROJECT --evaluator EVALUATOR \\
     --root-filter "attributes.is_copilot_root_span = 'true'" --out-dir plan/
+  plan_queue.py --space SPACE --intake plan/plan.json --queue QUEUE --per-label 2 --execute
 """
 
 import argparse
@@ -51,6 +58,11 @@ PAGE = 500  # spans per export call
 SOURCE_MAX_DAYS = 7  # time range of one queue record source
 SOURCES_PER_CALL = 2  # record sources per create/add-records call
 CONFIG_NAME_MAX = 40  # annotation config name length
+
+# Settings saved in plan.json so each intake run samples the way the first plan did.
+CARRIED = ("root_filter", "eval_name", "compare_eval", "max_disagreement_share", "mode", "expected_exclusion",
+           "labels", "not_applicable", "na_count", "pool", "slices")
+SETTLE_HOURS = 2  # leave time for evaluator tasks to score the newest units before an intake counts them
 
 
 class ColumnMissing(Exception):
@@ -155,9 +167,9 @@ def spread_pick(items, n, rng):
 def main():
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--space", required=True)
-    p.add_argument("--project", required=True, help="Project name or ID the evaluator's task scores")
-    p.add_argument("--evaluator", required=True, help="Evaluator name or ID")
-    p.add_argument("--out-dir", required=True)
+    p.add_argument("--project", help="Project name or ID the evaluator's task scores")
+    p.add_argument("--evaluator", help="Evaluator name or ID")
+    p.add_argument("--out-dir", help="Where to write the plan (intake: default intake-N/ beside the plan)")
     p.add_argument("--root-filter", help="Filter selecting one span per unit, e.g. the root span of each turn")
     p.add_argument("--days", type=int, default=30)
     p.add_argument("--start-time", help="ISO 8601 window start; overrides --days (use with --end-time)")
@@ -189,12 +201,42 @@ def main():
     p.add_argument("--compare-eval", help="Another evaluator's template name (e.g. a provider copy); "
                                           "records where it disagrees are picked first")
     p.add_argument("--exclude-queue", nargs="*", default=[], help="Skip units already in these queues")
-    p.add_argument("--seed", type=int, default=0)
+    p.add_argument("--intake", metavar="PLAN_JSON",
+                   help="Sample units that arrived since this plan's last run, for the queue in --queue")
+    p.add_argument("--queue", help="intake: the queue the plan's records went into")
+    p.add_argument("--settle-hours", type=float, default=SETTLE_HOURS,
+                   help="intake: leave out the newest hours, which evaluators may not have scored yet")
+    p.add_argument("--execute", action="store_true",
+                   help="intake: add the records to the queue and record the run in the plan")
+    p.add_argument("--seed", type=int, help="Random seed (default 0; intake: the run number)")
     p.add_argument("--ax", default="ax")
     a = p.parse_args()
+    base = None
+    if a.intake:
+        if not a.queue:
+            p.error("--intake needs --queue")
+        with open(a.intake) as f:
+            base = json.load(f)
+        if not base.get("window"):
+            sys.exit(f"{a.intake} has no window or settings; re-plan with a current plan_queue.py before intake.")
+        for k, v in (base.get("settings") or {}).items():
+            if getattr(a, k, None) == p.get_default(k):
+                setattr(a, k, v)
+        a.evaluator, a.project = a.evaluator or base["evaluator_id"], a.project or base["project_id"]
+        a.na_probe_eval = None
+        a.exclude_queue = list(dict.fromkeys(a.exclude_queue + [a.queue]))
+        a.per_label = a.per_label or base.get("per_label_quota")
+        run_id = f"intake-{len(base.get('intakes') or []) + 1}"
+        a.out_dir = a.out_dir or os.path.join(os.path.dirname(os.path.abspath(a.intake)), run_id)
+        if a.seed is None:
+            a.seed = len(base.get("intakes") or []) + 1
+    elif a.execute or a.queue:
+        p.error("--execute and --queue go with --intake")
+    elif not (a.project and a.evaluator and a.out_dir):
+        p.error("--project, --evaluator and --out-dir are required")
     a.target_gold = a.target_gold or SIZING[a.mode]["target_gold"]
     a.min_per_class = a.min_per_class or SIZING[a.mode]["min_per_class"]
-    rng = random.Random(a.seed)
+    rng = random.Random(a.seed or 0)
     os.makedirs(a.out_dir, exist_ok=True)
 
     ev = run_ax(a.ax, ["evaluators", "get", a.evaluator, "--space", a.space, "-o", "json"])
@@ -202,6 +244,10 @@ def main():
     tname = a.eval_name or tc.get("name")
     if not tname:
         sys.exit("Evaluator has no template_config.name; this script supports template evaluators only.")
+    if base and (ev.get("version") or {}).get("id") != base.get("version_id"):
+        sys.exit(f"The evaluator's version is now {(ev.get('version') or {}).get('id')}, not the plan's "
+                 f"{base.get('version_id')}. Labels from a new version measure a different evaluator: plan a new "
+                 "queue for it instead of adding to this one.")
     gran = (tc.get("data_granularity") or "SPAN").upper()
     column = f"{GRANULARITY_PREFIX.get(gran, 'eval')}.{tname}.label"
     choices = list((tc.get("classification_choices") or {}).keys())
@@ -219,6 +265,13 @@ def main():
 
     end = parse_time(a.end_time) if a.end_time else datetime.now(timezone.utc)
     start = parse_time(a.start_time) if a.start_time else end - timedelta(days=a.days)
+    if base:
+        start = parse_time(base.get("intake_cursor") or base["window"]["end"])
+        if not a.end_time:
+            end -= timedelta(hours=a.settle_hours)
+        if end <= start:
+            print(f"Nothing to take in: the plan already covers up to {start.isoformat()}.")
+            return
     step = (end - start) / a.slices
     empty_slices = set()
 
@@ -341,6 +394,13 @@ def main():
              probe_labels=dict(Counter(c["probe_label"] for c in chosen)))
         probe = summary[-1]
 
+    # An intake run's units are a new period, so its strata are counted and weighted on their own.
+    if base:
+        for x in picks + strata:
+            x["stratum"] += f"@{run_id}"
+        for st in strata:
+            st["intake"] = run_id
+
     # Record sources, split to Arize's limits: at most SOURCE_MAX_DAYS each, SOURCES_PER_CALL per call.
     def z(t):
         return t.isoformat().replace("+00:00", "Z")
@@ -359,18 +419,24 @@ def main():
     config_values = list(dict.fromkeys(choices + [l for l in a.not_applicable if l not in choices] + UNSCORABLE))
     config_name = f"{(tc.get('name') or tname)[:CONFIG_NAME_MAX - 5]}-gold"
 
+    run_plan = {"evaluator": ev.get("name"), "evaluator_id": ev.get("id"), "version_id": (ev.get("version") or {}).get("id"),
+                "column": column, "granularity": gran, "project_id": project["id"], "per_label_quota": per,
+                "config_name": config_name, "mode": a.mode, "window": {"start": z(start), "end": z(end)},
+                "settings": {k: getattr(a, k) for k in CARRIED}, "summary": summary, "strata": strata,
+                "records": picks}
     with open(os.path.join(a.out_dir, "plan.json"), "w") as f:
-        json.dump({"evaluator": ev.get("name"), "evaluator_id": ev.get("id"), "version_id": (ev.get("version") or {}).get("id"),
-                   "column": column, "granularity": gran, "project_id": project["id"], "per_label_quota": per,
-                   "config_name": config_name, "mode": a.mode, "summary": summary, "strata": strata,
-                   "records": picks}, f, indent=1)
+        json.dump(run_plan, f, indent=1)
     for old in os.listdir(a.out_dir):
         if old.startswith("record_sources."):
             os.remove(os.path.join(a.out_dir, old))
     with open(os.path.join(a.out_dir, "record_sources.json"), "w") as f:
         json.dump(sources, f, indent=1)
+    # An intake adds to an existing queue, so every batch goes to add-records.
+    files = []
     for i, b in enumerate(batches):
-        with open(os.path.join(a.out_dir, "record_sources.create.json" if i == 0 else f"record_sources.add_{i}.json"), "w") as f:
+        files.append(os.path.join(a.out_dir, "record_sources.create.json" if i == 0 and not base
+                                  else f"record_sources.add_{i + (1 if base else 0)}.json"))
+        with open(files[-1], "w") as f:
             json.dump(b, f, indent=1)
     with open(os.path.join(a.out_dir, "config_values.json"), "w") as f:
         json.dump(config_values, f, indent=1)
@@ -378,9 +444,12 @@ def main():
     expected_gold = decisive_picked * (1 - a.expected_exclusion)
     window = f"{a.start_time} → {a.end_time or 'now'}" if a.start_time else f"last {a.days} days"
     excluded = f"{len(excluded_units)} IDs from existing queues excluded" if excluded_units else "no existing queues excluded"
+    title = (f"# Intake {run_id} for queue `{a.queue}` (`{ev.get('name')}`)\n" if base
+             else f"# Queue plan for `{ev.get('name')}`\n")
     out = [
-        f"# Queue plan for `{ev.get('name')}`\n",
-        "Nothing has been created. Review, then approve or adjust.\n",
+        title,
+        "Records were added to the queue; the result is at the end.\n" if a.execute
+        else "Nothing has been created. Review, then approve or adjust.\n",
         f"- Evaluator version `{(ev.get('version') or {}).get('id')}`, granularity `{gran}`, stored column `{column}`",
         f"- Project `{project.get('name')}`, {window}" + (f", root filter `{a.root_filter}`" if a.root_filter else ""),
         f"- One record per {unit_key.replace('_id', '')}; {excluded}",
@@ -420,16 +489,58 @@ def main():
     if empty_slices:
         out.append(f"- No values for an eval column in: {', '.join(sorted(empty_slices))}. Those periods "
                    "contributed no candidates (nothing was scored there, or it is not indexed yet).")
-    out.append(f"- Record sources: {len(sources)} of at most {SOURCE_MAX_DAYS} days. Create the queue with "
-               "`--record-sources record_sources.create.json`"
-               + (", then run `add-records` with each `record_sources.add_*.json`." if len(batches) > 1 else "."))
+    if base:
+        out.append(f"- Intake: only units that started in this window and are not in `{a.queue}`; the newest "
+                   f"{a.settle_hours:g} hours are left for the next run. Its strata are tagged `@{run_id}`.")
+    else:
+        out.append(f"- Record sources: {len(sources)} of at most {SOURCE_MAX_DAYS} days. Create the queue with "
+                   "`--record-sources record_sources.create.json`"
+                   + (", then run `add-records` with each `record_sources.add_*.json`." if len(batches) > 1 else "."))
     short = [s for s in summary if s["shortfall"]]
     if short:
         out.append("- Not enough candidates for: " + ", ".join(f"`{s['label']}` (short {s['shortfall']})" for s in short)
-                   + ". Widen `--days`, or accept fewer and note it.")
+                   + (". Later intake runs add more as new units arrive." if base
+                      else ". Widen `--days`, or accept fewer and note it."))
+    if base and a.execute:
+        out += ["", record_intake(a, base, run_id, run_plan, batches, files)]
     print("\n".join(out))
     with open(os.path.join(a.out_dir, "plan.md"), "w") as f:
         f.write("\n".join(out) + "\n")
+
+
+def record_intake(a, base, run_id, run_plan, batches, files):
+    """Add an intake run's records to the queue, then append what was added to the plan.
+
+    A failed batch stops the run; the records already added are still recorded (with their strata's
+    picked counts and rates reduced to match), and the cursor still moves, so no period is counted twice."""
+    added, failed = set(), None
+    for b, path in zip(batches, files):
+        proc = subprocess.run([a.ax, "annotation-queues", "add-records", a.queue, "--space", a.space,
+                               "--record-sources", path, "-o", "json"], capture_output=True, text=True)
+        if proc.returncode != 0:
+            failed = (path, (proc.stderr + proc.stdout).strip()[:500])
+            break
+        added |= {sid for src in b for sid in src["span_ids"]}
+    records = [r for r in run_plan["records"] if r["span_id"] in added]
+    for st in run_plan["strata"]:
+        st["picked"] = sum(1 for r in records if r["stratum"] == st["stratum"])
+        st["selection_rate"] = st["picked"] / st["population"] if st["population"] else None
+    base["records"] = (base.get("records") or []) + records
+    base["strata"] = (base.get("strata") or []) + run_plan["strata"]
+    base.setdefault("intakes", []).append({
+        "id": run_id, "queue": a.queue, "window": run_plan["window"], "picked": len(records),
+        "planned": len(run_plan["records"]), "summary": run_plan["summary"],
+        "at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"), "failed": failed and failed[1]})
+    base["intake_cursor"] = run_plan["window"]["end"]
+    tmp = a.intake + ".tmp"
+    with open(tmp, "w") as f:
+        json.dump(base, f, indent=1)
+    os.replace(tmp, a.intake)
+    if failed:
+        return (f"**Added {len(records)} of {len(run_plan['records'])} records, then `add-records` failed on "
+                f"`{os.path.basename(failed[0])}`:** {failed[1]}\nThe added records and the window are recorded in "
+                "the plan; the rest of this window is skipped.")
+    return f"**Added {len(records)} records to `{a.queue}` and recorded {run_id} in `{a.intake}`.**"
 
 if __name__ == "__main__":
     main()

@@ -1,6 +1,6 @@
 ---
 name: arize-align-queue-builder
-description: Builds an Arize annotation queue designed to produce enough meaningful human labels to align a specific LLM-as-judge evaluator. Derives the label config from the evaluator, samples balanced records across its labels, sizes the queue for expected exclusions, writes annotator instructions, and stops for approval before creating anything. Use when the user needs a labeling queue, gold set, or human labels for evaluator alignment, or when an existing queue had too few usable labels.
+description: Builds an Arize annotation queue designed to produce enough meaningful human labels to align a specific LLM-as-judge evaluator. Derives the label config from the evaluator, samples balanced records across its labels, sizes the queue for expected exclusions, writes annotator instructions, and stops for approval before creating anything. Use when the user needs human labels for evaluator alignment, an existing queue had too few usable labels, or a queue should keep taking in new records.
 metadata:
   author: arize
   version: "1.1"
@@ -25,7 +25,7 @@ For plain queue mechanics (create, update, assign, delete), use **arize-annotati
 
 ## Hard rules
 
-- **Do not create anything before approval.** Phases 1–3 are read-only. Do not create the annotation config, the queue or its records until the user approves the plan in Phase 4.
+- **Do not create anything before approval.** Phases 1–3 are read-only. Do not create the annotation config, the queue or its records until the user approves the plan in Phase 4. For continuous intake, the user approves the intake settings and schedule once (Phase 7); scheduled runs then add records without asking each time.
 - **Never label records yourself.** Never present model output or stored evaluator labels as human labels.
 - **Keep labeling blind.** Stored evaluator labels are used to *choose* records. The instructions must tell annotators not to look at evaluator output, and the plan must never be shared with them.
 - **One record per unit.** For a session evaluator, each session appears once, and sessions already in the user's other queues for this evaluator are excluded.
@@ -43,7 +43,7 @@ If an `ax` command fails, troubleshoot based on the error:
 - Space unknown → see [Space](references/ax-profiles.md#space)
 - **Security:** Never read `.env` files or search the filesystem for credentials. Exception: the non-secret `ARIZE_SPACE_ID` line (see [Space](references/ax-profiles.md#space)). Never ask the user to paste secrets into chat.
 
-[scripts/plan_queue.py](scripts/plan_queue.py) uses only the Python standard library and is read-only. Run it by absolute path from the installed skill root, writing to a scratch directory.
+[scripts/plan_queue.py](scripts/plan_queue.py) uses only the Python standard library and is read-only, except `--intake --execute` (Phase 7). Run it by absolute path from the installed skill root, writing to a scratch directory.
 
 ---
 
@@ -143,7 +143,23 @@ Top up only on counts: a label short of gold records, or exclusions above plan. 
 - **A label is short of gold records:** run the script again with `--labels THAT_LABEL --per-label N --exclude-queue THIS_QUEUE`, and add each new `record_sources.create.json` / `record_sources.add_N.json` file with `ax annotation-queues add-records QUEUE --space SPACE --record-sources FILE`. That still requires the user's approval.
 - **Annotators disagree:** clarify the label definitions in the instructions with `ax annotation-queues update --instructions` before more labeling.
 
-When labeling is complete, hand off to **arize-align-evaluator**. Name the column it should compare against (the `*_backfill` column when the records came from a backfill), and pass it `plan.json` (`report --plan`) for production-weighted estimates. For a topped-up queue, merge the strata of every plan run into one `plan.json` first.
+When labeling is complete, hand off to **arize-align-evaluator**. Name the column it should compare against (the `*_backfill` column when the records came from a backfill), and pass it `plan.json` (`report --plan`) for production-weighted estimates. For a topped-up queue, merge the strata of every plan run into one `plan.json` first. Intake runs (Phase 7) record their strata in `plan.json` themselves.
+
+## Phase 7 (optional): Continuous intake
+
+Use this when the user wants the queue to keep sampling new production units, for example to watch an evaluator for drift. Don't use Arize's "run continuously" queue option for this: it samples at random, so rare labels starve and the results can't be weighted. The CLI can't set it either. Instead, rerun the plan on each new period:
+
+```bash
+python3 SKILL_ROOT/scripts/plan_queue.py --space SPACE \
+  --intake WORK_DIR/plan.json --queue QUEUE --per-label N [--settle-hours H]
+```
+
+1. **Dry run first.** Without `--execute`, it writes `WORK_DIR/intake-N/plan.md` and changes nothing. It samples only units that started since the plan's last run and are not in the queue, with the plan's saved settings and strata, and leaves out the newest `--settle-hours` (default 2) so evaluators have scored them. For session evaluators, use at least the time a session usually stays open.
+2. **Get approval for the intake settings,** not for each record. Show the dry run, then agree on records per label per run (`--per-label`), the schedule, and when to stop (a total count or a date). Daily or weekly fits most evaluators. Size `--per-label` so the annotators can keep up with the incoming records.
+3. **Schedule the run with `--execute`.** Each run adds its records with `add-records`, then appends them, its strata (tagged `@intake-N`) and the new cursor to `plan.json`. Use a cron job or CI job on a machine with an `ax` profile for the space, and keep `plan.json` there; it is the intake's state. Never run two intakes on the same plan at once.
+4. **Watch for stops.** A run stops if the evaluator's version changed: plan a new queue for the new version. If `add-records` fails partway, the run records what was added, moves on, and says so at the end of `intake-N/plan.md`.
+
+Run the report with `--plan WORK_DIR/plan.json`. Every intake period gets its own weight, so the production estimates stay unbiased even as volume and label mix change.
 
 ---
 
@@ -158,6 +174,8 @@ When labeling is complete, hand off to **arize-align-evaluator**. Name the colum
 | Script stops with "No part of the window has values for the eval column" | A wrong `--eval-name` or `--na-probe-eval`, a window the evaluator never scored, or a new column still indexing (20+ minutes after a run). Periods with no values are skipped, not fatal. |
 | `time range ... must not exceed 7 days` or `List should have at most 2 items` | A hand-built record source. Use the script's split files: `record_sources.create.json` for `create`, then `add-records` with each `record_sources.add_N.json`. |
 | `Annotator email not found or does not have access` | The address isn't a user in this space. Look it up with `ax users list --email NAME`. |
+| Intake says "Nothing to take in" | The plan already covers up to the settle cutoff. Run later, or lower `--settle-hours`. |
+| Intake stops on "plan a new queue" | The evaluator has a new version. Plan a new queue for it; don't mix versions in one queue. |
 | Labels land on spans instead of the session | The level is chosen when annotating. Restate it in the instructions; **arize-align-evaluator** reads span, trace and session labels either way. |
 
 ---
