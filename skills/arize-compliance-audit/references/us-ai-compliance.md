@@ -3,14 +3,14 @@
 This reference covers US regulatory frameworks applicable to AI agent and LLM application development. The US does not have a single comprehensive federal AI law; compliance is a patchwork of federal frameworks, state laws, and sector-specific regulations. Always consult qualified legal counsel for binding compliance assessments.
 
 Official sources:
-- NIST AI RMF: https://www.nist.gov/itl/ai-risk-management-framework
-- Colorado ADMT law (SB26-189, repeals and reenacts SB24-205): https://leg.colorado.gov/bills/sb26-189
+- NIST AI RMF: https://www.nist.gov/artificial-intelligence/ai-risk-management-framework
+- Colorado AI Act (SB24-205): https://leg.colorado.gov/bills/sb24-205
 - NYC Local Law 144: https://www.nyc.gov/site/dca/about/automated-employment-decision-tools.page
 - HIPAA: https://www.hhs.gov/hipaa/index.html
 
 ## NIST AI Risk Management Framework (AI RMF 1.0)
 
-The NIST AI RMF is voluntary but increasingly the de facto standard for AI governance. Federal agencies require alignment for AI procurement (OMB M-24-10). Aligning with NIST AI RMF is the strongest foundation for US compliance.
+The NIST AI RMF is voluntary but increasingly the de facto standard for AI governance. Federal agencies require alignment for AI procurement (OMB M-24-10), and state laws like the Colorado AI Act reference NIST-aligned frameworks. Aligning with NIST AI RMF is the strongest foundation for US compliance.
 
 ### Govern function
 
@@ -74,41 +74,31 @@ Implement controls and mitigation. Developer actions:
 | MAN-4.1 | Implement decommissioning procedures for AI systems |
 | MAN-4.2 | Document and apply lessons learned from incidents |
 
-## Colorado automated decision-making technology law (SB26-189)
-
-SB26-189 (signed 14 May 2026) repeals and reenacts the Colorado AI Act (SB24-205), whose requirements SB25B-004 had delayed to 30 June 2026. SB26-189 takes effect 1 January 2027 and applies to consequential decisions made on or after that date. For decisions before 1 January 2027, flag the SB24-205 requirements for legal counsel rather than auditing against them.
+## Colorado AI Act (SB24-205)
 
 ### Scope
-Applies to **developers and deployers** doing business in Colorado of a **covered automated decision-making technology (ADMT)**: technology that processes personal data to produce predictions, recommendations, classifications, rankings, or scores that **materially influence** a **consequential decision** in a covered domain:
-- Education enrollment or opportunity
-- Employment or an employment opportunity
-- Lease or purchase of residential real estate
-- Financial or lending services
-- Insurance (underwriting, pricing, coverage, claims)
-- Health-care services
-- Essential government services and public benefits
+Applies to **developers and deployers** of "high-risk AI systems" — those making or substantially assisting **consequential decisions** in:
+- Employment, promotion, termination
+- Education admissions and opportunities
+- Financial services (lending, credit, insurance)
+- Healthcare services
+- Housing
+- Legal services
+- Government services
 
-Excluded uses include advertising, marketing, differentiated product recommendations, search, content moderation, customer service triage, and summarising information for human review without producing a score, ranking, recommendation, classification, or prediction that materially influences the decision. Consumer-facing chatbots and other natural-language tools that inform, refer, answer questions, or generate content are not ADMT when they are not contracted, advertised, marketed, configured, or intended for use in a consequential decision and an acceptable use policy prohibits using their output in one.
-
-### Developer obligations (from 1 January 2027)
+### Developer obligations (effective 1 February 2026)
 
 | Requirement | What to implement |
 |---|---|
-| Documentation to deployers | Intended uses and known harmful or inappropriate uses; categories of training data, including personal data; known limitations, risks, and circumstances where the system should not be used; instructions for appropriate use, monitoring, and meaningful human review; information deployers need for their consumer disclosures |
-| Material-update notices | Notify deployers within a reasonable time of material updates, intentional and substantial modifications, and changes to intended use, limitations, or risk mitigation (public release notes qualify when deployers get direct notice of them) |
-| Record retention | Retain records demonstrating compliance for at least 3 years, including system version identifiers, changelogs, and the documentation and notices sent to deployers |
+| Reasonable care | Exercise reasonable care to protect consumers from algorithmic discrimination |
+| Impact assessment | Conduct and document annual impact assessments covering performance, bias, and discrimination risks |
+| Risk management | Implement a risk management programme aligned with a recognised framework (NIST AI RMF, ISO 42001) |
+| Documentation | Make available: a general description of the system, known limitations, the type of data used, how the system was evaluated, mitigation measures |
+| Disclosure to deployers | Provide deployers with documentation needed for their own compliance |
+| Discrimination prevention | Test for and mitigate algorithmic discrimination based on protected classes (race, colour, ethnicity, sex, religion, age, disability, sexual orientation, veteran status) |
 
-### Deployer obligations (from 1 January 2027)
-
-| Requirement | What to implement |
-|---|---|
-| Point-of-interaction notice | Before the ADMT materially influences a consequential decision, give a clear and conspicuous notice that it is used and how to get more information |
-| Adverse-outcome disclosure | Within 30 days of an adverse outcome: a plain-language description of the decision and the ADMT's role; how to request the ADMT name, version, developer, and personal data categories used; an explanation of consumer rights |
-| Consumer rights | After an adverse outcome, on the consumer's request: provide instructions to request their personal data and correct factually incorrect or materially inaccurate personal data used in the decision (opinions, predictions, scores, and protected evaluations are excluded), and offer meaningful human review and reconsideration to the extent commercially reasonable |
-| Record retention | Retain records demonstrating compliance for at least 3 years after each consequential decision, such as ADMT version identifiers and changelogs |
-
-### Enforcement
-The Colorado attorney general enforces the law under the Colorado Consumer Protection Act; a violation is a deceptive trade practice. There is no new private right of action. Before 1 January 2030, the attorney general must give a 60-day notice and opportunity to cure where a cure is possible.
+### Safe harbour
+Compliance with a recognised risk management framework (NIST AI RMF or ISO 42001) establishes a rebuttable presumption of reasonable care.
 
 ## NYC Local Law 144 — Automated Employment Decision Tools (AEDT)
 
@@ -182,13 +172,13 @@ Common obligations across state privacy laws:
 | Compliance area | Framework | Concrete developer action |
 |---|---|---|
 | Governance policy | NIST GOV-1 | Document AI governance policy, roles, accountability |
-| Risk identification | NIST MAP-1–3 | Document intended purpose, limitations, stakeholder impact, supply chain risks |
-| Bias testing | NIST MEA-2.1, NYC LL144 | Test output fairness across demographic groups; compute impact ratios |
+| Risk identification | NIST MAP-1–3, Colorado | Document intended purpose, limitations, stakeholder impact, supply chain risks |
+| Bias testing | NIST MEA-2.1, Colorado, NYC LL144 | Test output fairness across demographic groups; compute impact ratios |
 | Adversarial testing | NIST MEA-2.5, MEA-2.7 | Red team for prompt injection, jailbreak, goal hijacking, data exfiltration |
 | Input/output validation | NIST MAN-1.2 | Implement guardrails, content filtering, DLP |
 | Monitoring | NIST MAN-2.1, MEA-3.1 | Deploy Arize tracing with drift detection and alerting |
 | Incident response | NIST MAN-3.1 | Define and document AI incident response procedures |
-| Documentation | Colorado, NIST MAP-1 | Maintain model card, system docs, deployer documentation, and version changelogs (retain 3 years for Colorado) |
-| Transparency | Colorado, state privacy laws | Disclose AI use to users; explain adverse outcomes and offer human review (Colorado); provide opt-out for profiling |
+| Documentation | Colorado, NIST MAP-1 | Maintain model card, system docs, impact assessments |
+| Transparency | Colorado, state privacy laws | Disclose AI use to users; provide opt-out for profiling |
 | PHI protection | HIPAA | BAAs, PII/PHI redaction, audit logs, encryption, minimum necessary |
 | Privacy assessments | State privacy laws | Conduct DPAs for AI processing involving personal data |
