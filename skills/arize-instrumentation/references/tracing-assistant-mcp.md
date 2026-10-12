@@ -20,4 +20,4 @@ For deeper instrumentation guidance inside the IDE, the user can enable:
 
 Then the user can ask things like: *"Instrument this app using Arize AX"*, *"Can you use manual instrumentation so I have more control over my traces?"*, *"How can I redact sensitive information from my spans?"*
 
-See the full setup at [Agent-Assisted Tracing Setup](https://arize.com/docs/ax/alyx/tracing-assistant).
+See the full setup at [Set Up with AI Assistants](https://arize.com/docs/ax/set-up-with-ai-assistants).

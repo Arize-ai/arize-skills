@@ -55,7 +55,7 @@ curl -sS -u "$LANGFUSE_PUBLIC_KEY:$LANGFUSE_SECRET_KEY" \
   "$LANGFUSE_BASE_URL/api/public/v2/prompts/PROMPT_NAME?version=1"
 ```
 
-Map Langfuse `text` / `chat` prompts into AX messages, then `ax prompts create` / `create_version` and `set_labels` for Langfuse labels (`production`, `staging`, …).
+Map Langfuse `text` / `chat` prompts into AX messages, then `ax prompts create` / `ax prompts create-version` and `ax prompts set-version-labels` for Langfuse labels (`production`, `staging`, …).
 
 ## Historical observations → Arize AX
 

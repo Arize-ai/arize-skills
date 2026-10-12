@@ -4,7 +4,7 @@ description: Downloads, exports, and inspects existing Arize traces and spans to
 metadata:
   author: arize
   version: "1.0"
-compatibility: Requires the ax CLI (≥ 0.33.0) and a configured Arize profile.
+compatibility: Requires the ax CLI (≥ 0.39.0) and a configured Arize profile.
 ---
 
 # Arize Trace Skill
@@ -27,6 +27,8 @@ Use `ax spans export` to download individual spans, or `ax traces export` to dow
 
 **Exploratory export rule:** When exporting spans or traces **without** a specific `--trace-id`, `--span-id`, or `--session-id` (i.e., browsing/exploring a project), always start with `-l 50` to pull a small sample first. Summarize what you find, then pull more data only if the user asks or the task requires it. This avoids slow queries and overwhelming output on large projects.
 
+### Time windows: recency, UTC, and index lag
+
 **Recency warning:** `ax traces export` and `ax spans export` return results in **arbitrary order, not by recency**. Running without `--start-time` will not give you the most recent traces. To fetch recent data (e.g., "last day's conversations"), always pass `--start-time` scoped to the relevant window.
 
 **Timezone rule:** The API expects UTC. Pass timestamps as UTC with a `Z` suffix (e.g. `2026-06-08T18:00:00Z`). Naive timestamps without a suffix are also interpreted as UTC — but always construct them from UTC time, not local time, or the window will be silently shifted.
@@ -36,6 +38,10 @@ When the user asks for traces relative to now or a human time ("last hour", "yes
 2. Compute the window from that and pass UTC timestamps.
 
 When the user references times they see in the **Arize UI** (e.g., "I see a trace at 3:45pm"), those times reflect the timezone configured in their Arize account settings. Convert that local time to UTC before passing it to `--start-time`. If the user doesn't know their UTC offset, ask: "What timezone is your Arize account set to?"
+
+**Index lag:** spans are written immediately to the primary trace store, which `--trace-id` lookups hit, so `ax spans export PROJECT --space SPACE --trace-id TRACE_ID` is always up to date. Time-scoped queries (`--days`, `--start-time`, `--end-time`) use a time-series index built asynchronously that lags **6–12 hours**, so they miss very recent traces. Holding a `trace_id` → export by `--trace-id`. Running a time-range query that must be complete → set `--start-time` at least 12 hours in the past.
+
+### Export defaults
 
 **Default output directory:** Always use `--output-dir .arize-tmp-traces` on every `ax spans export` call. The CLI automatically creates the directory and adds it to `.gitignore`.
 
@@ -76,7 +82,7 @@ ax spans export PROJECT --space SPACE --span-id SPAN_ID --output-dir .arize-tmp-
 ax spans export PROJECT --space SPACE --session-id SESSION_ID --output-dir .arize-tmp-traces
 ```
 
-Flags: see [references/spans-cli.md](references/spans-cli.md#ax-spans-export).
+Flags: run `ax spans export --help`.
 
 Output is a JSON array of span objects. File naming: `{type}_{id}_{timestamp}/spans.json`.
 
@@ -134,20 +140,7 @@ ax spans export PROJECT --space SPACE --filter "status_code = 'ERROR'" --all --o
 
 *Exploratory export* (no ID filter): If the result equals the limit, **surface the truncation prominently and offer to re-run**: "Got exactly 100 spans — results are likely truncated. Re-run with `--all` to get the full dataset?" Wait for confirmation before re-running (exploratory exports can be slow or large).
 
-**Decision tree:**
-```
-Do you have a --trace-id, --span-id, or --session-id?
-├─ YES (targeted): count is bounded by trace/session
-│   ├─ Result < limit → done, report count
-│   └─ Result = limit → auto re-run with --all (no need to ask)
-└─ NO (exploratory):
-    ├─ Just browsing a sample? → use -l 50, report count
-    └─ Need all matching spans?
-        ├─ Expected < 100 → -l is fine; report count
-        └─ Expected ≥ 100 or unknown → use --all
-            ├─ Result = limit after -l? → offer to re-run with --all
-            └─ Times out? → batch by --days (e.g., --days 7) and loop
-```
+If an `--all` export times out, batch by `--days` (e.g. `--days 7`) and loop.
 
 **Check span count first:** Before a large exploratory export, check how many spans match your filter:
 ```bash
@@ -192,7 +185,7 @@ ax traces export PROJECT --space SPACE --filter "status_code = 'ERROR'" --stdout
 ax traces export PROJECT --space SPACE --filter "status_code = 'ERROR'" --all --output-dir .arize-tmp-traces
 ```
 
-Flags: see [references/spans-cli.md](references/spans-cli.md#ax-traces-export).
+Flags: run `ax traces export --help`.
 
 ### How it differs from `ax spans export`
 
@@ -201,7 +194,7 @@ Flags: see [references/spans-cli.md](references/spans-cli.md#ax-traces-export).
 
 ## Browse Traces: `ax traces list`
 
-Paginated table of traces in a project. This is mainly useful for open-ended human-style browsing when you don't yet know what filter or trace ID to use — if you already know the filter/time range you need, skip straight to `ax traces export` or `ax spans export` instead of listing first.
+Lists traces in a project; without `-o` it renders a branch-graph view of each trace's spans. This is for human browsing when no filter or trace ID is known yet. When holding a trace ID, filter, or time range, export directly with `ax traces export` or `ax spans export` instead of listing first.
 
 ```bash
 ax traces list PROJECT --space SPACE -l 30
@@ -209,33 +202,23 @@ ax traces list PROJECT --space SPACE --filter "status_code = 'ERROR'"
 ax traces list PROJECT --space SPACE --start-time "2026-08-01T00:00:00Z" -o json
 ```
 
-`--space` is required when `PROJECT` is a name. Flags: `--filter`, `--start-time`/`--end-time` (ISO 8601), `--limit, -l` (default 15), `--cursor, -c`, `-o, --output`. The same [filter syntax](references/spans-cli.md#filter-syntax) applies.
+`--limit` is capped at 50 per page; page with `--cursor`. Flags: run `ax traces list --help`. The same [filter syntax](references/spans-cli.md#filter-syntax) applies.
 
-**When the filter is unknown:** `ax traces list` to locate a trace → `ax spans export PROJECT --space SPACE --trace-id TRACE_ID` to pull its spans (immediately consistent; see Time-series index lag below). When you already know the filter, skip listing and export directly.
-
-### Time-series index lag
-
-Arize uses two storage tiers:
-
-- **Primary trace store** (indexed by `trace_id`) — spans are written here immediately on ingestion. `--trace-id` direct lookups (`ax spans export PROJECT_ID --trace-id TRACE_ID`) hit this store and are always up to date.
-- **Time-series query index** (used by `--days`, `--start-time`, `--end-time`) — built asynchronously from the primary store and lags **6–12 hours**. Queries scoped by time range will miss very recent traces.
-
-**Implication:** If you already have a `trace_id`, use `ax spans export PROJECT_ID --trace-id TRACE_ID` — it's faster and immediately consistent. Use time-range queries only for historical exploration, and set `--start-time` at least 12 hours in the past to guarantee results are indexed.
+**When the filter is unknown:** `ax traces list` to locate a trace → `ax spans export PROJECT --space SPACE --trace-id TRACE_ID` to pull its spans (immediately consistent; see [Time windows](#time-windows-recency-utc-and-index-lag)).
 
 ## Batch Annotate Spans: `ax spans annotate`
 
-Write annotations onto spans in bulk from a file. Upsert semantics — existing annotations with the same key are updated, new ones are created. Up to 1000 annotations per request.
+Write annotations onto spans in bulk from a file. Upsert semantics: resubmitting the same annotation config name for the same span overwrites the previous value. Up to 1000 spans per request.
 
 ```bash
-ax spans annotate PROJECT --file annotations.json
-ax spans annotate PROJECT --file annotations.csv --space SPACE
-ax spans annotate PROJECT --file annotations.json --start-time "2026-05-01T00:00:00" --end-time "2026-05-28T00:00:00"
-ax spans annotate PROJECT --file annotations.json --days 7
+ax spans annotate PROJECT --space SPACE --file annotations.json
+ax spans annotate PROJECT --space SPACE --file annotations.csv --days 7
+ax spans annotate PROJECT --space SPACE --file annotations.json --start-time "2026-05-01T00:00:00Z" --end-time "2026-05-28T00:00:00Z"
 ```
 
-Flags: see [references/spans-cli.md](references/spans-cli.md#ax-spans-annotate).
+Flags: run `ax spans annotate --help`.
 
-The annotation file must contain the span ID and the annotation fields to write. Export a sample span first to confirm span IDs and available fields before bulk-annotating.
+Each record needs `record_id` (the span ID) and `values`: a list of annotation objects, each with `name` and optionally `score`, `label`, or `text`. If any span ID is not found within the lookup window, the entire request is rejected, so export the spans first to confirm IDs and set `--start-time`/`--days` to cover every span in the file.
 
 ## Delete Spans: `ax spans delete`
 Irreversible deletion by span ID; missing IDs in the lookback window are silently ignored. Confirms by default (`--force` to skip); pass `--space` with a project name.
@@ -279,21 +262,7 @@ ax spans export PROJECT --space SPACE --trace-id TRACE_ID --stdout | jq '.[]'
 
 ## Span Column Reference (OpenInference Semantic Conventions)
 
-Core columns you'll need on almost every task:
-
-| Column | Description |
-|--------|-------------|
-| `name` | Span operation name (e.g., `ChatCompletion`, `retrieve_docs`) |
-| `context.trace_id` / `context.span_id` | Trace ID (shared by all spans in a trace) / unique span ID |
-| `parent_id` | Parent span ID. `null` for root spans (= traces) |
-| `start_time` / `end_time` | When the span started / ended (ISO 8601) |
-| `latency_ms` | Duration in milliseconds |
-| `status_code` / `status_message` | `OK`, `ERROR`, `UNSET` / optional message (usually set on errors) |
-| `attributes.openinference.span.kind` | `LLM`, `CHAIN`, `TOOL`, `AGENT`, `RETRIEVER`, `RERANKER`, `EMBEDDING`, `GUARDRAIL`, `EVALUATOR` |
-| `attributes.input.value` / `attributes.output.value` | Generic input/output for any span kind |
-| `attributes.llm.input_messages` / `attributes.llm.output_messages` | Structured chat message arrays — where LLM-span prompts and responses actually live |
-
-For the full column map — timing/status fields, prompt templates, cost/token counts, tool/retriever/reranker/embedding-specific columns, error and annotation columns — see [references/span-columns.md](references/span-columns.md).
+See [references/span-columns.md](references/span-columns.md) for the column map: identity and timing, status, span kind, input/output and LLM message arrays, prompt templates, token counts and cost, tool/retriever/reranker/embedding columns, and error and annotation columns.
 
 ## Troubleshooting
 
@@ -305,8 +274,8 @@ For the full column map — timing/status fields, prompt templates, cost/token c
 | `No profile found` | No profile is configured. See [references/ax-profiles.md](references/ax-profiles.md) to create one. |
 | `401 Unauthorized` with valid API key | For `ax traces export` with a project name, add `--space SPACE`. For `ax spans export`, try resolving to a base64 project ID: `ax projects list -l 100 -o json` and use the project's `id`. If the key itself is wrong or expired, fix the profile using [references/ax-profiles.md](references/ax-profiles.md). |
 | `No spans found` | Expand `--days` (default 30), verify project ID |
-| Results don't include recent traces | Time-range queries lag 6–12h. Use `--trace-id` for immediate lookups of known traces. For time-range queries, set `--start-time` at least 12h in the past to ensure spans are indexed. |
-| Expected traces missing from time-range query | Likely a timezone mismatch. Timestamps must be UTC — naive timestamps and `Z`-suffix timestamps are both treated as UTC; local times without conversion will shift the window. Re-run using `date -u "+%Y-%m-%dT%H:%M:%SZ"` to get current UTC and compute the correct window. If the user references UI-displayed times, ask what timezone their Arize account is set to and convert to UTC. |
+| Results don't include recent traces | Index lag; see [Time windows](#time-windows-recency-utc-and-index-lag). |
+| Expected traces missing from time-range query | Likely a timezone mismatch; see [Time windows](#time-windows-recency-utc-and-index-lag). |
 | `Filter error` or `invalid filter expression` | Check column name spelling (e.g., `attributes.openinference.span.kind` not `span_kind`), wrap string values in single quotes, use `CONTAINS` for free-text fields |
 | `unknown attribute` in filter | The attribute path is wrong or not indexed. Try browsing a small sample first to see actual column names: `ax spans export PROJECT --space SPACE -l 5 --stdout \| jq '.[0] \| keys'` |
 | Attribute columns exist but values look empty | Make sure you are inspecting exported spans, not model column discovery. Column discovery returns schema metadata only. For per-span values, run `ax spans export PROJECT --space SPACE --trace-id TRACE_ID --stdout` and inspect `.[] .attributes` or explicit fields like `.attributes["input.value"]`, `.attributes["output.value"]`, and `.attributes["tool.name"]`. |

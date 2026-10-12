@@ -9,7 +9,7 @@ compatibility: Requires the ax CLI and a configured Arize profile.
 
 # Arize AI Integration Skill
 
-> **`SPACE`** — `--space` flags accept a space **name** (e.g., `my-workspace`) or a base64 space **ID** (e.g., `U3BhY2U6...`). Find yours with `ax spaces list`.
+> **`SPACE`** — `--space` flags accept a space **name** (e.g., `my-workspace`) or a base64 space **ID** (e.g., `U3BhY2U6...`). Resolve a known name with `ax spaces get NAME`; `ax spaces list` is for browsing when the name is unknown.
 > **Note:** `ai-integrations create` does **not** accept `--space` — AI integrations are account-scoped. Use `--space` only with `list`, `get`, `update`, and `delete`.
 
 ## Concepts
@@ -18,7 +18,7 @@ compatibility: Requires the ax CLI and a configured Arize profile.
 - **Provider** = the LLM service backing the integration (e.g., `OPEN_AI`, `ANTHROPIC`, `AWS_BEDROCK`)
 - **Integration ID** = a base64-encoded global identifier for an integration (e.g., `TGxtSW50ZWdyYXRpb246MTI6YUJjRA==`); required for evaluator creation and other downstream operations
 - **Scoping** = visibility rules controlling which spaces or users can use an integration
-- **Auth type** = how Arize authenticates with the provider: `DEFAULT` (provider API key), `PROXY_WITH_HEADERS` (proxy via custom headers), or `BEARER_TOKEN` (bearer token auth)
+- **Auth type** = how Arize authenticates with the provider: `DEFAULT` (provider API key), `PROXY_WITH_HEADERS` (proxy via custom headers), `BEARER_TOKEN` (bearer token auth), or `OAUTH2_CLIENT_CREDENTIALS`
 
 ## Prerequisites
 
@@ -59,15 +59,7 @@ ax ai-integrations list --space SPACE --limit 20 -o json
 ax ai-integrations list --space SPACE --limit 20 --cursor CURSOR_TOKEN -o json
 ```
 
-**Key flags:**
-
-| Flag | Description |
-|------|-------------|
-| `--space` | Space name or ID to filter integrations |
-| `--name` | Case-insensitive substring filter on integration name |
-| `--limit` | Max results (1–100, default 15) |
-| `--cursor` | Pagination token from a previous response |
-| `-o, --output` | Output format: `table` (default) or `json` |
+Run `ax ai-integrations list --help` for flags. When the integration name or ID is known, use `ax ai-integrations get` (below) instead of paging the list; `list` is for browsing.
 
 **Response fields:**
 
@@ -80,7 +72,7 @@ ax ai-integrations list --space SPACE --limit 20 --cursor CURSOR_TOKEN -o json
 | `model_names` | Allowed model list, or `null` if all models are enabled |
 | `enable_default_models` | Whether default models for this provider are allowed |
 | `function_calling_enabled` | Whether tool/function calling is enabled |
-| `auth_type` | Authentication method: `DEFAULT`, `PROXY_WITH_HEADERS`, or `BEARER_TOKEN` |
+| `auth_type` | Authentication method: `DEFAULT`, `PROXY_WITH_HEADERS`, `BEARER_TOKEN`, or `OAUTH2_CLIENT_CREDENTIALS` |
 
 ---
 
@@ -136,25 +128,14 @@ For a provider's full example and notes (Bedrock/Vertex metadata, base URLs, fla
 | `FIREWORKS` | `--api-key <key>` only — no `--base-url` or `--headers` | `$FIREWORKS_API_KEY` | [provider-fireworks.md](references/provider-fireworks.md) |
 | `TOGETHER_AI` | `--api-key <key>` only — no `--base-url` or `--headers` | `$TOGETHER_API_KEY` | [provider-together-ai.md](references/provider-together-ai.md) |
 
-### Optional flags for any provider
-
-| Flag | Description |
-|------|-------------|
-| `--model-name` | Allowed model name (repeat for multiple, e.g. `--model-name gpt-4o --model-name gpt-4o-mini`); satisfies the model-source requirement |
-| `--enable-default-models` | Enable Arize's default model list for the provider; satisfies the model-source requirement |
-| `--function-calling-enabled` | Enable tool/function calling support |
-| `--auth-type` | Authentication type: `DEFAULT`, `PROXY_WITH_HEADERS`, `BEARER_TOKEN`, or `OAUTH2_CLIENT_CREDENTIALS` |
-| `--headers` | Custom headers as JSON object or file path (for proxy auth) |
-| `--provider-metadata` | Provider-specific metadata as JSON object or file path |
+Run `ax ai-integrations create --help` for optional flags. Pair `--headers` with `--auth-type PROXY_WITH_HEADERS` when the provider sits behind a proxy.
 
 ### After creation
 
 Capture the returned integration ID (e.g., `TGxtSW50ZWdyYXRpb246MTI6YUJjRA==`) — it is needed for evaluator creation and other downstream commands. If you missed it, retrieve it:
 
 ```bash
-ax ai-integrations list --space SPACE -o json
-# or by name/ID directly:
-ax ai-integrations get NAME_OR_ID
+ax ai-integrations get NAME_OR_ID --space SPACE -o json
 ```
 
 ---
@@ -200,6 +181,18 @@ Omit `--force` to get a confirmation prompt instead of deleting immediately.
 
 ---
 
+## `ax integrations` (LLM and agent integrations)
+
+`ax integrations` manages LLM and agent integrations in one group (`list`, `get`, `delete`, `create llm|agent`, `update llm|agent`). Run `ax integrations <sub> --help` for flags.
+
+- **Choosing a create command:** use `ax ai-integrations create` (the examples above) for `AZURE_OPEN_AI` or when `--auth-type` is needed; `ax integrations create llm` accepts neither. Use `ax integrations create llm` when scopings must be set at create time (`--scopings`).
+- **`create llm` provider flags differ** from `ax ai-integrations create`: Bedrock and Vertex AI take dedicated flags instead of `--provider-metadata`. Run `ax integrations create llm --help` for the per-provider list.
+- **Agent endpoints:** use `ax integrations create agent` to register an agent endpoint; run its `--help` for flags.
+- **Provider is immutable** in `ax integrations update llm`; delete and recreate to change it.
+- **`--type`:** `list` returns every type merged; filter with `--type LLM` or `--type AGENT`. `get` and `delete` by name need `--type` because names are unique only per type; IDs work without it.
+
+---
+
 ## Troubleshooting
 
 | Problem | Solution |
@@ -207,7 +200,7 @@ Omit `--force` to get a confirmation prompt instead of deleting immediately.
 | `ax: command not found` | See [references/ax-setup.md](references/ax-setup.md) |
 | `401 Unauthorized` | API key may not have access to this space. Verify key and space ID at https://app.arize.com/admin > API Keys |
 | `No profile found` | Run `ax profiles show --expand`; set `ARIZE_API_KEY` env var or write `~/.arize/config.toml` |
-| `Integration not found` | Verify with `ax ai-integrations list --space SPACE` |
+| `Integration not found` | Check the name or ID with `ax ai-integrations get NAME_OR_ID --space SPACE`; use `ax ai-integrations list --space SPACE --name TEXT` only to browse for the right name |
 | `has_api_key: false` after create | Credentials were not saved — re-run `update` with the correct `--api-key` or `--provider-metadata` |
 | Evaluator runs fail with LLM errors | Check integration credentials with `ax ai-integrations get INT_ID`; rotate the API key if needed |
 | `Invalid value for '--provider'` with `FIREWORKS` or `TOGETHER_AI` | The installed ax CLI predates these providers — upgrade the ax CLI (see [references/ax-setup.md](references/ax-setup.md)) |

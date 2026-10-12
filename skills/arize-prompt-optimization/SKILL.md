@@ -9,7 +9,7 @@ compatibility: Requires the ax CLI and a configured Arize profile.
 
 # Arize Prompt Optimization Skill
 
-> **`SPACE`** — `--space` flags accept a space **name** (e.g., `my-workspace`) or a base64 space **ID** (e.g., `U3BhY2U6...`). Find yours with `ax spaces list`.
+> **`SPACE`** — `--space` flags accept a space **name** (e.g., `my-workspace`) or a base64 space **ID** (e.g., `U3BhY2U6...`). Confirm a known name with `ax spaces get NAME`; `ax spaces list` is for human browsing.
 
 ## Related skills
 
@@ -68,7 +68,7 @@ If an `ax` command fails, troubleshoot based on the error:
 
 ### When you must ask the user first
 
-Still prefer `ax spaces list`, `ax projects list`, `ax datasets list`, `ax experiments list`, and exports over open-ended questions. If you still cannot proceed (e.g. multiple projects match the name the user gave, unclear trace vs experiment path, or destructive scope), **do not** jump straight into questions — use the same explicit framing as **arize-instrumentation** when it stops for scope or confirmation:
+Still prefer `ax` lookups over open-ended questions: confirm a known name with `ax projects get NAME --space SPACE` or `ax datasets get NAME --space SPACE` (`list` is for human browsing). If you still cannot proceed (e.g. multiple projects match the name the user gave, unclear trace vs experiment path, or destructive scope), **do not** jump straight into questions — use the same explicit framing as **arize-instrumentation** when it stops for scope or confirmation:
 
 1. Acknowledge the skill, e.g.: **I found the arize-prompt-optimization skill in this repo** (you may add `skills/arize-prompt-optimization/SKILL.md` if helpful).
 2. Then a clear pause line, e.g.: **A few clarifying questions before I invoke it:**
@@ -283,7 +283,7 @@ jq -s '
 ### A/B compare two prompts
 
 1. Create two experiments against the same dataset, each using a different prompt version
-2. Export both: `ax experiments export EXP_A` and `ax experiments export EXP_B`
+2. Export both: `ax experiments export EXP_A --dataset DATASET_NAME --space SPACE`, then the same for `EXP_B`
 3. Compare average scores, failure rates, and specific example flips
 4. Check for regressions -- examples that passed with prompt A but fail with prompt B
 
@@ -317,42 +317,33 @@ When optimizing prompts that use template variables:
 
 ### Optimize a prompt from a failing trace
 
-1. Find a failing trace ID directly from the known filter — skip `ax traces list`'s human-browsing view and go straight to the scriptable path:
+1. Export full failing traces in one step:
    ```bash
-   ax spans export PROJECT --space SPACE --filter "status_code = 'ERROR'" -l 5 --stdout | jq -r '.[0].context.trace_id'
+   ax traces export PROJECT --space SPACE --filter "status_code = 'ERROR'" -l 5 --stdout > failing.json
    ```
-2. Export the full trace:
+2. Extract the prompt from the LLM span (the errored LLM span when one exists, else the first LLM span):
    ```bash
-   ax spans export PROJECT --space SPACE --trace-id TRACE_ID
-   ```
-3. Extract the prompt from the LLM span:
-   ```bash
-   jq '[.[] | select(.attributes.openinference.span.kind == "LLM")][0] | {
+   jq '[.[] | select(.attributes.openinference.span.kind == "LLM")] | (map(select(.status_code == "ERROR"))[0] // .[0]) | {
      messages: .attributes.llm.input_messages,
      template: .attributes.llm.prompt_template,
      output: .attributes.output.value,
      error: .attributes.exception.message
-   }' trace_*/spans.json
+   }' failing.json
    ```
-4. Identify what failed from the error message or output
-5. Fill in the optimization meta-prompt (Phase 3) with the prompt and error context
-6. Apply the revised prompt
+3. Identify what failed from the error message or output
+4. Fill in the optimization meta-prompt (Phase 3) with the prompt and error context
+5. Apply the revised prompt
 
 ### Optimize using a dataset and experiment
 
-1. Find the dataset and experiment:
-   ```bash
-   ax datasets list --space SPACE
-   ax experiments list --dataset DATASET_NAME --space SPACE
-   ```
-2. Export both:
+1. Export the dataset and experiment (`ax experiments list --dataset DATASET_NAME --space SPACE` finds unknown names):
    ```bash
    ax datasets export DATASET_NAME --space SPACE
    ax experiments export EXPERIMENT_NAME --dataset DATASET_NAME --space SPACE
    ```
-3. Prepare the joined data for the meta-prompt
-4. Run the optimization meta-prompt
-5. Create a new experiment with the revised prompt to measure improvement
+2. Prepare the joined data for the meta-prompt
+3. Run the optimization meta-prompt
+4. Create a new experiment with the revised prompt to measure improvement
 
 ### Debug a prompt that produces wrong format
 

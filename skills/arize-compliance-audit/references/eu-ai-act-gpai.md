@@ -6,6 +6,7 @@ Official sources:
 - EU AI Act full text: https://eur-lex.europa.eu/eli/reg/2024/1689/oj
 - GPAI Code of Practice: https://digital-strategy.ec.europa.eu/en/policies/contents-code-gpai
 - Code of Practice portal: https://code-of-practice.ai/
+- AI Act implementation timeline (including the AI Omnibus amendments): https://digital-strategy.ec.europa.eu/en/policies/regulatory-framework-ai
 
 ## Risk classification
 
@@ -172,5 +173,7 @@ If your AI application processes personal data of EU residents, GDPR applies reg
 | 1 August 2024 | EU AI Act entered into force |
 | 2 February 2025 | Prohibited practices apply |
 | 2 August 2025 | GPAI obligations apply to new models |
-| 2 August 2026 | Full enforcement begins — high-risk requirements, Commission can request info, model access, and order recalls |
+| 2 August 2026 | General application and enforcement begin — Art. 50 transparency obligations; Commission can request info, model access, and order recalls |
 | 2 August 2027 | Existing GPAI models (released before Aug 2025) must comply |
+| 2 December 2027 | High-risk requirements apply to Annex III use cases (e.g. employment, education, biometrics, critical infrastructure, migration), as amended by the AI Omnibus |
+| 2 August 2028 | High-risk requirements apply to AI systems embedded in Annex I regulated products |

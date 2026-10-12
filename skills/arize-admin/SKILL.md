@@ -4,7 +4,7 @@ description: "Manages Arize users, organizations, spaces, projects, roles, role 
 metadata:
   author: arize
   version: "1.0"
-compatibility: Requires the ax CLI (≥ 0.33.0) and a configured Arize profile with org-admin privileges.
+compatibility: Requires the ax CLI (≥ 0.39.0) and a configured Arize profile with org-admin privileges.
 ---
 
 # Arize Admin Skill
@@ -36,7 +36,7 @@ Programmatic management of Arize users, organizations, spaces, roles, permission
 For multi-step workflows, **collect all required information before running any `ax` commands**. Use `AskUserQuestion` to avoid back-and-forth mid-workflow. Fetch live data first (e.g. org list) so you can present real options rather than asking the user to recall IDs.
 
 ### Onboarding a new team
-1. Run `ax organizations list -o json` to get available org names.
+1. Run `ax organizations get NAME -o json` when the org name is known; use `ax organizations list -o json` to present org names as options.
 2. Use `AskUserQuestion` (single call, up to 4 questions) to gather:
    - **Which org?** — present the org names from the list as options
    - **Space name** — what to call the new team's space
@@ -45,7 +45,7 @@ For multi-step workflows, **collect all required information before running any 
 
 ### Offboarding a user
 Ask before running any commands:
-- **Which user?** — email address (then look up with `ax users list --email`)
+- **Which user?** — email address (then look up with `ax users get EMAIL -o json`)
 
 ### Restricting a project
 Ask before running any commands:
@@ -56,12 +56,12 @@ Ask before running any commands:
 Ask before running any commands:
 - **Name and email** — for each user to invite
 - **Role** — `ADMIN`, `MEMBER`, or `ANNOTATOR` (present as options; account-level user creation has no `READ_ONLY` role)
-- **Invite mode** — `EMAIL_LINK` (default), `TEMPORARY_PASSWORD`, or `NONE`
+- **Invite mode** — `EMAIL_LINK`, `TEMPORARY_PASSWORD`, or `NONE` (`--invite-mode` is required)
 
 ### Revoking or rotating an API key
 Ask before running any commands:
 - **Which key?** — run `ax api-keys list -o json` and present options by name and status; or ask for `KEY_ID`
-- **Revoke or rotate?** — `revoke` invalidates immediately; `refresh` issues a new key with the same scope (zero-downtime rotation)
+- **Revoke or rotate?** — `revoke` invalidates immediately; `refresh` issues a new key with the same scope and invalidates the old one immediately unless `--grace-period-seconds` is passed
 
 If the user says "delete" an API key, use `ax api-keys revoke` to invalidate it.
 
@@ -84,7 +84,7 @@ If an `ax` command fails:
 - `403 Forbidden` → the active profile lacks admin privileges; see [references/ax-profiles.md](references/ax-profiles.md) (never ask the user to paste an admin key into chat)
 - **Security:** Never read `.env` files or search the filesystem for credentials. Exception: the non-secret `ARIZE_SPACE_ID` line (see [Space](references/ax-profiles.md#space)). Use `ax profiles` for Arize credentials. Never ask the user to paste secrets into chat. Never echo, log, or display raw API key values. For missing credentials, see [references/ax-profiles.md](references/ax-profiles.md).
 
-> **OAuth login option (v0.18.0+):** Users can authenticate via browser-based OAuth PKCE instead of API keys by running `ax auth login` (then `ax auth logout` to revoke). Inform users of this option if they ask about authentication alternatives — do **not** run `ax auth login` yourself, as it opens a browser interactively.
+> **OAuth login option:** Users can authenticate via browser-based OAuth PKCE instead of API keys by running `ax auth login` (then `ax auth logout` to revoke). The active profile must be an OAuth profile, created with `ax profiles create --auth-method oauth`. Inform users of this option if they ask about authentication alternatives — do **not** run `ax auth login` yourself, as it opens a browser interactively.
 
 ---
 
@@ -95,10 +95,10 @@ A user must exist in the account before they can be added to an org or space. **
 ```bash
 ax users list                                  # all users
 ax users list --email "jane"                   # substring filter
-ax users list --status active                  # active only
+ax users list --status ACTIVE                  # ACTIVE or INVITED
 ax users list -l 100 -o json                   # paginate, get global IDs
 
-ax users get USER_ID
+ax users get USER_ID_OR_EMAIL                   # direct lookup; list is for browsing
 
 ax users create \
   --full-name "Jane Doe" \
@@ -229,18 +229,18 @@ Idempotent — if a binding already exists for the user on that resource, exits 
 
 ## Resource Restrictions
 
-Restricts a **project or dashboard** so only users with an explicit role binding on that resource can access it. Space/org-level roles are excluded.
+Restricts a **project, dashboard, or prompt** so only users with an explicit role binding on that resource can access it. Space/org-level roles are excluded.
 
 ```bash
 ax resource-restrictions list                                          # all restrictions, paginated
-ax resource-restrictions list --resource-type DASHBOARD                # filter to one resource type (PROJECT or DASHBOARD)
+ax resource-restrictions list --resource-type DASHBOARD                # filter to one resource type (PROJECT, DASHBOARD, or PROMPT)
 ax resource-restrictions list --limit 50 --cursor PAGINATION_CURSOR    # fetch next page
 
-ax resource-restrictions restrict --resource-id PROJECT_OR_DASHBOARD_GLOBAL_ID     # idempotent
-ax resource-restrictions unrestrict --resource-id PROJECT_OR_DASHBOARD_GLOBAL_ID --force   # ⚠ confirm first
+ax resource-restrictions restrict --resource-id RESOURCE_GLOBAL_ID     # idempotent
+ax resource-restrictions unrestrict --resource-id RESOURCE_GLOBAL_ID --force   # ⚠ confirm first
 
-# Finding project IDs
-ax projects list -l 100 -o json --space "my-workspace"
+# Finding a project ID
+ax projects get NAME --space "my-workspace" -o json
 ```
 
 ---
@@ -265,24 +265,15 @@ ax api-keys create-service-key \
 
 ax api-keys revoke KEY_ID --force   # ⚠ confirm first — invalidates the key immediately
 
-# Zero-downtime rotation — revokes old key, issues new one with same scope
-ax api-keys refresh KEY_ID
+# Rotation — issues a new key with same scope; old key dies immediately
+# unless --grace-period-seconds keeps it valid while clients switch over
+ax api-keys refresh KEY_ID --grace-period-seconds 3600
 ax api-keys refresh KEY_ID --expires-at "2028-01-01T00:00:00"
 ```
 
 > **The raw key is displayed once.** Save it immediately in your secrets manager. It cannot be retrieved again.
 
-**`create-service-key` flags:**
-
-| Flag | Required | Description |
-|------|----------|-------------|
-| `--name` | yes | Key name |
-| `--assignments` | yes | JSON array (or path to a JSON file) of org/space assignments for the bot user: `[{"org_id": "<id>", "role": "<org-role>", "spaces": [{"space": "<name-or-id>", "role": "<space-role>"}]}]`. `role` is optional at both levels — omitted roles default to `space=MEMBER`, `org=READ_ONLY`. Custom roles use `{"type": "CUSTOM", "id": "<role-id>"}`. |
-| `--account-role` | no | Account-level role for the bot user: `ADMIN`, `MEMBER`, or `ANNOTATOR` (default `MEMBER`) |
-| `--expires-at` | no | ISO 8601 expiry date |
-| `--description` | no | Optional description |
-
-Scope `create-service-key` entirely through `--assignments`, not through separate `--space`/`--space-role`/`--org-role` flags.
+Scope `create-service-key` entirely through `--assignments`; run `ax api-keys create-service-key --help` for the assignment JSON shape, role defaults, and `--account-role`. Pass `--env-file PATH` to write the new key to `ARIZE_API_KEY` in a dotenv or .envrc file, so the key lands in a file rather than the conversation.
 
 ---
 
@@ -304,7 +295,7 @@ ax projects update NAME_OR_ID --name "new-project-name" --space SPACE
 ax projects delete NAME_OR_ID --space SPACE --force   # ⚠ confirm first — deletes all traces and datasets
 ```
 
-> **Note:** Project IDs (base64 strings) are used by `ax spans export`, `ax traces export`, and `ax resource-restrictions`. If commands reject a project name, look up the `id` field from `ax projects list -o json` and use that instead.
+> **Note:** Project IDs (base64 strings) are used by `ax spans export`, `ax traces export`, and `ax resource-restrictions`. If commands reject a project name, take the `id` field from `ax projects get NAME --space SPACE -o json`; `ax projects list` is for browsing.
 
 ---
 

@@ -70,7 +70,7 @@ Braintrust REST (https://www.braintrust.dev/docs/api-reference/prompts/list-prom
 - List: `GET /v1/prompt` (filter with `project_name`, `slug`, …)
 - Get: `GET /v1/prompt/{prompt_id}` with optional `version` / `environment`
 
-Map `prompt_data` messages into AX Prompt Hub via `ax prompts create` / `create_version`, and map environments to AX labels when the user wants them. Skip tool/scorer functions unless explicitly requested.
+Map `prompt_data` messages into AX Prompt Hub via `ax prompts create` / `ax prompts create-version`, and map environments to AX labels with `ax prompts set-version-labels` when the user wants them. Skip tool/scorer functions unless explicitly requested.
 
 ## Transform checklist
 

@@ -55,7 +55,7 @@ LangSmith exposes prompts programmatically (docs: https://docs.langchain.com/lan
 - Versions: `client.list_prompt_commits("owner/repo")` or `GET /api/v1/commits/{owner}/{repo}`
 - One version: pull / `GET /api/v1/commits/{owner}/{repo}/{commit}` where `{commit}` can be a hash, tag, or `latest`
 
-Map into AX with `ax prompts create` / `ax prompts create-version` (or Python `client.prompts.create` / `create_version`), then `set_labels` for tags such as production.
+Map into AX with `ax prompts create` / `ax prompts create-version` (or Python `client.prompts.create` / `create_version`), then `ax prompts set-version-labels` for tags such as production.
 
 Chat manifests → AX `messages` with roles `SYSTEM` / `USER` / `ASSISTANT` / `TOOL`. Prefer importing readable chat templates; note tool-only / non-chat commits the agent cannot flatten.
 

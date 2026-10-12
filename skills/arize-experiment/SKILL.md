@@ -4,7 +4,7 @@ description: Creates, runs, and analyzes Arize experiments for evaluating and co
 metadata:
   author: arize
   version: "1.0"
-compatibility: Requires the ax CLI (≥ 0.33.0) and a configured Arize profile.
+compatibility: Requires the ax CLI (≥ 0.39.0) and a configured Arize profile.
 ---
 
 # Arize Experiment Skill
@@ -43,7 +43,7 @@ ax experiments list --cursor CURSOR_TOKEN
 ax experiments list -o json
 ```
 
-Flags: see [references/experiments-cli.md#list](references/experiments-cli.md#list).
+Flags: `ax experiments list --help`.
 
 ## Get Experiment: `ax experiments get`
 
@@ -55,7 +55,7 @@ ax experiments get NAME_OR_ID -o json
 ax experiments get NAME_OR_ID --dataset DATASET_NAME --space SPACE   # required when using experiment name instead of ID
 ```
 
-Flags: see [references/experiments-cli.md#get](references/experiments-cli.md#get).
+Flags: `ax experiments get --help`.
 
 ### Response fields
 
@@ -84,7 +84,7 @@ ax experiments export EXPERIMENT_NAME --dataset DATASET_NAME --space SPACE --std
 ax experiments export EXPERIMENT_NAME --dataset DATASET_NAME --space SPACE --stdout | jq '.[0]'
 ```
 
-Flags: see [references/experiments-cli.md#export](references/experiments-cli.md#export).
+Flags: `ax experiments export --help`.
 
 ### REST vs Flight (`--all`)
 
@@ -128,7 +128,7 @@ ax experiments create --name "gpt-4o-baseline" --dataset DATASET_NAME --space SP
 ax experiments create --name "claude-test" --dataset DATASET_NAME --space SPACE --file runs.csv
 ```
 
-Flags: see [references/experiments-cli.md#create](references/experiments-cli.md#create). `--dataset` is optional — omit it to create a standalone experiment with no linked dataset (then `--space` is required instead).
+Flags: `ax experiments create --help`. `--dataset` is optional — omit it to create a standalone experiment with no linked dataset (then `--space` is required instead).
 
 ### Passing data via stdin
 
@@ -172,13 +172,13 @@ from anthropic import Anthropic
 
 def task(dataset_row):
     resp = Anthropic().messages.create(
-        model="claude-3-5-sonnet-20241022", max_tokens=256,
+        model="claude-sonnet-4-6", max_tokens=256,
         messages=[{"role": "user", "content": dataset_row["question"]}]
     )
     return resp.content[0].text
 ```
 
-`--dry-run` tests against the first 10 examples without uploading, to validate the task before a full run. Flags: see [references/experiments-cli.md#run](references/experiments-cli.md#run).
+`--dry-run` tests against the first 10 examples without uploading, to validate the task before a full run. Flags: `ax experiments run --help`.
 
 > **Choose the run path based on where the logic lives.** Use `ax experiments run` when there's a local Python task to execute — it runs `task.py` on this machine and uploads the results; no AI integration is required. Use `ax tasks create-run-experiment` when the run should be hosted and recurring — it registers a platform-side `run_experiment` task that Arize executes on a schedule or on demand, driven by a JSON `--run-configuration` (model + messages + AI integration) instead of local code. Default to `ax experiments run` for local/ad-hoc runs and custom logic; use the task path for recurring, hosted runs — see the **arize-evaluator** skill for that route.
 
@@ -191,7 +191,7 @@ ax experiments list-runs EXPERIMENT_NAME --dataset DATASET_NAME --space SPACE --
 ax experiments list-runs EXPERIMENT_ID
 ```
 
-Flags: see [references/experiments-cli.md#list-runs](references/experiments-cli.md#list-runs).
+Flags: `ax experiments list-runs --help`.
 
 ## Delete Experiment: `ax experiments delete`
 
@@ -201,7 +201,7 @@ ax experiments delete NAME_OR_ID --dataset DATASET_NAME --space SPACE   # requir
 ax experiments delete NAME_OR_ID --force   # skip confirmation prompt
 ```
 
-Flags: see [references/experiments-cli.md#delete](references/experiments-cli.md#delete).
+Flags: `ax experiments delete --help`.
 
 ## Annotate Runs: `ax experiments annotate-runs`
 
@@ -241,7 +241,7 @@ A JSON array; each item annotates one run:
 
 > `record_id` keys on the **run** id, which only exists after `create`. So the order is always: `create` → `export` (to read each run's `id`) → build annotations → `annotate-runs`.
 
-Flags: see [references/experiments-cli.md#annotate-runs](references/experiments-cli.md#annotate-runs).
+Flags: `ax experiments annotate-runs --help`.
 
 ## Experiment Run Schema
 
@@ -292,19 +292,8 @@ Each run corresponds to one dataset example. **On `create`, only `example_id` an
    **Attach evaluation scores (required for scores to show in the UI).** Evaluations do **not** come from the create file — you attach them with `annotate-runs`, which keys on each run's `id` (assigned at create time), so you must export first to learn those IDs.
 
 7. Export the experiment to structured data so you can read each run's `id` alongside its `example_id`. Confirm that the exported run records include both fields.
-8. Build the annotation file with structured JSON handling, keyed by `record_id` (the run `id`). Score/label each run via an LLM-as-judge, a code check, or human review; never fabricate scores. Create the annotation config first (here, categorical `correctness` with values `correct`/`incorrect`). Emit this shape:
-   ```json
-   [
-     {
-       "record_id": "RUN_ID_FROM_EXPERIMENT_EXPORT",
-       "values": [
-         { "name": "correctness", "label": "correct" }
-       ]
-     }
-   ]
-   ```
+8. Build the annotation file with structured JSON handling, keyed by `record_id` (the run `id`). Score/label each run via an LLM-as-judge, a code check, or human review; never fabricate scores. Create the annotation config first (here, categorical `correctness` with values `correct`/`incorrect`). Emit the shape in [Annotation file schema](#annotation-file-schema).
 9. Attach the scores with `ax experiments annotate-runs ... --file annotations.json`, then export or inspect the experiment to confirm the evaluations are attached.
-   The scores now render in the experiment view in the Arize UI.
 
 ### Compare two experiments
 
@@ -370,7 +359,7 @@ ax experiments export EXPERIMENT_NAME --dataset DATASET_NAME --space SPACE --std
 | `ax: command not found` | See [references/ax-setup.md](references/ax-setup.md) |
 | `401 Unauthorized` | API key is wrong, expired, or doesn't have access to this space. Fix the profile using [references/ax-profiles.md](references/ax-profiles.md). |
 | `No profile found` | No profile is configured. See [references/ax-profiles.md](references/ax-profiles.md) to create one. |
-| `Experiment not found` | Verify experiment name with `ax experiments list --space SPACE` |
+| `Experiment not found` | Check with `ax experiments get NAME --dataset DATASET --space SPACE` (omit `--dataset` if standalone) |
 | `Invalid runs file` | Each run must have `example_id` and `output` fields |
 | `example_id mismatch` | `example_id` must be the dataset row's **top-level `id`** from `ax datasets export` — not a value nested in the example's fields or `additional_properties`. Export the dataset and inspect the top-level `id` field. |
 | Runs created but no scores / evals in the UI | Evaluations in the create file are silently ignored. Attach them with `ax experiments annotate-runs` (keyed by run `id`) after creating the experiment — see the workflow steps 7–9. |
@@ -378,7 +367,7 @@ ax experiments export EXPERIMENT_NAME --dataset DATASET_NAME --space SPACE --std
 | `annotate-runs`: `no annotation config with name '...'` | Create the config first (see the **arize-annotation** skill); `name` must match it exactly. |
 | `annotate-runs`: `score must not be set` or `label '...' is not one of` | The value doesn't fit the config type: categorical takes a `label` from its values, continuous a `score`, freeform `text`. |
 | `No runs found` | Export returned empty -- verify experiment has runs via `ax experiments get` |
-| `Dataset not found` | The linked dataset may have been deleted; check with `ax datasets list` |
+| `Dataset not found` | The linked dataset may have been deleted; check with `ax datasets get NAME --space SPACE` |
 
 ## Save Credentials for Future Use
 

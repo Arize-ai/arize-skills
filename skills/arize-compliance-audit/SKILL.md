@@ -1,6 +1,6 @@
 ---
 name: arize-compliance-audit
-description: "INVOKE THIS SKILL when auditing an AI agent or LLM app for regulatory compliance. Covers EU AI Act, GPAI Code of Practice, GDPR, NIST AI RMF, Colorado AI Act, HIPAA, and ISO 42001. Scans the codebase for compliance gaps, cross-references Arize instrumentation for audit trail coverage, and produces an actionable remediation checklist tailored to the selected frameworks."
+description: "INVOKE THIS SKILL when auditing an AI agent or LLM app for regulatory compliance. Covers EU AI Act, GPAI Code of Practice, GDPR, NIST AI RMF, Colorado ADMT law (formerly the Colorado AI Act), HIPAA, and ISO 42001. Scans the codebase for compliance gaps, cross-references Arize instrumentation for audit trail coverage, and produces an actionable remediation checklist tailored to the selected frameworks."
 ---
 
 # Arize Compliance Audit Skill
@@ -50,7 +50,7 @@ Select all that apply (reply with numbers, e.g. "1, 3"):
 1. EU frameworks — EU AI Act, GPAI Code of Practice, GDPR
    (choose if end-users or data subjects are located in the EU)
 
-2. US frameworks — NIST AI RMF, state laws (Colorado AI Act, NYC LL144),
+2. US frameworks — NIST AI RMF, state laws (Colorado ADMT law, NYC LL144),
    HIPAA (if processing health data)
    (choose if operating in the United States)
 
@@ -64,7 +64,7 @@ and we can narrow down during the audit.
 
 Based on the selection:
 - **1 selected** — EU AI Act, GPAI Code of Practice, GDPR apply. See [references/eu-ai-act-gpai.md](references/eu-ai-act-gpai.md).
-- **2 selected** — NIST AI RMF, Colorado AI Act, NYC LL144, HIPAA may apply. See [references/us-ai-compliance.md](references/us-ai-compliance.md).
+- **2 selected** — NIST AI RMF, Colorado ADMT law (SB26-189), NYC LL144, HIPAA may apply. See [references/us-ai-compliance.md](references/us-ai-compliance.md).
 - **3 selected** — ISO 42001 AIMS controls apply. See [references/iso-42001.md](references/iso-42001.md). Note: ISO 42001 is an organisational management system — the audit will cover technically-auditable controls only; purely organisational clauses (leadership review, internal audits) are flagged separately.
 - **Multiple selected** — all selected frameworks apply; the audit covers the union of requirements, with cross-references where frameworks overlap.
 
@@ -73,9 +73,9 @@ Based on the selection:
 Use the `AskUserQuestion` tool to ask: **What does your AI application do?**
 
 - **General chatbot / assistant** — Limited risk (EU), general obligations (US)
-- **Hiring / HR** — High risk (EU Art. 6, Annex III); Colorado AI Act applies; NYC LL144 applies if NYC
+- **Hiring / HR** — High risk (EU Art. 6, Annex III); Colorado SB26-189 applies when a covered ADMT materially influences the hiring decision; NYC LL144 applies if NYC
 - **Healthcare** — High risk (EU); HIPAA applies if processing PHI
-- **Credit / financial** — High risk (EU); Colorado AI Act applies
+- **Credit / financial** — High risk (EU); Colorado SB26-189 applies when a covered ADMT materially influences the lending decision
 - **Education** — High risk (EU)
 - **Content generation** — Limited risk (EU Art. 50 transparency); general obligations (US)
 - **GPAI model provider** — GPAI Code of Practice applies (EU)
@@ -84,7 +84,7 @@ Use the `AskUserQuestion` tool to ask: **What does your AI application do?**
 
 Based on the use case and selected frameworks:
 - **EU selected**: Classify as Unacceptable / High / Limited / Minimal per [references/eu-ai-act-gpai.md](references/eu-ai-act-gpai.md)
-- **US selected**: Classify as High-risk (consequential decisions per Colorado AI Act) or General
+- **US selected**: Classify as High-risk (a covered automated decision-making technology that materially influences consequential decisions per Colorado SB26-189) or General
 - **ISO 42001 selected**: Risk tier is not a formal classification in ISO 42001, but note whether the system is high-stakes (which elevates the priority of impact assessment and bias controls)
 
 ### Phase 0 output
@@ -299,8 +299,8 @@ If Arize tracing is **not** set up, this is a significant compliance gap. Offer:
 | EU AI Act full text | https://eur-lex.europa.eu/eli/reg/2024/1689/oj |
 | GPAI Code of Practice | https://digital-strategy.ec.europa.eu/en/policies/contents-code-gpai |
 | Code of Practice portal | https://code-of-practice.ai/ |
-| NIST AI RMF | https://www.nist.gov/artificial-intelligence/ai-risk-management-framework |
-| Colorado AI Act (SB24-205) | https://leg.colorado.gov/bills/sb24-205 |
+| NIST AI RMF | https://www.nist.gov/itl/ai-risk-management-framework |
+| Colorado ADMT law (SB26-189, repeals and reenacts SB24-205) | https://leg.colorado.gov/bills/sb26-189 |
 | NYC Local Law 144 | https://www.nyc.gov/site/dca/about/automated-employment-decision-tools.page |
 | HIPAA | https://www.hhs.gov/hipaa/index.html |
 | ISO/IEC 42001:2023 | https://www.iso.org/standard/42001.html |
