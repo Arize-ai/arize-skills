@@ -105,7 +105,11 @@ Useful flags:
 - `--eval-column session_eval.X` overrides the derived output column.
 - `--not-applicable` and `--unscorable` set the human labels to exclude. The defaults are `not_applicable`, and `cannot_judge` plus `unclear`.
 - `--adjudications FILE` takes a JSON file mapping `record_id` to a resolved label, once disputes are adjudicated.
-- `--plan WORK_DIR/plan.json` takes the plan from **arize-align-queue-builder** and adds production-weighted agreement and recall. Without it, agreement on a queue that oversamples rare labels is not a production rate.
+- `--plan WORK_DIR/plan.json` takes the plan from **arize-align-queue-builder**. The queue builder makes two queues:
+  - On its **calibration queue** (the random stream, a uniform sample), the report's agreement and recall are measurement estimates. Quote these, and take the verdict from this queue.
+  - On its **gold queue** (targeted records), the report adds production-weighted agreement and recall as a secondary estimate. Use that queue to find and fix disagreements.
+
+  Without a plan, agreement on a queue that oversamples rare labels is not a production rate.
 
 The report sorts every record into one of these buckets: **gold** (applicable, decisive and resolved), **not_applicable**, **unscorable**, **off_rubric** (a human label the evaluator cannot output), **disputed** or **unlabeled**. Only gold records count toward human-vs-evaluator agreement. Every other bucket is reported with its share of the records, never silently dropped.
 

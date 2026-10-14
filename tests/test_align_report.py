@@ -418,6 +418,35 @@ def test_weighted_estimates_undo_oversampling(tmp_path):
     assert "Production-weighted estimates" in align.render(r)
 
 
+def test_a_random_stream_queue_is_a_measurement_and_is_not_reweighted(tmp_path):
+    recs = [record(f"r{i}", {A: "good" if i % 3 else "bad"}, stored="good") for i in range(9)]
+    plan = tmp_path / "plan.json"
+    plan.write_text(json.dumps({
+        "strata": [{"stratum": "random", "stream": "random", "population": 900, "frame": 880},
+                   {"stratum": "good", "stream": "targeted", "population": 90}],
+        "records": [{"span_id": f"sp-r{i}", "stratum": "random", "stream": "random"} for i in range(9)]}))
+    r = build(tmp_path, recs, plan=str(plan))
+    assert r["weighted"] == {"random_only": True, "streams": {"random": 9}, "frame": 880}
+    assert "measurement estimates and need no weighting" in align.render(r)
+
+
+def test_random_strata_are_left_out_of_targeted_weighting(tmp_path):
+    recs = [record(f"g{i}", {A: "good"}, stored="good") for i in range(4)]
+    recs.append(record("r0", {A: "bad"}, stored="good"))
+    plan = tmp_path / "plan.json"
+    plan.write_text(json.dumps({
+        "strata": [{"stratum": "random", "stream": "random", "population": 900, "frame": 900},
+                   {"stratum": "good", "stream": "targeted", "population": 90}],
+        "records": [{"span_id": f"sp-g{i}", "stratum": "good", "stream": "targeted"} for i in range(4)]
+        + [{"span_id": "sp-r0", "stratum": "random", "stream": "random"}]}))
+    r = build(tmp_path, recs, plan=str(plan))
+    wt = r["weighted"]
+    assert wt["agreement"] == 1.0 and wt["covered_share"] == 1.0 and wt["uncovered"] == []
+    assert wt["streams"] == {"targeted": 4, "random": 1}
+    text = align.render(r)
+    assert "These records were targeted" in text and "1 gold records here are from the random stream" in text
+
+
 def test_weighted_estimates_explain_an_old_plan(tmp_path):
     plan = tmp_path / "plan.json"
     plan.write_text(json.dumps({"records": []}))

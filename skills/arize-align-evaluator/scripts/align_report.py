@@ -530,8 +530,17 @@ def weight_by_plan(plan, rows, gold_scored):
 
     The queue oversamples rare stored labels and provider disagreements, so raw agreement on it is
     not a production rate. Each stratum's gold records stand in for its production units (strata
-    without gold are reported as uncovered). Assumes exclusions are random within a stratum."""
-    strata = {s["stratum"]: s for s in plan.get("strata") or [] if s.get("population")}
+    without gold are reported as uncovered). Assumes exclusions are random within a stratum.
+
+    Records from the plan's random stream are a uniform sample, so a queue of only those is already a
+    measurement and needs no weights; they are never pooled into the targeted strata."""
+    stream_of = {r.get("span_id"): r.get("stream", "targeted") for r in plan.get("records") or []}
+    streams = Counter(stream_of.get(row["span_id"], "unplanned") for row in gold_scored)
+    if gold_scored and streams["random"] == len(gold_scored):
+        frame = next((s.get("frame") for s in plan.get("strata") or [] if s.get("stream") == "random"), None)
+        return {"random_only": True, "streams": dict(streams), "frame": frame}
+    strata = {s["stratum"]: s for s in plan.get("strata") or []
+              if s.get("population") and s.get("stream", "targeted") != "random"}
     if not strata:
         return {"error": "plan.json has no strata with production counts (re-plan with a current plan_queue.py)"}
     by_span = {r.get("span_id"): r.get("stratum") for r in plan.get("records") or []}
@@ -554,6 +563,7 @@ def weight_by_plan(plan, rows, gold_scored):
                   / len(groups[h]) for h, n in covered.items())
         recall[lbl] = hit / has if has else None
     return {"agreement": agree, "recall": recall, "covered_share": pop / total if total else None,
+            "streams": dict(streams),
             "uncovered": sorted(h for h in strata if h not in covered),
             "lower_bound": any(s.get("population_lower_bound") for s in strata.values())}
 
@@ -698,7 +708,15 @@ def render(r):
         w("### Production-weighted estimates\n")
         if wt.get("error"):
             w(f"Not computed: {wt['error']}.\n")
+        elif wt.get("random_only"):
+            w("Every gold record is from the plan's random stream, a uniform sample"
+              + (f" of {wt['frame']} scored units" if wt.get("frame") else "") + ", so the agreement and recall "
+              "above are measurement estimates and need no weighting.\n")
         else:
+            w("These records were targeted: chosen using the evaluator's labels or other signals, to find failures. "
+              "Take agreement from the calibration queue's random stream; the weighted figures below are a "
+              "secondary estimate.\n" + (f"{wt['streams']['random']} gold records here are from the random stream.\n"
+                                          if wt["streams"].get("random") else ""))
             w("Each queue stratum's gold records are weighted by that stratum's production count from the queue "
               "plan, which undoes the oversampling of rare labels and provider disagreements. Exclusions are "
               "assumed random within a stratum.\n")
