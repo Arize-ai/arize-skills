@@ -130,11 +130,12 @@ You'll also need a space name or ID. Find yours by running `ax spaces list -o js
 export ARIZE_SPACE="my-workspace"        # name, or base64 ID like U3BhY2U6...
 ```
 
-**Option B — Environment variables**:
+**Skill defaults (environment variables)**:
+
+`ax` authenticates only through a profile. It does not read these variables; the skills do, and pass the values to `ax` as flags. Setting `ARIZE_API_KEY` alone does not log you in. The skills use it only to create a profile when none exists (`ax profiles create default --api-key "$ARIZE_API_KEY"`).
 ```bash
-export ARIZE_API_KEY="your-api-key"       # from https://app.arize.com/admin > API Keys
-export ARIZE_SPACE="my-workspace"         # space name or base64 ID from ax spaces list
-# export ARIZE_DEFAULT_PROJECT=my-project # optional default project
+export ARIZE_SPACE="my-workspace"         # space name or base64 ID from ax spaces list; passed as --space
+# export ARIZE_DEFAULT_PROJECT=my-project # optional default project when a prompt doesn't name one
 # export OPENAI_API_KEY="sk-..."          # for AI integrations and evaluators
 # export ANTHROPIC_API_KEY="sk-ant-..."   # for AI integrations and evaluators
 ```

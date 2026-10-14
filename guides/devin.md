@@ -48,23 +48,41 @@ initialize: |
 
 If you skip this step, Devin installs `ax` itself the first time a skill needs it. That works, but it repeats in every session.
 
-### 3. Add your Arize credentials as Devin Secrets
+### 3. Add your Arize credentials
+
+`ax` authenticates only through a profile. It does not read an API key from the environment. Every Devin session starts from a fresh snapshot with no profile, so store the key as a Devin Secret and have Devin create the profile from it at the start of each session.
 
 On the [Secrets page](https://app.devin.ai/secrets), create these raw [secrets](https://docs.devin.ai/product-guides/secrets):
 
 | Secret | Value |
 |--------|-------|
-| `ARIZE_API_KEY` | An API key from [app.arize.com/admin](https://app.arize.com/admin) → **API Keys** |
-| `ARIZE_SPACE` | Your space name or base64 space ID (find it with `ax spaces list -o json`) |
-| `ARIZE_DEFAULT_PROJECT` | *(Optional)* The project to use when a prompt doesn't name one |
+| `ARIZE_API_KEY` | An API key from [app.arize.com/admin](https://app.arize.com/admin) → **API Keys**. Used only to create the `ax` profile. |
+| `ARIZE_SPACE` | Your space name or base64 space ID (find it with `ax spaces list -o json`). Read by the skills, which pass it to `ax` as `--space`. |
+| `ARIZE_DEFAULT_PROJECT` | *(Optional)* The project the skills use when a prompt doesn't name one. Read by the skills, not by `ax`. |
 
 Use the **Personal** scope for a key tied to your own account. Use **Organization** only for a shared service key, because every member's sessions can use organization secrets. To limit a key to one repository, add it under that repository's blueprint **Secrets** tab instead.
+
+Then add a `knowledge` entry to the blueprint of each repository where you use the skills. Knowledge is loaded into Devin's context at the start of every session:
+
+```yaml
+knowledge:
+  - name: arize-ax-profile
+    contents: |
+      The ax CLI authenticates only through a profile. Before the first ax
+      command in a session, run `ax profiles show`. If no profile exists,
+      bind the ARIZE_API_KEY secret and create one from it:
+        ax profiles create default --api-key "$ARIZE_API_KEY"
+      ax does not read ARIZE_SPACE or ARIZE_DEFAULT_PROJECT. Pass them as
+      --space and the project argument.
+```
+
+Don't create the profile in `initialize` or `maintenance`. Those steps run at snapshot build time, when personal secrets aren't available, and the profile would be saved into a snapshot that every session in your organization starts from.
 
 ### 4. Verify
 
 Start a session and ask:
 
-> Run `ax --version && ax profiles show` and confirm the Arize CLI can authenticate. Then use the arize-trace skill to export and summarize the most recent traces from my project.
+> Set up the `ax` profile from the ARIZE_API_KEY secret, then run `ax spaces list` to confirm the Arize CLI can authenticate. Then use the arize-trace skill to export and summarize the most recent traces from my project.
 
 ## Devin CLI
 
@@ -88,14 +106,19 @@ uv tool install arize-ax-cli   # or: pipx install arize-ax-cli
 
 ### 3. Set up your Arize credentials
 
-Create an `ax` profile once. It's stored locally and used by every session:
+Create an `ax` profile once with the interactive wizard. It prompts for your API key, so the key never appears in a command or your shell history. The profile is stored locally and used by every session:
 
 ```bash
-ax profiles create --api-key YOUR_API_KEY
+ax profiles create
+```
+
+Then set your space. `ax` doesn't read this variable; the skills do, and pass it to `ax` as `--space`:
+
+```bash
 export ARIZE_SPACE="my-workspace"   # add to ~/.zshrc or ~/.bashrc; find it with: ax spaces list -o json
 ```
 
-Prefer environment variables? Export `ARIZE_API_KEY` and `ARIZE_SPACE` in your shell instead. See [Authentication](../README.md#authentication) in the README for all options, including on-prem deployments.
+See [Authentication](../README.md#authentication) in the README for more profile options, including on-prem deployments.
 
 ### 4. Verify
 
@@ -109,6 +132,7 @@ Run `ax --version && ax profiles show` in your terminal, then start `devin` in y
 - **Skills don't appear in the CLI.** Run `devin plugins list`. If the plugin is missing, check that you're signed in (`devin auth login`). If it's stale, run `devin plugins update arize-skills`.
 - **Plugin shows as blocked.** An organization or enterprise policy forbids it. Ask the policy owner to add `Arize-ai/arize-skills` to `optionalPlugins` or `requiredPlugins`.
 - **`ax: command not found`.** In the Devin app, the blueprint step didn't run or `~/.local/bin` isn't on `PATH`; rebuild the snapshot. In the CLI, run `uv tool update-shell` and open a new terminal.
-- **Authentication errors.** In the Devin app, a personal secret only works in sessions you start, and a repository secret only in its own repository. In the CLI, run `ax profiles show` to check which profile and key are active.
+- **`No active profile configured`.** `ax` has no profile, and setting `ARIZE_API_KEY` alone doesn't create one. In the Devin app, check that the blueprint has the `arize-ax-profile` knowledge entry and that the `ARIZE_API_KEY` secret applies to the session: a personal secret works only in sessions you start, and a repository secret only in its own repository. In the CLI, run `ax profiles create`.
+- **Authentication errors with a profile.** Run `ax profiles show` to see which profile and key are active, and `ax profiles update` to replace a wrong key.
 
 For how Devin finds and runs skills, see Devin's [Skills guide](https://docs.devin.ai/product-guides/skills) and [Plugins guide](https://docs.devin.ai/product-guides/plugins).
