@@ -335,7 +335,9 @@ ax tasks create-evaluation \
   --evaluators '[{"evaluator_id": "EVAL_ID", "column_mappings": {"input": "attributes.input.value", "output": "attributes.output.value"}}]' \
   --no-continuous
 
-# Create evaluation task (experiment / dataset)
+# Create evaluation task (experiment runs on a dataset)
+# v2 REST and ax require --experiment-ids whenever --dataset is set.
+# A dataset with no experiment is supported via GraphQL createEvalTask (omit experiments; pass runContinuously: false). See SKILL.md Workflow B.
 # --experiment-ids takes base64 IDs from `ax experiments list --space SPACE -o json`
 ax tasks create-evaluation \
   --name "Experiment Scoring" \
