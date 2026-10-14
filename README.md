@@ -4,7 +4,7 @@ Skills that guide AI coding agents to help you add observability, run experiment
 
 These skills encode the workflows we've refined building the [Arize](https://arize.com) platform and helping teams debug LLM apps in production. They handle the `ax` CLI flags, data shape quirks, and multi-step recipes so you don't have to.
 
-Works with Cursor, Claude Code, Codex, GitHub Copilot, Windsurf, and [40+ other agents](https://github.com/vercel-labs/skills#supported-agents).
+Works with Cursor, Claude Code, Codex, GitHub Copilot, Windsurf, Devin, and [40+ other agents](https://github.com/vercel-labs/skills#supported-agents).
 
 ## New to Arize? Start Here
 
@@ -75,6 +75,16 @@ Open up a Claude Code session and execute the following:
 /plugin marketplace add Arize-ai/arize-skills
 /plugin install arize-skills@arize-skills
 ```
+
+### Option 5: Devin
+
+For Devin Desktop and the Devin CLI, install the repo as a Devin plugin:
+
+```bash
+devin plugins install Arize-ai/arize-skills
+```
+
+Then set up `ax` as described in [Prerequisites](#prerequisites). See the [Devin install guide](guides/devin.md) for details.
 
 ## Prerequisites
 
