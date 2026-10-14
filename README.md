@@ -83,7 +83,7 @@ Install the repo as a Devin plugin.
 - **Devin app:** open [Customize → Plugins](https://app.devin.ai/customize), click **Add plugin → From repository**, and enter `Arize-ai/arize-skills`.
 - **Devin CLI:** run `devin plugins install Arize-ai/arize-skills`.
 
-The `ax` CLI and credentials are set up differently for each one. In the app they go in Devin's blueprint and Secrets; with the CLI they live on your machine. The [Devin install guide](guides/devin.md) covers both.
+The `ax` CLI and credentials are set up differently for each one. In the app, `ax` goes in Devin's blueprint and you create a profile in each session; with the CLI, both live on your machine. The [Devin install guide](guides/devin.md) covers both.
 
 ## Prerequisites
 
@@ -132,7 +132,7 @@ export ARIZE_SPACE="my-workspace"        # name, or base64 ID like U3BhY2U6...
 
 **Skill defaults (environment variables)**:
 
-`ax` authenticates only through a profile. It does not read these variables; the skills do, and pass the values to `ax` as flags. Setting `ARIZE_API_KEY` alone does not log you in. The skills use it only to create a profile when none exists (`ax profiles create default --api-key "$ARIZE_API_KEY"`).
+`ax` authenticates only through a profile (Option A). It does not read these variables; the skills do, and pass the values to `ax` as flags. Don't export `ARIZE_API_KEY` for `ax`: it doesn't log you in, and a key in the environment is easy for an agent to read.
 ```bash
 export ARIZE_SPACE="my-workspace"         # space name or base64 ID from ax spaces list; passed as --space
 # export ARIZE_DEFAULT_PROJECT=my-project # optional default project when a prompt doesn't name one
