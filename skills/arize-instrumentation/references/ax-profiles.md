@@ -47,16 +47,18 @@ If no profile exists, or if the existing profile needs to point to a completely 
 
 ```bash
 # Requires ARIZE_API_KEY to be exported in the shell first
-ax profiles create --api-key $ARIZE_API_KEY
+ax profiles create default --api-key $ARIZE_API_KEY
 
 # Create with a region
-ax profiles create --api-key $ARIZE_API_KEY --region us-east-1b
+ax profiles create default --api-key $ARIZE_API_KEY --region us-east-1b
 
 # Create a named profile
 ax profiles create work --api-key $ARIZE_API_KEY --region us-east-1b
 ```
 
-To use a named profile, switch to it first with `ax profiles use NAME` (see **Managing Multiple Profiles** below).
+Always pass a profile name (`default`, `work`, ...). Without one, `ax profiles create` prompts for the name even when `--api-key` is given; in a non-interactive shell it then exits 0 without saving a profile. Creating a profile also makes it the active one.
+
+To switch between profiles later, use `ax profiles use NAME` (see **Managing Multiple Profiles** below).
 
 ## 4. Getting the API key
 
@@ -70,7 +72,7 @@ export ARIZE_API_KEY="..."   # user pastes their key here in their own terminal
 
 They can find their key at https://app.arize.com/admin > API Keys. Recommend they create a **scoped service key** (not a personal user key) — service keys are not tied to an individual account and are safer for programmatic use. Keys are space-scoped — make sure they copy the key for the correct space.
 
-Once the user confirms the variable is set, proceed with `ax profiles create --api-key $ARIZE_API_KEY` or `ax profiles update --api-key $ARIZE_API_KEY` as described above.
+Once the user confirms the variable is set, proceed with `ax profiles create default --api-key $ARIZE_API_KEY` or `ax profiles update --api-key $ARIZE_API_KEY` as described above.
 
 ## 5. Verify
 
@@ -142,6 +144,6 @@ At the **end of the session**, if the user manually provided any credentials dur
 
 **If the user says yes:**
 
-1. **API key** — Run `ax profiles show` to check the current state. Then run `ax profiles create --api-key $ARIZE_API_KEY` or `ax profiles update --api-key $ARIZE_API_KEY` (the key must already be exported as an env var — never pass a raw key value).
+1. **API key** — Run `ax profiles show` to check the current state. Then run `ax profiles create default --api-key $ARIZE_API_KEY` or `ax profiles update --api-key $ARIZE_API_KEY` (the key must already be exported as an env var — never pass a raw key value).
 
 2. **Space** — See the Space section above to persist it as an environment variable.

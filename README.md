@@ -97,15 +97,16 @@ pip install arize-ax-cli
 
 Set up your API key once and it persists across all sessions and projects:
 ```bash
-# Interactive wizard (creates 'default' profile if no profiles exist)
+# Interactive wizard: prompts for the key, so it never appears in a command or shell history
 ax profiles create
 
-# Or pass the key directly (optional profile name as positional arg)
-ax profiles create --api-key YOUR_API_KEY
-ax profiles create staging --api-key YOUR_STAGING_KEY
+# Non-interactive (scripts, CI, agents): name the profile and read the key from an env var.
+# Without a name, `create` still prompts for one and saves nothing in a non-interactive shell.
+ax profiles create default --api-key "$ARIZE_API_KEY"
+ax profiles create staging --api-key "$ARIZE_STAGING_API_KEY"
 
 # Update an existing profile (patches only what you specify)
-ax profiles update --api-key NEW_API_KEY
+ax profiles update --api-key "$ARIZE_API_KEY"
 ax profiles update --region us-east-1b
 
 # Other profile management
@@ -141,7 +142,7 @@ ax --version && ax profiles show 2>&1
 Point the CLI at your deployment with a **single-endpoint** profile (hostname and HTTPS port, usually `443`). Replace the host with the value your operations team provides:
 
 ```bash
-ax profiles create my-onprem --api-key <key> --single-host arize.yourcompany.com --single-port 443
+ax profiles create my-onprem --api-key "$ARIZE_API_KEY" --single-host arize.yourcompany.com --single-port 443
 ax profiles use my-onprem
 ax profiles validate
 ```
