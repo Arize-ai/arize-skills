@@ -1,40 +1,29 @@
 # Installing Arize Skills for Devin
 
-[Devin](https://devin.ai) loads skills in the [Agent Skills](https://agentskills.io/specification) format, the same `SKILL.md` format this repo ships, so Arize skills work in Devin unchanged. There are two ways to install them:
+[Devin](https://devin.ai) loads skills in the [Agent Skills](https://agentskills.io/specification) format, the same `SKILL.md` format this repo ships, and it can install a Claude Code plugin directly, which this repo is. So Arize skills work in Devin unchanged.
 
-| Method | Best for | Scope |
-|--------|----------|-------|
-| [Plugin](#option-1-install-as-a-plugin-recommended) (recommended) | Most users. Gets updates automatically. | Personal, organization, or enterprise. Works in cloud sessions, the Devin CLI, and Devin Desktop |
-| [Commit to a repo](#option-2-commit-the-skills-to-a-repository) | Pinning a fixed version to one codebase | Sessions that work in that repository |
+Setup depends on where Devin runs:
 
-After installing, finish the [setup in Devin's environment](#set-up-the-ax-cli-and-credentials) so the skills can call the Arize API.
+- **[Devin app](#devin-app)** (app.devin.ai): sessions run on Devin's cloud machine, so the `ax` CLI and your Arize key are configured in Devin's environment settings.
+- **[Devin CLI](#devin-cli)**: sessions run on your own machine, so you install `ax` and set up your Arize key locally.
 
-## Option 1: Install as a plugin (recommended)
+Plugins installed to your personal scope sync between the two, so if you use both, install once and then follow the credential setup for each.
 
-Devin can install a Claude Code plugin directly, and this repo is one. Installing it adds every Arize skill at once.
+## Devin app
 
-**From the Devin web app:**
+### 1. Install the skills
 
 1. Open [Customize → Plugins](https://app.devin.ai/customize).
 2. Click **Add plugin → From repository**.
 3. Enter `Arize-ai/arize-skills` and leave the subdirectory empty.
 4. Pick a scope: **Personal** (just you), **Organization**, or **Enterprise**. Organization and enterprise installs require admin rights.
 
-**From the Devin CLI** (you need to be signed in with `devin auth login`):
+New sessions pick up the latest version from `main` automatically. To remove the skills, uninstall from the plugin's details sheet in Customize.
 
-```bash
-devin plugins install Arize-ai/arize-skills          # adds it to your personal plugins (cloud + every machine you sign in to)
-devin plugins install Arize-ai/arize-skills --local  # this machine only
-devin plugins info arize-skills                      # list the skills it provides
-```
+<details>
+<summary>Alternative: commit the skills to one repository</summary>
 
-Either way, the plugin is synced across cloud sessions, the CLI, and Devin Desktop. Plugin skills are namespaced: invoke one as `/arize-skills:arize-trace`, or just describe the task and Devin picks the right skill.
-
-**Updating:** New cloud sessions pick up the latest `main` automatically. In the CLI, run `devin plugins update arize-skills`. **Removing:** run `devin plugins remove arize-skills`, or uninstall from the plugin's details sheet in Customize.
-
-## Option 2: Commit the skills to a repository
-
-Devin scans every connected repository for `.agents/skills/<name>/SKILL.md` (it also scans `.devin/skills/`, `.claude/skills/`, `.github/skills/`, `.windsurf/skills/`, and `.cognition/skills/`). Copy the skills into your repo and commit them:
+Use this to pin a fixed version to a single codebase. Devin scans every connected repository for `.agents/skills/<name>/SKILL.md`:
 
 ```bash
 git clone --depth 1 https://github.com/Arize-ai/arize-skills.git /tmp/arize-skills
@@ -43,17 +32,13 @@ cp -R /tmp/arize-skills/skills/arize-* .agents/skills/
 git add .agents/skills && git commit -m "Add Arize skills for Devin"
 ```
 
-To install only some skills, copy just those folders (for example `/tmp/arize-skills/skills/arize-trace`).
+To install only some skills, copy just those folders. Copy the folders; don't symlink them. `install.sh` and `npx skills add` create symlinks to a local checkout, and those links break once committed. To update, run the copy again and commit the result. Mention a repository skill with `@skills:arize-trace`.
 
-Copy the folders; don't symlink them. `install.sh` and `npx skills add` link skills to a local checkout, which works for a local agent but leaves broken links when committed, so Devin's cloud sessions can't read them. To update, run the copy again and commit the result.
+</details>
 
-Invoke a repository skill by mentioning it in a prompt, for example `@skills:arize-trace`, or let Devin choose one automatically.
+### 2. Install `ax` in Devin's environment
 
-## Set up the `ax` CLI and credentials
-
-The skills run the [`ax` CLI](https://github.com/Arize-ai/arize-ax-cli) against your Arize account, so Devin's machine needs the CLI and an API key.
-
-**1. Install `ax` in the environment.** Add it to the `initialize` section of your [blueprint](https://docs.devin.ai/onboard-devin/environment/blueprints) (**Settings → Environment → Blueprints**), so it's included in the snapshot every session starts from:
+Add the [`ax` CLI](https://github.com/Arize-ai/arize-ax-cli) to the `initialize` section of your [blueprint](https://docs.devin.ai/onboard-devin/environment/blueprints) (**Settings → Environment → Blueprints**), so it's included in the snapshot every session starts from:
 
 ```yaml
 initialize: |
@@ -63,7 +48,9 @@ initialize: |
 
 If you skip this step, Devin installs `ax` itself the first time a skill needs it. That works, but it repeats in every session.
 
-**2. Add your credentials as [Devin Secrets](https://docs.devin.ai/product-guides/secrets).** On the [Secrets page](https://app.devin.ai/secrets), create these raw secrets:
+### 3. Add your Arize credentials as Devin Secrets
+
+On the [Secrets page](https://app.devin.ai/secrets), create these raw [secrets](https://docs.devin.ai/product-guides/secrets):
 
 | Secret | Value |
 |--------|-------|
@@ -73,19 +60,55 @@ If you skip this step, Devin installs `ax` itself the first time a skill needs i
 
 Use the **Personal** scope for a key tied to your own account. Use **Organization** only for a shared service key, because every member's sessions can use organization secrets. To limit a key to one repository, add it under that repository's blueprint **Secrets** tab instead.
 
-**3. Verify.** Start a session and ask:
+### 4. Verify
 
-> Run `ax --version && ax profiles show` and confirm the Arize CLI can authenticate.
+Start a session and ask:
 
-Then try a real workflow:
+> Run `ax --version && ax profiles show` and confirm the Arize CLI can authenticate. Then use the arize-trace skill to export and summarize the most recent traces from my project.
+
+## Devin CLI
+
+### 1. Install the skills
+
+Sign in with `devin auth login`, then:
+
+```bash
+devin plugins install Arize-ai/arize-skills          # personal scope: also available in the Devin app
+devin plugins install Arize-ai/arize-skills --local  # or: this machine only
+devin plugins info arize-skills                      # list the skills it provides
+```
+
+Plugin skills are namespaced: invoke one as `/arize-skills:arize-trace`, or describe the task and Devin picks the right skill. Update with `devin plugins update arize-skills` and remove with `devin plugins remove arize-skills`.
+
+### 2. Install `ax`
+
+```bash
+uv tool install arize-ax-cli   # or: pipx install arize-ax-cli
+```
+
+### 3. Set up your Arize credentials
+
+Create an `ax` profile once. It's stored locally and used by every session:
+
+```bash
+ax profiles create --api-key YOUR_API_KEY
+export ARIZE_SPACE="my-workspace"   # add to ~/.zshrc or ~/.bashrc; find it with: ax spaces list -o json
+```
+
+Prefer environment variables? Export `ARIZE_API_KEY` and `ARIZE_SPACE` in your shell instead. See [Authentication](../README.md#authentication) in the README for all options, including on-prem deployments.
+
+### 4. Verify
+
+Run `ax --version && ax profiles show` in your terminal, then start `devin` in your project and ask:
 
 > Use the arize-trace skill to export and summarize the most recent traces from my project.
 
 ## Troubleshooting
 
-- **Skills don't appear.** For a plugin, open its details sheet in Customize and check that the skills are listed; after a change, click **Plugin settings → Reindex plugins**. For repository skills, confirm the files are on the branch Devin is using, then ask Devin to reload its skills.
-- **Plugin shows under "Installed but blocked".** An organization or enterprise policy forbids it. Ask the policy owner to add `Arize-ai/arize-skills` to `optionalPlugins` or `requiredPlugins`.
-- **`ax: command not found`.** The blueprint step didn't run or `~/.local/bin` isn't on `PATH`. Rebuild the snapshot, or have Devin run `uv tool install arize-ax-cli` in the session.
-- **Authentication errors.** Confirm `ARIZE_API_KEY` is visible to the session. A personal secret only works in sessions you start, and a repository secret only works in its own repository.
+- **Skills don't appear in the Devin app.** Open the plugin's details sheet in Customize and check that the skills are listed. After a change, click **Plugin settings → Reindex plugins** and start a new session.
+- **Skills don't appear in the CLI.** Run `devin plugins list`. If the plugin is missing, check that you're signed in (`devin auth login`). If it's stale, run `devin plugins update arize-skills`.
+- **Plugin shows as blocked.** An organization or enterprise policy forbids it. Ask the policy owner to add `Arize-ai/arize-skills` to `optionalPlugins` or `requiredPlugins`.
+- **`ax: command not found`.** In the Devin app, the blueprint step didn't run or `~/.local/bin` isn't on `PATH`; rebuild the snapshot. In the CLI, run `uv tool update-shell` and open a new terminal.
+- **Authentication errors.** In the Devin app, a personal secret only works in sessions you start, and a repository secret only in its own repository. In the CLI, run `ax profiles show` to check which profile and key are active.
 
 For how Devin finds and runs skills, see Devin's [Skills guide](https://docs.devin.ai/product-guides/skills) and [Plugins guide](https://docs.devin.ai/product-guides/plugins).

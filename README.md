@@ -78,13 +78,12 @@ Open up a Claude Code session and execute the following:
 
 ### Option 5: Devin
 
-Install the repo as a Devin plugin, either from [Customize → Plugins](https://app.devin.ai/customize) (**Add plugin → From repository** → `Arize-ai/arize-skills`) or from the Devin CLI:
+Install the repo as a Devin plugin.
 
-```bash
-devin plugins install Arize-ai/arize-skills
-```
+- **Devin app:** open [Customize → Plugins](https://app.devin.ai/customize), click **Add plugin → From repository**, and enter `Arize-ai/arize-skills`.
+- **Devin CLI:** run `devin plugins install Arize-ai/arize-skills`.
 
-See the [Devin install guide](guides/devin.md) for committing skills to a repo instead, plus setting up the `ax` CLI and Arize credentials as Devin Secrets.
+The `ax` CLI and credentials are set up differently for each one. In the app they go in Devin's blueprint and Secrets; with the CLI they live on your machine. The [Devin install guide](guides/devin.md) covers both.
 
 ## Prerequisites
 
