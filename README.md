@@ -78,12 +78,13 @@ Open up a Claude Code session and execute the following:
 
 ### Option 5: Devin
 
-Install the repo as a Devin plugin.
+For Devin Desktop and the Devin CLI, install the repo as a Devin plugin:
 
-- **Devin app:** open [Customize → Plugins](https://app.devin.ai/customize), click **Add plugin → From repository**, and enter `Arize-ai/arize-skills`.
-- **Devin CLI:** run `devin plugins install Arize-ai/arize-skills`.
+```bash
+devin plugins install Arize-ai/arize-skills
+```
 
-The `ax` CLI and credentials are set up differently for each one. In the app, `ax` goes in Devin's blueprint and you create a profile in each session; with the CLI, both live on your machine. The [Devin install guide](guides/devin.md) covers both.
+Then set up `ax` as described in [Prerequisites](#prerequisites). See the [Devin install guide](guides/devin.md) for details.
 
 ## Prerequisites
 
