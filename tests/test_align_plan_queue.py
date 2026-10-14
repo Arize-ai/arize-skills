@@ -8,6 +8,7 @@ import json
 import random
 import re
 import subprocess
+from collections import Counter
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -32,6 +33,19 @@ def span(i, label, t, session=None, name="ROUTER-CHAT", compare=None, probe=None
         evals.append({"name": "v1_eval", "label": probe})
     return {"name": name, "start_time": t.isoformat(), "attributes": {"session.id": session or f"s-{label}-{i}"},
             "context": {"trace_id": f"t-{label}-{i}", "span_id": f"sp-{label}-{i}"}, "evaluations": evals}
+
+
+def matches(s, filt):
+    """The filter clauses plan_queue builds: eval label =, != and IS NOT NULL, and attribute equality."""
+    labels = {e["name"]: e["label"] for e in s["evaluations"]}
+    for name, op, value in re.findall(r"(?:session_eval|eval)\.(\w+)\.label (=|!=|IS NOT NULL)\s*(?:'([^']*)')?", filt):
+        got = labels.get(name)
+        if got is None or (op == "=" and got != value) or (op == "!=" and got == value):
+            return False
+    for key, value in re.findall(r"attributes\.(\w+) = '([^']*)'", filt):
+        if s["attributes"].get(key) != value:
+            return False
+    return True
 
 
 class FakeAx:
@@ -63,13 +77,9 @@ class FakeAx:
             hi = datetime.fromisoformat(args[args.index("--end-time") + 1])
             if self.missing_before and hi <= self.missing_before:
                 raise plan.ColumnMissing("session_eval.my_eval.label")
-            label = re.search(r"my_eval\.label = '([^']*)'", filt).group(1)
             limit = int(args[args.index("-l") + 1])
             self.limits.append(limit)
-            hits = [s for s in self.spans if lo <= datetime.fromisoformat(s["start_time"]) < hi
-                    and s["evaluations"][0]["label"] == label]
-            if "v1_eval.label IS NOT NULL" in filt:
-                hits = [s for s in hits if any(e["name"] == "v1_eval" for e in s["evaluations"])]
+            hits = [s for s in self.spans if lo <= datetime.fromisoformat(s["start_time"]) < hi and matches(s, filt)]
             return sorted(hits, key=lambda s: s["start_time"], reverse=True)[:limit]
         raise AssertionError(f"unexpected ax call {args}")
 
@@ -78,7 +88,8 @@ def run(monkeypatch, tmp_path, fake, *extra):
     monkeypatch.setattr(plan, "run_ax", fake)
     monkeypatch.setattr("sys.argv", ["plan_queue.py", "--space", "S", "--project", "prod", "--evaluator", "My Eval",
                                      "--out-dir", str(tmp_path), "--root-filter", ROOT_FILTER,
-                                     "--start-time", START.isoformat(), "--end-time", END.isoformat(), *extra])
+                                     "--start-time", START.isoformat(), "--end-time", END.isoformat(),
+                                     "--random", "0", *extra])
     plan.main()
     return json.loads((tmp_path / "plan.json").read_text())
 
@@ -270,7 +281,7 @@ def test_strata_record_production_counts_and_selection_rates(monkeypatch, tmp_pa
     assert strata["good"]["selection_rate"] == 0.25
     assert strata["not_applicable"]["picked"] == 2
     assert all(r["stratum"] in strata for r in p["records"])
-    assert "Strata, for weighting results back to production" in (tmp_path / "plan.md").read_text()
+    assert "Strata (`report --plan plan.json`)" in (tmp_path / "plan.md").read_text()
 
 
 def test_provider_disagreements_are_their_own_stratum(monkeypatch, tmp_path):
@@ -279,9 +290,12 @@ def test_provider_disagreements_are_their_own_stratum(monkeypatch, tmp_path):
         for i in range(20):
             t = START + timedelta(hours=i * 30, minutes=len(label))
             spans.append(span(i, label, t, compare="bad" if (label == "good" and i < 5) else label))
-    p = run(monkeypatch, tmp_path, FakeAx(spans), "--compare-eval", "my_eval_anthropic")
+    fake = FakeAx(spans)
+    p = run(monkeypatch, tmp_path, fake, "--compare-eval", "my_eval_anthropic")
     strata = {s["stratum"]: s for s in p["strata"]}
-    assert strata["good|disagree"]["population"] == 5 and strata["good|disagree"]["population_estimated"]
+    # Counted in full, not estimated from the candidate pool.
+    assert strata["good|disagree"]["population"] == 5 and not strata["good|disagree"]["population_estimated"]
+    assert any("my_eval_anthropic.label != 'good'" in f for f in fake.filters)
     assert strata["good|agree"]["population"] == 15
     assert strata["good|disagree"]["picked"] == 2 and strata["good|agree"]["picked"] == 3
     assert {r["stratum"] for r in by_label(p)["good"]} == {"good|disagree", "good|agree"}
@@ -297,12 +311,17 @@ def test_population_count_splits_periods_that_fill_a_page(monkeypatch, tmp_path)
     assert fake.limits.count(plan.PAGE) > 4  # the count bisected at least once
 
 
-def test_validation_mode_sizes_for_the_validated_tier(monkeypatch, tmp_path):
-    p = run(monkeypatch, tmp_path, FakeAx(plentiful(per_label=60, hours=10)), "--mode", "validation", "--pool", "400")
-    # ceil(max(30, 50/3) / 0.7) = 43 per decisive label
-    assert p["per_label_quota"] == 43 and p["mode"] == "validation"
-    assert len(by_label(p)["good"]) == 43
-    assert "about 30.1 gold records per label" in (tmp_path / "plan.md").read_text()
+def test_validation_mode_sizes_for_dev_and_test_splits(monkeypatch, tmp_path):
+    p = run(monkeypatch, tmp_path, FakeAx(plentiful(per_label=120, hours=5)), "--mode", "validation", "--pool", "800")
+    # 30 per label in each of dev and test after a 42.5% split is 71 gold; ceil(71 / 0.7) = 102 per label
+    assert p["per_label_quota"] == 102 and p["mode"] == "validation"
+    assert len(by_label(p)["good"]) == 102
+    assert "about 71.4 gold records per label" in (tmp_path / "plan.md").read_text()
+
+
+def test_directional_is_an_alias_for_discovery(monkeypatch, tmp_path):
+    p = run(monkeypatch, tmp_path, FakeAx(plentiful()), "--mode", "directional")
+    assert p["mode"] == "discovery" and p["per_label_quota"] == 5
 
 
 def test_probes_are_kept_out_of_weighting_strata(monkeypatch, tmp_path):
@@ -448,3 +467,119 @@ def test_intake_needs_a_current_plan(monkeypatch, tmp_path):
     (tmp_path / "plan.json").write_text(json.dumps({"evaluator_id": "ev-1", "project_id": "proj-1"}))
     with pytest.raises(SystemExit, match="re-plan"):
         intake(monkeypatch, tmp_path, FakeAx([]))
+
+
+# ---------------------------------------------------------------------------
+# random stream, routing reasons and signals
+# ---------------------------------------------------------------------------
+
+def test_random_stream_is_uniform_over_scored_units_with_a_known_rate(monkeypatch, tmp_path):
+    fake = FakeAx(plentiful())
+    p = run(monkeypatch, tmp_path, fake, "--random", "10")
+    rand = [r for r in p["records"] if r["routing_reason"] == "random"]
+    assert len(rand) == 10 and all(r["stream"] == "random" and r["stratum"] == "random" for r in rand)
+    st = next(s for s in p["strata"] if s["stratum"] == "random")
+    assert st["population"] == 80 and st["frame"] == 80 and st["selection_rate"] == 10 / 80
+    # Drawn with no filter on the evaluator's label values, only on it having scored the unit.
+    assert any(f == f"({ROOT_FILTER}) AND session_eval.my_eval.label IS NOT NULL" for f in fake.filters)
+    # Its own sources, for the calibration queue; never mixed into the targeted queue's sources.
+    rand_ids = {r["span_id"] for r in rand}
+    rs = json.loads((tmp_path / "random_sources.json").read_text())
+    ts = json.loads((tmp_path / "record_sources.json").read_text())
+    assert {i for s in rs for i in s["span_ids"]} == rand_ids
+    assert not rand_ids & {i for s in ts for i in s["span_ids"]}
+    assert (tmp_path / "random_sources.create.json").exists()
+    assert "Random stream (measurement): 10 records" in (tmp_path / "plan.md").read_text()
+
+
+def test_random_units_are_not_picked_again_by_the_targeted_stream(monkeypatch, tmp_path):
+    p = run(monkeypatch, tmp_path, FakeAx(plentiful(per_label=6)), "--random", "12")
+    sessions = [r["session_id"] for r in p["records"]]
+    assert len(sessions) == len(set(sessions))
+
+
+def test_random_frame_leaves_out_queued_units(monkeypatch, tmp_path):
+    spans = plentiful()
+    fake = FakeAx(spans, queues={"old": [s["attributes"]["session.id"] for s in spans[:30]]})
+    p = run(monkeypatch, tmp_path, fake, "--random", "5", "--exclude-queue", "old")
+    st = next(s for s in p["strata"] if s["stratum"] == "random")
+    assert st["population"] == 80 and st["frame"] == 50 and st["selection_rate"] == 5 / 50
+
+
+def test_discovery_mode_draws_30_random_records_by_default(monkeypatch, tmp_path):
+    monkeypatch.setattr(plan, "run_ax", FakeAx(plentiful()))
+    monkeypatch.setattr("sys.argv", ["plan_queue.py", "--space", "S", "--project", "prod", "--evaluator", "My Eval",
+                                     "--out-dir", str(tmp_path), "--start-time", START.isoformat(),
+                                     "--end-time", END.isoformat()])
+    plan.main()
+    p = json.loads((tmp_path / "plan.json").read_text())
+    assert sum(r["stream"] == "random" for r in p["records"]) == 30
+
+
+def test_no_random_stream_is_called_out(monkeypatch, tmp_path):
+    run(monkeypatch, tmp_path, FakeAx(plentiful()))
+    assert "No random stream" in (tmp_path / "plan.md").read_text()
+    assert not (tmp_path / "random_sources.json").exists()
+
+
+def test_every_targeted_record_has_a_routing_reason(monkeypatch, tmp_path):
+    spans = plentiful()
+    for s in spans[:3]:  # good, disagreeing with the provider copy
+        s["evaluations"].append({"name": "my_eval_anthropic", "label": "bad"})
+    for s in (x for x in spans if x["evaluations"][0]["label"] == "not_applicable"):
+        s["evaluations"].append({"name": "v1_eval", "label": "wrong"})
+    p = run(monkeypatch, tmp_path, FakeAx(spans), "--compare-eval", "my_eval_anthropic",
+            "--na-probe-eval", "v1_eval", "--na-probe-count", "2")
+    reasons = Counter(r["routing_reason"] for r in p["records"])
+    assert reasons["provider_disagreement"] == 2 and reasons["na_check"] == 2 and reasons["scope_probe"] == 2
+    assert reasons["label_stratum"] == 13
+    assert all(r["stream"] == "targeted" for r in p["records"])
+
+
+def test_signals_pick_by_a_judge_independent_filter_and_are_not_weighted(monkeypatch, tmp_path):
+    spans = plentiful()
+    for s in spans[::7]:
+        s["attributes"]["feedback"] = "down"
+    fake = FakeAx(spans)
+    p = run(monkeypatch, tmp_path, fake, "--signal", "thumbs_down=attributes.feedback = 'down'", "--signal-count", "3")
+    sig = [r for r in p["records"] if r["routing_reason"] == "signal:thumbs_down"]
+    assert len(sig) == 3 and all(r["stratum"] == "signal:thumbs_down" for r in sig)
+    assert not any(s["stratum"].startswith("signal:") for s in p["strata"])
+    assert any("(attributes.feedback = 'down') AND session_eval.my_eval.label IS NOT NULL" in f for f in fake.filters)
+
+
+def test_bad_signal_spec_is_rejected(monkeypatch, tmp_path):
+    with pytest.raises(SystemExit):
+        run(monkeypatch, tmp_path, FakeAx(plentiful()), "--signal", "no-filter-here")
+
+
+def test_instructions_version_and_critique_config_are_recorded(monkeypatch, tmp_path):
+    p = run(monkeypatch, tmp_path, FakeAx(plentiful()), "--instructions-version", "v2 2026-10-14")
+    assert {r["instructions_version"] for r in p["records"]} == {"v2 2026-10-14"}
+    assert p["critique_config_name"] == "my_eval-critique"
+    md = (tmp_path / "plan.md").read_text()
+    assert "`my_eval-critique` (free text)" in md and "No `--instructions-version`" not in md
+    run(monkeypatch, tmp_path, FakeAx(plentiful()))
+    assert "No `--instructions-version`" in (tmp_path / "plan.md").read_text()
+
+
+def test_intake_adds_the_random_stream_to_the_calibration_queue(monkeypatch, tmp_path):
+    fake, first = first_plan(monkeypatch, tmp_path, plentiful() + later(), "--random", "5")
+    fake.queues["CAL"] = [r["session_id"] for r in first["records"] if r["stream"] == "random"]
+    add = FakeAdd()
+    p = intake(monkeypatch, tmp_path, fake, "--random-queue", "CAL", "--random", "4", "--per-label", "1",
+               "--execute", add=add)
+    new = p["records"][len(first["records"]):]
+    assert sum(r["stream"] == "random" for r in new) == 4
+    assert {c[3] for c in add.calls} == {"Q", "CAL"}
+    st = next(s for s in p["strata"] if s["stratum"] == "random@intake-1")
+    assert st["picked"] == 4 and st["selection_rate"] == 4 / st["frame"]
+    assert p["intakes"][0]["random_queue"] == "CAL"
+
+
+def test_intake_random_needs_its_queue(monkeypatch, tmp_path):
+    fake, _ = first_plan(monkeypatch, tmp_path, plentiful() + later())
+    with pytest.raises(SystemExit):
+        intake(monkeypatch, tmp_path, fake, "--random", "4")
+    with pytest.raises(SystemExit):
+        intake(monkeypatch, tmp_path, fake, "--random-queue", "CAL")

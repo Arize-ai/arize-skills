@@ -16,9 +16,28 @@ Leave out:
 
 Use a categorical config with optimization direction `NONE`, so the UI doesn't imply one label is better. If an earlier round's config has exactly these values, reuse it so labels stay comparable across rounds.
 
+## Critique config
+
+Attach a second, free-text config (`critique_config_name` in `plan.json`, for example `my_eval-critique`) to both queues, and make a critique required in the instructions. A good critique says what was wrong or right and why, in enough detail to reuse as a few-shot example in the evaluator's prompt. One-line critiques are the most common mistake. They also make adjudication faster, because the reason behind each label is on the record.
+
+```bash
+ax annotation-configs create freeform --name "CRITIQUE_CONFIG_NAME" --space SPACE -o json
+```
+
+## Keeping labelers blind
+
+Annotators who see a model's label or score drift toward it. In one controlled study, pre-filled suggestions roughly doubled a judge's measured F1 against the resulting "gold" labels. Agreement between annotators also rises when everyone sees the same suggestion, which makes it meaningless.
+
+The instructions line is not enough, because the Arize record view can show eval results. Each queue has an **Annotator Columns** allowlist that sets which columns annotators see. ax can't set it, so after creating each queue:
+1. Open the queue in the Arize UI, edit it, and under Annotator Columns leave out every `eval.*`, `trace_eval.*` and `session_eval.*` column.
+2. Open one record as an annotator and confirm no evaluator label, score or explanation is visible.
+3. If the record view still shows them, say so in the report, so its results aren't presented as blind.
+
+Never pre-fill or highlight a label. Showing the evaluator's reasoning after a human submits is untested as a way to improve labels; if it's used, keep the first label.
+
 ## Instructions template
 
-Annotators see these instructions on every record, and the limit is 5000 characters. Fill in each `<…>` from the evaluator template, using its definitions rather than new wording, so humans and the judge apply the same rule.
+Annotators see these instructions on every record of both queues, and the limit is 5000 characters. Fill in each `<…>` from the evaluator template, using its definitions rather than new wording, so humans and the judge apply the same rule.
 
 ```text
 Goal: judge whether <one-sentence statement of what the evaluator decides>.
@@ -36,7 +55,14 @@ Labels:
 - not_applicable: the <session> is not about <evaluator's topic>, for example <common
   out-of-scope case>.
 - cannot_judge: the evidence needed to decide is missing or truncated. Use sparingly; say
-  what is missing in a note if the tool allows it.
+  what is missing in the critique.
+
+Critique (required): in the critique field, say why you chose the label, citing the
+evidence, in a few sentences that someone else could check and reuse as an example.
+You may go back and change an earlier label if your reading of a definition changes;
+update its critique too.
+
+Work in sittings of about 100 records at most. Take a break before continuing.
 
 Evidence: <what counts as evidence, e.g. tool calls and their results over the assistant's
 claims; artifacts the user accepted>.
@@ -50,5 +76,6 @@ If two labels seem to fit, <tie-break rule from the template>.
 - The instructions name the unit, and for session evaluators, say to label the session.
 - The blindness line is present.
 - The length is under 5000 characters: `wc -c instructions.txt`.
-- The instructions carry a version line (for example `Instructions v2, 2026-10-06`). Change it whenever a definition changes, so labels made under older definitions can be found.
+- The instructions carry a version line (for example `Instructions v2, 2026-10-06`). Pass the same text to the planner as `--instructions-version`, so each record in `plan.json` carries it. Change it whenever a definition changes. Labels made under the older version, on the labels whose definitions changed, then need re-review.
+- The critique line and the sitting limit are present.
 - Spot-check 2–3 planned records with **arize-trace**: open the session and confirm an annotator could reach a label from what is visible. If not, the unit or the instructions need adjusting before creation.

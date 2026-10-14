@@ -1,9 +1,9 @@
 ---
 name: arize-align-queue-builder
-description: Builds an Arize annotation queue designed to produce enough meaningful human labels to align a specific LLM-as-judge evaluator. Derives the label config from the evaluator, samples balanced records across its labels, sizes the queue for expected exclusions, writes annotator instructions, and stops for approval before creating anything. Use when the user needs human labels for evaluator alignment, an existing queue had too few usable labels, or a queue should keep taking in new records.
+description: Builds Arize annotation queues that yield enough human labels to align one LLM-as-judge evaluator, with a random calibration queue that measures it and a targeted queue that finds its failures. Derives the label config from the evaluator, sizes for exclusions, writes blind annotator instructions, and stops for approval before creating anything. Use when the user needs human labels for evaluator alignment, a queue had too few usable labels, or a queue should keep taking in new records.
 metadata:
   author: arize
-  version: "1.1"
+  version: "1.2"
 compatibility: Requires the ax CLI (≥ 0.38.0), Python 3.9+, and a configured Arize profile.
 ---
 
@@ -11,13 +11,18 @@ compatibility: Requires the ax CLI (≥ 0.38.0), Python 3.9+, and a configured A
 
 > **`SPACE`** — `--space` flags accept a space **name** (e.g., `my-workspace`) or a base64 space **ID** (e.g., `U3BhY2U6...`). Find yours with `ax spaces list`.
 
-This skill builds an annotation queue whose labels can be used to align one evaluator. A queue built by picking recent spans usually fails in four ways:
+This skill builds the annotation queues whose labels are used to align one evaluator. A queue built by picking recent spans usually fails in five ways:
 - Most records turn out to be off-topic, so humans mark them not applicable.
 - Nearly every label is the same, so the evaluator's other labels are never tested.
 - The rubric doesn't match the evaluator's labels.
 - The same session is labeled twice.
+- Records picked using the evaluator's own labels are then used to measure it, which biases the result.
 
-This skill designs the queue to avoid all four. The output is a queue that **arize-align-evaluator** can measure. This skill does not measure agreement or change evaluators.
+So the skill builds two streams ([Two streams](references/sampling.md#two-streams)):
+- **Random (calibration queue):** a uniform sample with a known rate, never filtered on the evaluator's labels. Agreement, the human ceiling and the VALIDATED verdict come from it.
+- **Targeted (gold queue):** a quota per stored label, disagreements, signals and scope probes, to find failures and supply dev and few-shot examples.
+
+The output is queues that **arize-align-evaluator** can measure. This skill does not measure agreement or change evaluators.
 
 For plain queue mechanics (create, update, assign, delete), use **arize-annotation**.
 
@@ -25,10 +30,11 @@ For plain queue mechanics (create, update, assign, delete), use **arize-annotati
 
 ## Hard rules
 
-- **Do not create anything before approval.** Phases 1–3 are read-only. Do not create the annotation config, the queue or its records until the user approves the plan in Phase 4. For continuous intake, the user approves the intake settings and schedule once (Phase 7); scheduled runs then add records without asking each time.
+- **Do not create anything before approval.** Phases 1–3 are read-only. Do not create the annotation configs, the queues or their records until the user approves the plan in Phase 4. For continuous intake, the user approves the intake settings and schedule once (Phase 7); scheduled runs then add records without asking each time.
 - **Never label records yourself.** Never present model output or stored evaluator labels as human labels.
-- **Keep labeling blind.** Stored evaluator labels are used to *choose* records. The instructions must tell annotators not to look at evaluator output, and the plan must never be shared with them.
-- **One record per unit.** For a session evaluator, each session appears once, and sessions already in the user's other queues for this evaluator are excluded.
+- **Measure only on the random stream.** Targeted records were chosen by the evaluator's labels or other signals. Never quote their agreement as the evaluator's accuracy.
+- **Keep labeling blind.** Stored evaluator labels are used to *choose* records. Set each queue's Annotator Columns so evaluator output is hidden, and check it ([Keeping labelers blind](references/rubric-and-instructions.md#keeping-labelers-blind)). Never share the plan with annotators.
+- **One record per unit.** For a session evaluator, each session appears once across both queues, and sessions already in the user's other queues for this evaluator are excluded.
 
 ---
 
@@ -54,18 +60,21 @@ If an `ax` command fails, troubleshoot based on the error:
    - `data_granularity`, which sets the unit each record must represent.
    - `classification_choices`.
    - The `template`, especially how it defines each label and when to use `not_applicable`.
-2. **Find the task that runs it** with `ax tasks list --space SPACE`, then `ax tasks get TASK -o json`. The task must list **this exact evaluator** by ID; check every page of the list. Record the `project_id` and the `query_filters`. That filter is the evaluator's admission rule; the queue should sample from the population that rule admits.
+2. **Find the task that runs it** with `ax tasks list --space SPACE`, then `ax tasks get TASK -o json`. The task must list **this exact evaluator** by ID; check every page of the list. Record the `project_id` and the `query_filters`. That filter is the evaluator's admission rule; the queues should sample from the population that rule admits.
 
    **If no task runs this evaluator** (a new evaluator, or a new version built to replace another), it has no stored labels to plan from. Hand off to **arize-align-history-backfill** in its new-evaluator mode. It agrees an admission rule with the user, scores sessions with the evaluator itself, and checks the task against that rule. Then plan on the evaluator's own column. Don't treat a predecessor's task or labels as this evaluator's. If the user wants a quick proxy plan from a predecessor's stored labels (`--eval-name`), say that labels the predecessor can't output will come up empty, and that its scope rules differ.
 3. **Check for other copies.** A provider copy (for example a `*_anthropic` evaluator on the same task population) is useful. Records where two copies disagree are often the most informative to label.
-4. **Find the existing queues for this evaluator** with `ax annotation-queues list --space SPACE --name "KEYWORD"`. Their records will be excluded. If one exists, ask whether this is a **new queue** or a **top-up** of the existing one (see Phase 6).
+4. **Find the existing queues for this evaluator** with `ax annotation-queues list --space SPACE --name "KEYWORD"`. Their records will be excluded. If they exist, ask whether this is a **new round** or a **top-up** (see Phase 6).
+5. **Ask whether anyone has done error analysis** on this evaluator's traffic: a domain expert reading 30 or more real traces and noting how they fail. If not, start in `discovery` mode. Its 30 random records are for that expert to open-code before the rubric is trusted. Rubric definitions often change once people see real outputs, so settle them before a validation round.
+6. **Ask for judge-independent signals.** User thumbs-down or feedback annotations, escalations, or high-severity topics that can be written as a span filter become `--signal` strata. They find failures the evaluator is confidently wrong about.
 
-## Phase 2: Design the label config and instructions
+## Phase 2: Design the label configs and instructions
 
 Follow [references/rubric-and-instructions.md](references/rubric-and-instructions.md). In short:
 - **Label values** are the evaluator's choices, spelled exactly the same, plus `not_applicable` (if the evaluator lacks it) and `cannot_judge`. The script writes these to `config_values.json`. Don't add labels the evaluator cannot output. They become off-rubric records that can't be compared.
-- **Reuse an existing config** if one already has exactly these values, so labels stay comparable across rounds. Otherwise propose a new one with a dated name.
-- **Instructions** define every label in the template's own terms. They say which unit to judge (the whole session for session evaluators) and when `cannot_judge` is allowed, and they tell annotators not to look at evaluator output. For session evaluators, they also tell annotators to put the label on the **session**, not on the individual span.
+- **A critique config:** a free-text config attached next to the label config. Every label needs a critique detailed enough to reuse as a few-shot example.
+- **Reuse existing configs** if they already have exactly these values, so labels stay comparable across rounds. Otherwise propose new ones with dated names.
+- **Instructions** define every label in the template's own terms. They say which unit to judge (the whole session for session evaluators), when `cannot_judge` is allowed, that a critique is required, and to work in sittings of about 100 records. They tell annotators not to look at evaluator output. For session evaluators, they also say to put the label on the **session**, not on an individual span. They start with a version line, which you also pass to the script as `--instructions-version`.
 
 ## Phase 3: Plan the records
 
@@ -73,25 +82,31 @@ Follow [references/rubric-and-instructions.md](references/rubric-and-instruction
 python3 SKILL_ROOT/scripts/plan_queue.py \
   --space SPACE --project PROJECT --evaluator EVALUATOR \
   --root-filter "ROOT_SPAN_FILTER" \
+  --mode discovery|validation \
   --compare-eval OTHER_COPY_TEMPLATE_NAME \
+  --signal NAME="SPAN_FILTER" \
+  --instructions-version "Instructions v1, YYYY-MM-DD" \
   --exclude-queue EXISTING_QUEUE [EXISTING_QUEUE ...] \
   --out-dir WORK_DIR
 ```
 
+- `--mode` sets the size ([Sizing](references/sampling.md#sizing)). Ask the user which they need; validation is several times larger.
+  - `discovery` (default): about 10 gold targeted records and 30 random ones. Enough for error analysis and a first alignment pass, not to validate.
+  - `validation`: 30 gold per label in each of dev and test (102 per label at the default exclusion rate) and 100 random records.
+- `--random N` overrides the random stream's size; `--random 0` turns it off, and then nothing in the plan can measure agreement. Size it from the interval needed, not a share of traffic.
 - `--root-filter` makes each candidate a single entry-point span, for example `attributes.is_copilot_root_span = 'true'`, or `parent_id` being null. Ask the user, or derive it from the task's filters. Without it, child spans of one session compete with each other as candidates.
-- `--compare-eval` is the `template_config.name` of another copy of the evaluator. Disagreements between the copies are picked first, up to 40% of each label's quota.
+- `--compare-eval` is the `template_config.name` of another copy of the evaluator. Disagreements between the copies are picked first, up to 40% of each label's quota, and counted in full as their own stratum.
+- `--signal NAME=FILTER` (repeatable) adds `--signal-count` records (default 5) matching a judge-independent span filter.
 - `--na-probe-eval` is the template name of another evaluator that grades the same sessions, for example the version this one replaces. It adds `--na-probe-count` records (default 5) that this evaluator called not applicable but the other graded decisively. Use it when a label comes up empty because the new scope rule moved those sessions to not applicable. If humans label the probes decisively, the scope rule is too strict. The other evaluator only chooses records; labelers stay blind to it.
 - `--expected-exclusion` is the share of records you expect humans to mark not applicable or cannot judge. The default is 0.30. If an earlier queue for this evaluator exists, use its actual excluded rate from the **arize-align-evaluator** report.
-- `--mode` sets the size. `directional` (default) aims for about 10 gold records, enough to start aligning. `validation` aims for 30 per label and 50 in all, enough for the evaluator's VALIDATED verdict. Ask the user which they need; validation queues are several times larger.
 
 How it picks (details and reasoning in [references/sampling.md](references/sampling.md)):
-1. For each evaluator label, it exports candidates whose stored label is that label, drawn evenly across the time window.
-2. It deduplicates to one span per unit and drops units already in excluded queues.
-3. It sizes each decisive label's quota so the queue should clear the gates after exclusions (5 per label at the defaults; formula in [Sizing](references/sampling.md#sizing)), and adds 2 records with a stored `not_applicable` label to test applicability.
-4. Within each label, it spreads picks across entry points (span names), and puts provider disagreements first.
-5. It counts each stratum's production units and records every record's stratum and selection rate, so the evaluator report can weight results back to production ([Strata and weights](references/sampling.md#strata-and-weights)).
+1. **Random stream.** It enumerates every unit the evaluator scored in the window and draws `--random` of them uniformly, recording the selection rate.
+2. **Signals.** For each `--signal`, it picks records matching the filter.
+3. **Label strata.** For each evaluator label, it exports candidates with that stored label, drawn evenly across the time window. It deduplicates to one span per unit and drops units already used or queued. It sizes each decisive label's quota so the queue should clear the gates after exclusions. It adds 2 records with a stored `not_applicable` label to test applicability. It spreads picks across entry points and puts provider disagreements first.
+4. **Strata and routing.** It counts each stratum's production units. Every record gets its stratum, `routing_reason` (`random`, `label_stratum`, `provider_disagreement`, `na_check`, `scope_probe` or `signal:NAME`), stream and instructions version.
 
-It writes `plan.md`, `plan.json`, `config_values.json` and the record sources. Arize accepts at most 7 days per record source and at most 2 sources per call, so the script splits the records into `record_sources.create.json` (for `create`) and `record_sources.add_N.json` (for `add-records`). `record_sources.json` holds all of them. Periods where the evaluator's column has no values are skipped and listed in `plan.md`. The script retries rate limits itself; run one evaluator at a time rather than several in parallel.
+It writes `plan.md`, `plan.json`, `config_values.json` and the record sources. Targeted records go to `record_sources.*` (the gold queue), and random records go to `random_sources.*` (the calibration queue). Arize accepts at most 7 days per record source and at most 2 sources per call, so each set is split into a `*.create.json` (for `create`) and `*.add_N.json` files (for `add-records`). Periods where the evaluator's column has no values are skipped and listed in `plan.md`. The script retries rate limits itself; run one evaluator at a time rather than several in parallel.
 
 If a label is short of candidates, widen `--days` first. If the continuous task hasn't been running long enough to have them, use **arize-align-history-backfill** (copy mode) to score older sessions with a candidate copy of the evaluator, then re-plan with `--eval-name` and `--start-time`/`--end-time` pointing at the backfilled column. Low-volume topics are cheap to backfill further back. A label the evaluator almost never gives (none in hundreds of sessions) usually won't come from more backfill; use `--na-probe-eval` instead. Otherwise accept the shortfall and say so. Don't fill the gap with records from other labels.
 
@@ -99,67 +114,85 @@ If a label is short of candidates, widen `--days` first. If the continuous task 
 
 Show the user:
 - the evaluator, version, unit and admission filter the plan is based on
-- the per-label table from `plan.md`, including any shortfall, and the expected number of gold records
-- the proposed annotation config values (or the existing config to reuse), and the full instructions text
-- annotators and assignment. A single annotator is fine. With two or more, use `ALL` if they want agreement measured.
-- the queue name, for example `<evaluator> alignment gold (YYYY-MM-DD)`, and the config name from `plan.md` (Arize caps it at 40 characters)
+- the random stream: its size, the frame it was drawn from, and its rate
+- the targeted table from `plan.md`, including any shortfall, and the expected number of gold records
+- the proposed label and critique configs (or existing ones to reuse), and the full instructions text with its version line
+- annotators and assignment for each queue:
+  - In `validation` mode the calibration queue needs 3 or more annotators with `ALL`, for human–human agreement. If their agreement is high, the gold queue can be single-annotated.
+  - In `discovery` mode one domain expert labels the random records.
+- the queue names, for example `<evaluator> calibration (YYYY-MM-DD)` and `<evaluator> gold (YYYY-MM-DD)`, and the config names from `plan.md` (Arize caps them at 40 characters)
 - when the records came from a backfill, the column **arize-align-evaluator** will compare against: the backfill copy's `*_backfill` column, not the live one, because the live task never scored these sessions
-- the sizing mode and the expected gold per label; at the default size, say that the queue can start an alignment but not validate one
-- the caveats: records are stratified by the evaluator's own labels, so agreement within a label is its precision; recall and production rates need `report --plan plan.json`; labelers must stay blind to the labels
+- the sizing mode and the expected gold per label; in discovery mode, say that the queues can start an alignment but not validate one
+- the caveats:
+  - Agreement comes from the calibration queue. Targeted records find failures, and agreement within a stored label is only that label's precision.
+  - Labelers must stay blind; the Annotator Columns step is manual.
 
 Then ask the user to approve or adjust. **Do not create anything in the same turn.**
 
-## Phase 5: After approval, create the queue
+## Phase 5: After approval, create the queues
 
 1. **Resolve the annotators.** Each `--annotator-email` must belong to a user with access to the space, and people often have a different address per account. Check with `ax users list --email NAME -o json`, use the address listed there, and confirm it with the user. An unknown address fails with `Annotator email not found or does not have access`.
-2. **Create the config**, unless you are reusing one. With `-o json`, the response includes its `id`:
+2. **Create the configs**, unless you are reusing them. With `-o json`, each response includes its `id`:
 
    ```bash
    ax annotation-configs create categorical --name "CONFIG_NAME" --space SPACE \
      --value LABEL_1 --value LABEL_2 ... --optimization-direction NONE -o json
+   ax annotation-configs create freeform --name "CRITIQUE_CONFIG_NAME" --space SPACE -o json
    ```
-3. **Create the queue with its first record sources, then add the rest:**
+3. **Create each queue with its first record sources, then add the rest.** The calibration queue takes `random_sources.*`, and the gold queue takes `record_sources.*`:
 
    ```bash
-   ax annotation-queues create --name "QUEUE_NAME" --space SPACE \
-     --annotation-config-id CONFIG_ID \
-     --annotator-email A@example.com [--annotator-email B@example.com] \
+   ax annotation-queues create --name "CALIBRATION_QUEUE_NAME" --space SPACE \
+     --annotation-config-id CONFIG_ID --annotation-config-id CRITIQUE_CONFIG_ID \
+     --annotator-email A@example.com --annotator-email B@example.com --annotator-email C@example.com \
      --assignment-method ALL \
      --instructions "$(cat WORK_DIR/instructions.txt)" \
-     --record-sources WORK_DIR/record_sources.create.json
-   ax annotation-queues add-records QUEUE_ID --space SPACE --record-sources WORK_DIR/record_sources.add_1.json
-   # ...one add-records per remaining record_sources.add_N.json
+     --record-sources WORK_DIR/random_sources.create.json
+   ax annotation-queues add-records CALIBRATION_QUEUE_ID --space SPACE --record-sources WORK_DIR/random_sources.add_1.json
+   # ...then the same for the gold queue with record_sources.create.json and each record_sources.add_N.json
    ```
 
    Instructions are limited to 5000 characters. Create queues one at a time; if a call fails part way, check what exists (`ax annotation-configs get`, `ax annotation-queues get`) before retrying, so nothing is created twice.
-4. **Verify.** Run `ax annotation-queues list-records QUEUE --space SPACE --limit 100 -o json`. Confirm the record count matches the plan, every planned span ID is present, and no session appears twice. If any are missing, report which ones. Re-run `add-records` with the plan's source file that holds them, or explain why they were dropped.
+4. **Hide evaluator output.** ax can't set a queue's Annotator Columns. Ask the user to edit each queue in the Arize UI and leave out every `eval.*`, `trace_eval.*` and `session_eval.*` column. Then open one record as an annotator and confirm no evaluator label, score or explanation shows. If it can't be hidden, record that the labels aren't blind.
+5. **Verify.** Run `ax annotation-queues list-records QUEUE --space SPACE --limit 100 -o json` for each queue. Confirm the record counts match the plan, every planned span ID is present, and no session appears twice. If any are missing, report which ones. Re-run `add-records` with the plan's source file that holds them, or explain why they were dropped.
 
 ## Phase 6: Check partway, then top up
 
-After annotators have labeled about a third of the records, run the **arize-align-evaluator** report on the queue. Check the bucket counts against the plan:
+After annotators have labeled about a third of the records, run the **arize-align-evaluator** report on each queue. Check the bucket counts against the plan:
 - **Excluded rate well above expected:** the admission population is wider than the evaluator's scope. Raise `--expected-exclusion`, or tighten `--root-filter`, before topping up.
+- **Annotators disagree** in the calibration queue: clarify the label definitions, bump the instructions version, and update the instructions with `ax annotation-queues update --instructions`. Earlier labels on the definitions that changed need re-review; `plan.json` shows each record's instructions version.
+
 Top up only on counts: a label short of gold records, or exclusions above plan. Never top up because agreement so far looks low or high; that biases the result.
 
-- **A label is short of gold records:** run the script again with `--labels THAT_LABEL --per-label N --exclude-queue THIS_QUEUE`, and add each new `record_sources.create.json` / `record_sources.add_N.json` file with `ax annotation-queues add-records QUEUE --space SPACE --record-sources FILE`. That still requires the user's approval.
-- **Annotators disagree:** clarify the label definitions in the instructions with `ax annotation-queues update --instructions` before more labeling.
+- **A label is short of gold records:** run the script again with `--labels THAT_LABEL --per-label N --random 0 --exclude-queue GOLD_QUEUE CALIBRATION_QUEUE`, and add each new `record_sources.create.json` / `record_sources.add_N.json` file with `ax annotation-queues add-records QUEUE --space SPACE --record-sources FILE`. That still requires the user's approval.
+- **The random stream is too small** for the interval needed: re-plan with `--random N` and the same exclusions, and add `random_sources.*` to the calibration queue.
 
-When labeling is complete, hand off to **arize-align-evaluator**. Name the column it should compare against (the `*_backfill` column when the records came from a backfill), and pass it `plan.json` (`report --plan`) for production-weighted estimates. For a topped-up queue, merge the strata of every plan run into one `plan.json` first. Intake runs (Phase 7) record their strata in `plan.json` themselves.
+When labeling is complete, hand off to **arize-align-evaluator**:
+- Report on the **calibration queue** for agreement, recall per label, human–human agreement and the verdict.
+- Report on the **gold queue** for disagreements to fix and for dev and few-shot examples.
+- Name the column to compare against (the `*_backfill` column when the records came from a backfill), and pass `plan.json` (`report --plan`).
+- For a topped-up round, merge the strata and records of every plan run into one `plan.json` first. Intake runs (Phase 7) record theirs in `plan.json` themselves.
 
 ## Phase 7 (optional): Continuous intake
 
-Use this when the user wants the queue to keep sampling new production units, for example to watch an evaluator for drift. Don't use Arize's "run continuously" queue option for this: it samples at random, so rare labels starve and the results can't be weighted. The CLI can't set it either. Instead, rerun the plan on each new period:
+Use this when the user wants the queues to keep sampling new production units, for example to watch an evaluator for drift. Don't use Arize's "run continuously" queue option for this. It doesn't record a selection rate per record, it can't be set from the CLI, and a random sample alone starves the rare labels that the targeted stream covers. Instead, rerun the plan on each new period:
 
 ```bash
 python3 SKILL_ROOT/scripts/plan_queue.py --space SPACE \
-  --intake WORK_DIR/plan.json --queue QUEUE --per-label N [--settle-hours H]
+  --intake WORK_DIR/plan.json --queue GOLD_QUEUE --per-label N \
+  --random-queue CALIBRATION_QUEUE --random M [--settle-hours H]
 ```
 
-1. **Dry run first.** Without `--execute`, it writes `WORK_DIR/intake-N/plan.md` and changes nothing. It samples only units that started since the plan's last run and are not in the queue, with the plan's saved settings and strata, and leaves out the newest `--settle-hours` (default 2) so evaluators have scored them. For session evaluators, use at least the time a session usually stays open.
-2. **Get approval for the intake settings,** not for each record. Show the dry run, then agree on records per label per run (`--per-label`), the schedule, and when to stop (a total count or a date). Daily or weekly fits most evaluators. Size `--per-label` so the annotators can keep up with the incoming records.
-3. **Schedule the run with `--execute`.** Each run adds its records with `add-records`, then appends them, its strata (tagged `@intake-N`) and the new cursor to `plan.json`. Use a cron job or CI job on a machine with an `ax` profile for the space, and keep `plan.json` there; it is the intake's state. Never run two intakes on the same plan at once.
-4. **Watch for stops.** A run stops if the evaluator's version changed: plan a new queue for the new version. If `add-records` fails partway, the run records what was added, moves on, and says so at the end of `intake-N/plan.md`.
+1. **Dry run first.** Without `--execute`, it writes `WORK_DIR/intake-N/plan.md` and changes nothing. It samples only units that started since the plan's last run and are in neither queue, with the plan's saved settings and strata. It leaves out the newest `--settle-hours` (default 2) so evaluators have scored them. For session evaluators, use at least the time a session usually stays open.
+2. **Get approval for the intake settings,** not for each record. Show the dry run, then agree on:
+   - records per label per run (`--per-label`) and random records per run (`--random`)
+   - the schedule; daily or weekly fits most evaluators
+   - when to stop (a total count or a date)
 
-Run the report with `--plan WORK_DIR/plan.json`. Every intake period gets its own weight, so the production estimates stay unbiased even as volume and label mix change.
+   Size the runs so the annotators can keep up with the incoming records.
+3. **Schedule the run with `--execute`.** Each run adds its records with `add-records`, then appends them, its strata (tagged `@intake-N`) and the new cursor to `plan.json`. Use a cron job or CI job on a machine with an `ax` profile for the space, and keep `plan.json` there; it is the intake's state. Never run two intakes on the same plan at once.
+4. **Track the random stream weekly.** Report on the calibration queue. The confident-wrong rate (random records humans failed that the evaluator passed) should fall as the evaluator improves; if it doesn't, start a new round of error analysis.
+5. **Watch for stops.** A run stops if the evaluator's version changed: plan new queues for the new version. If `add-records` fails partway, the run records what was added, moves on, and says so at the end of `intake-N/plan.md`.
 
 ---
 
@@ -175,7 +208,9 @@ Run the report with `--plan WORK_DIR/plan.json`. Every intake period gets its ow
 | `time range ... must not exceed 7 days` or `List should have at most 2 items` | A hand-built record source. Use the script's split files: `record_sources.create.json` for `create`, then `add-records` with each `record_sources.add_N.json`. |
 | `Annotator email not found or does not have access` | The address isn't a user in this space. Look it up with `ax users list --email NAME`. |
 | Intake says "Nothing to take in" | The plan already covers up to the settle cutoff. Run later, or lower `--settle-hours`. |
-| Intake stops on "plan a new queue" | The evaluator has a new version. Plan a new queue for it; don't mix versions in one queue. |
+| Intake stops on "plan a new queue" | The evaluator has a new version. Plan new queues for it; don't mix versions in one queue. |
+| Annotators can see evaluator labels or scores | Edit the queue's Annotator Columns in the Arize UI to leave out the eval columns; ax can't set them. Labels made while evals were visible aren't blind. |
+| `--random` draws fewer than asked | The window has fewer scored units than requested. Widen `--days`, or accept a wider interval and say so. |
 | Labels land on spans instead of the session | The level is chosen when annotating. Restate it in the instructions; **arize-align-evaluator** reads span, trace and session labels either way. |
 
 ---
