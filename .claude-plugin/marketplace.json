@@ -11,7 +11,7 @@
     {
       "name": "arize-skills",
       "source": "./",
-      "description": "Add Arize AX observability to LLM applications — auto-instrumentation, trace export, dataset management, experiment workflows, prompt optimization, and deep linking via the ax CLI.",
+      "description": "Add Arize AX observability to LLM applications — auto-instrumentation, trace export, dataset management, experiment workflows, prompt optimization, deep linking, and migrations from Langfuse, LangSmith, and Braintrust via the ax CLI.",
       "version": "1.2.0",
       "keywords": [
         "arize",
@@ -22,7 +22,8 @@
         "evals",
         "datasets",
         "experiments",
-        "instrumentation"
+        "instrumentation",
+        "migration"
       ],
       "category": "observability",
       "homepage": "https://arize.com/docs/ax",
