@@ -137,6 +137,27 @@ def queue_units(ax, space, queue):
             return seen
 
 
+def keep_earliest(found, unit, item):
+    """Keep each unit's earliest-starting span (or candidate row)."""
+    if unit is not None and (unit not in found or (item.get("start_time") or "") < (found[unit].get("start_time") or "")):
+        found[unit] = item
+
+
+def stratum(name, stream, label=None, subgroup="all", population=None, frame=None, lower=False):
+    """One plan.json stratum. frame is the sampling frame selection_rate divides by; strata without one
+    (signals, scope probes) are never weighted."""
+    return {"stratum": name, "stream": stream, "label": label, "subgroup": subgroup, "population": population,
+            "frame": frame, "population_lower_bound": lower}
+
+
+def finalize_strata(strata, records):
+    """Set each stratum's picked count and selection rate from the records that point to it."""
+    picked = Counter(r["stratum"] for r in records)
+    for st in strata:
+        st["picked"] = picked[st["stratum"]]
+        st["selection_rate"] = st["picked"] / st["frame"] if st["frame"] else None
+
+
 def export_units(ax, project_id, space, filt, lo, hi, unit_key, min_span=timedelta(minutes=30)):
     """Every distinct unit matching filt in [lo, hi), with its earliest matching span, splitting any period
     that fills an export page. Returns (units, lower_bound). A period where the eval column has no values
@@ -151,15 +172,12 @@ def export_units(ax, project_id, space, filt, lo, hi, unit_key, min_span=timedel
         if len(page) < PAGE or hi - lo <= min_span:
             found = {}
             for s in page:
-                u = unit_of(s, unit_key)
-                if u is not None and (u not in found or s.get("start_time", "") < found[u].get("start_time", "")):
-                    found[u] = s
+                keep_earliest(found, unit_of(s, unit_key), s)
             return found, len(page) >= PAGE
         mid = lo + (hi - lo) / 2
         (a, t1), (b, t2) = fetch(lo, mid), fetch(mid, hi)
         for u, s in b.items():
-            if u not in a or s.get("start_time", "") < a[u].get("start_time", ""):
-                a[u] = s
+            keep_earliest(a, u, s)
         return a, t1 or t2
     return fetch(lo, hi)
 
@@ -173,6 +191,12 @@ def unit_of(span, unit_key):
     if unit_key == "session_id":
         return (span.get("attributes") or {}).get("session.id")
     return (span.get("context") or {}).get(unit_key)
+
+
+def fill(chosen, pool, n, rng):
+    """Top chosen up to n from the pool items not already chosen."""
+    ids = {c["span_id"] for c in chosen}
+    return chosen + spread_pick([i for i in pool if i["span_id"] not in ids], n - len(chosen), rng)
 
 
 def spread_pick(items, n, rng):
@@ -303,10 +327,11 @@ def main():
         a.exclude_queue = list(dict.fromkeys(a.exclude_queue + [q for q in (a.queue, a.random_queue) if q]))
         a.per_label = a.per_label or base.get("per_label_quota")
         a.random = a.random or 0
-        run_id = f"intake-{len(base.get('intakes') or []) + 1}"
+        run_n = len(base.get("intakes") or []) + 1
+        run_id = f"intake-{run_n}"
         a.out_dir = a.out_dir or os.path.join(os.path.dirname(os.path.abspath(a.intake)), run_id)
         if a.seed is None:
-            a.seed = len(base.get("intakes") or []) + 1
+            a.seed = run_n
     elif a.execute or a.queue or a.random_queue:
         p.error("--execute, --queue and --random-queue go with --intake")
     elif not (a.project and a.evaluator and a.out_dir):
@@ -405,41 +430,43 @@ def main():
             unit = row[unit_key]
             if not unit or str(unit) in used:
                 dup += 1
-            elif unit not in cands or row["start_time"] < cands[unit]["start_time"]:
-                cands[unit] = row
+            else:
+                keep_earliest(cands, unit, row)
         return list(cands.values()), dup
 
     def take(chosen, tag, label, quota, pool, dup, **extra):
+        """Add picks (each already carrying its stratum and routing_reason) and return their summary row."""
         for c in chosen:
             c["sampled_as"] = tag(c)
-            c.setdefault("stratum", f"probe:{label}")
-            c.setdefault("routing_reason", PROBE)
             c["stream"] = "random" if c["routing_reason"] == RANDOM else "targeted"
             used.add(str(c[unit_key]))
         picks.extend(chosen)
-        summary.append({"label": label, "pool_units": pool, "quota": quota, "picked": len(chosen),
-                        "provider_disagreements": sum(1 for c in chosen if c.get("disagree")),
-                        "span_names": len({c["span_name"] for c in chosen}), "skipped_dupes_or_excluded": dup,
-                        "shortfall": max(0, quota - len(chosen)), **extra})
+        return {"label": label, "pool_units": pool, "quota": quota, "picked": len(chosen),
+                "provider_disagreements": sum(1 for c in chosen if c.get("disagree")),
+                "span_names": len({c["span_name"] for c in chosen}), "skipped_dupes_or_excluded": dup,
+                "shortfall": max(0, quota - len(chosen)), **extra}
 
     picks, summary, strata, used = [], [], [], set(excluded_units)
 
     # Random stream first: a uniform draw from every scored unit not already queued, so its selection
     # probability is known exactly and nothing about the evaluator's labels decides who is in it.
-    rand = None
+    # The enumeration also gives the judge's label mix over every scored unit (label_counts, which the report's
+    # production estimate needs), and the label and disagreement populations, so they aren't exported again.
+    rand, label_counts, dis_counts, rand_lower = None, None, None, False
     if a.random:
-        units, lower = export_units(a.ax, project["id"], a.space, with_root(f"{column} IS NOT NULL"),
-                                    start, end, unit_key)
+        units, rand_lower = export_units(a.ax, project["id"], a.space, with_root(f"{column} IS NOT NULL"),
+                                         start, end, unit_key)
+        rows = {u: row_of(sp) for u, sp in units.items()}
+        label_counts = Counter(r["stored_label"] for r in rows.values())
+        dis_counts = Counter(r["stored_label"] for r in rows.values()
+                             if r["compare_label"] and r["compare_label"] != r["stored_label"])
         frame = sorted(u for u in units if str(u) not in used)
-        chosen = [row_of(units[u]) for u in rng.sample(frame, min(a.random, len(frame)))]
+        chosen = [rows[u] for u in rng.sample(frame, min(a.random, len(frame)))]
         for c in chosen:
             c["stratum"], c["routing_reason"] = "random", RANDOM
-        take(chosen, lambda c: "random", "random", a.random, len(frame), len(units) - len(frame))
-        rand = summary.pop()
-        strata.append({"stratum": "random", "stream": "random", "label": None, "subgroup": "all",
-                       "population": len(units), "frame": len(frame), "population_lower_bound": lower,
-                       "population_estimated": False, "picked": len(chosen),
-                       "selection_rate": len(chosen) / len(frame) if frame else None})
+        rand = take(chosen, lambda c: "random", "random", a.random, len(frame), len(units) - len(frame))
+        strata.append({**stratum("random", "random", population=len(units), frame=len(frame), lower=rand_lower),
+                       "label_counts": dict(label_counts)})
 
     # Judge-independent signals (user feedback, severity): targeted, never weighted.
     for name, filt in a.signal:
@@ -447,7 +474,8 @@ def main():
         chosen = spread_pick(items, a.signal_count, rng)
         for c in chosen:
             c["stratum"] = c["routing_reason"] = f"signal:{name}"
-        take(chosen, lambda c, n=name: f"signal: {n}", f"signal: {name}", a.signal_count, len(items), dup)
+        summary.append(take(chosen, lambda c, n=name: f"signal: {n}", f"signal: {name}", a.signal_count, len(items), dup))
+        strata.append(stratum(f"signal:{name}", "targeted"))
 
     decisive_picked = 0
     cmp_col = f"{prefix}.{a.compare_eval}.label" if a.compare_eval else None
@@ -460,35 +488,39 @@ def main():
             (disagree if i["disagree"] else rest).append(i)
         chosen = spread_pick(disagree, int(quota * a.max_disagreement_share), rng)
         chosen += spread_pick(rest, quota - len(chosen), rng)
-        if len(chosen) < quota:
-            # Not enough other candidates; fall back to the remaining disagreements.
-            ids = {c["span_id"] for c in chosen}
-            chosen += spread_pick([d for d in disagree if d["span_id"] not in ids], quota - len(chosen), rng)
+        chosen = fill(chosen, disagree, quota, rng)  # not enough others: fall back to the remaining disagreements
         # Strata: the stored label, split by provider agreement when a comparison copy is given. Disagreements
         # are oversampled, so they are their own stratum and get their own weight.
         for c in chosen:
             c["stratum"] = label if not a.compare_eval else f"{label}|{'disagree' if c['disagree'] else 'agree'}"
             c["routing_reason"] = DISAGREE if c["disagree"] else NA_CHECK if label in na else LABEL
-        take(chosen, lambda c, l=label: l, label, quota, len(items), dup)
-        population, lower = (None, False) if a.skip_population else count_units(
-            a.ax, project["id"], a.space, with_root(f"{column} = {quote(label)}"), start, end, unit_key)
+        summary.append(take(chosen, lambda c, l=label: l, label, quota, len(items), dup))
+        # Populations are counted in full (an estimate is not a known selection probability): from the random
+        # stream's enumeration when there is one, otherwise with their own exports.
+        if a.skip_population:
+            population, lower = None, False
+        elif label_counts is not None:
+            population, lower = label_counts[label], rand_lower
+        else:
+            population, lower = count_units(a.ax, project["id"], a.space, with_root(f"{column} = {quote(label)}"),
+                                            start, end, unit_key)
         if not a.compare_eval:
             pops = {"all": population}
         elif population is None:
             pops = {"disagree": None, "agree": None}
         else:
-            # Count disagreements in full: an estimated population is not a known selection probability.
-            dis, dis_lower = count_units(
-                a.ax, project["id"], a.space,
-                with_root(f"{column} = {quote(label)} AND {cmp_col} IS NOT NULL AND {cmp_col} != {quote(label)}"),
-                start, end, unit_key)
-            pops, lower = {"disagree": dis, "agree": population - dis}, lower or dis_lower
+            if dis_counts is not None:
+                dis = dis_counts[label]
+            else:
+                dis, dis_lower = count_units(
+                    a.ax, project["id"], a.space,
+                    with_root(f"{column} = {quote(label)} AND {cmp_col} IS NOT NULL AND {cmp_col} != {quote(label)}"),
+                    start, end, unit_key)
+                lower = lower or dis_lower
+            pops = {"disagree": dis, "agree": population - dis}
         for sub, pop in pops.items():
-            name = label if sub == "all" else f"{label}|{sub}"
-            picked = sum(1 for c in chosen if c["stratum"] == name)
-            strata.append({"stratum": name, "stream": "targeted", "label": label, "subgroup": sub,
-                           "population": pop, "population_lower_bound": lower, "population_estimated": False,
-                           "picked": picked, "selection_rate": picked / pop if pop else None})
+            strata.append(stratum(label if sub == "all" else f"{label}|{sub}", "targeted", label=label, subgroup=sub,
+                                  population=pop, frame=pop, lower=lower))
         if label not in na:
             decisive_picked += len(chosen)
 
@@ -507,21 +539,24 @@ def main():
         share = math.ceil(n / max(1, len(by_probe)))
         for lbl in sorted(by_probe, key=lambda k: len(by_probe[k])):
             chosen += spread_pick(by_probe[lbl], min(share, n - len(chosen)), rng)
-        if len(chosen) < n:
-            ids = {c["span_id"] for c in chosen}
-            chosen += spread_pick([i for g in by_probe.values() for i in g if i["span_id"] not in ids], n - len(chosen), rng)
-        pool = sum(len(g) for g in by_probe.values())
-        take(chosen, lambda c: f"{na_label} (probe: {a.na_probe_eval}={c['probe_label']})",
-             f"{na_label} probe vs {a.na_probe_eval}", n, pool, dup,
-             probe_labels=dict(Counter(c["probe_label"] for c in chosen)))
-        probe = summary[-1]
+        chosen = fill(chosen, [i for g in by_probe.values() for i in g], n, rng)
+        name = f"probe:{na_label} probe vs {a.na_probe_eval}"
+        for c in chosen:
+            c["stratum"], c["routing_reason"] = name, PROBE
+        probe = take(chosen, lambda c: f"{na_label} (probe: {a.na_probe_eval}={c['probe_label']})",
+                     f"{na_label} probe vs {a.na_probe_eval}", n, sum(len(g) for g in by_probe.values()), dup,
+                     probe_labels=dict(Counter(c["probe_label"] for c in chosen)))
+        summary.append(probe)
+        strata.append(stratum(name, "targeted"))
 
-    # An intake run's units are a new period, so its strata are counted and weighted on their own.
-    if base:
-        for x in picks + strata:
+    # An intake run's units are a new period, so its strata are counted and weighted on their own. The period
+    # is a field on every record and stratum; the name suffix only keeps stratum names unique across periods.
+    period = run_id if base else ""
+    for x in picks + strata:
+        x["period"] = period
+        if base:
             x["stratum"] += f"@{run_id}"
-        for st in strata:
-            st["intake"] = run_id
+    finalize_strata(strata, picks)
 
     targeted = [c for c in picks if c["stream"] == "targeted"]
     randoms = [c for c in picks if c["stream"] == "random"]
@@ -655,17 +690,14 @@ def record_intake(a, base, run_id, run_plan, targets):
                 break
             added |= {sid for src in b for sid in src["span_ids"]}
     records = [r for r in run_plan["records"] if r["span_id"] in added]
-    for st in run_plan["strata"]:
-        st["picked"] = sum(1 for r in records if r["stratum"] == st["stratum"])
-        denom = st.get("frame", st["population"])
-        st["selection_rate"] = st["picked"] / denom if denom else None
+    finalize_strata(run_plan["strata"], records)
     base["records"] = (base.get("records") or []) + records
     base["strata"] = (base.get("strata") or []) + run_plan["strata"]
     base.setdefault("intakes", []).append({
         "id": run_id, "queue": a.queue, "random_queue": a.random_queue, "window": run_plan["window"],
         "picked": len(records), "planned": len(run_plan["records"]), "summary": run_plan["summary"],
         "random_stream": run_plan["random_stream"],
-        "at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"), "failed": failed and failed[1]})
+        "at": z(datetime.now(timezone.utc)), "failed": failed and failed[1]})
     base["intake_cursor"] = run_plan["window"]["end"]
     tmp = a.intake + ".tmp"
     with open(tmp, "w") as f:

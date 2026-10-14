@@ -100,11 +100,7 @@ python3 SKILL_ROOT/scripts/plan_queue.py \
 - `--na-probe-eval` is the template name of another evaluator that grades the same sessions, for example the version this one replaces. It adds `--na-probe-count` records (default 5) that this evaluator called not applicable but the other graded decisively. Use it when a label comes up empty because the new scope rule moved those sessions to not applicable. If humans label the probes decisively, the scope rule is too strict. The other evaluator only chooses records; labelers stay blind to it.
 - `--expected-exclusion` is the share of records you expect humans to mark not applicable or cannot judge. The default is 0.30. If an earlier queue for this evaluator exists, use its actual excluded rate from the **arize-align-evaluator** report.
 
-How it picks (details and reasoning in [references/sampling.md](references/sampling.md)):
-1. **Random stream.** It enumerates every unit the evaluator scored in the window and draws `--random` of them uniformly, recording the selection rate.
-2. **Signals.** For each `--signal`, it picks records matching the filter.
-3. **Label strata.** For each evaluator label, it exports candidates with that stored label, drawn evenly across the time window. It deduplicates to one span per unit and drops units already used or queued. It sizes each decisive label's quota so the queue should clear the gates after exclusions. It adds 2 records with a stored `not_applicable` label to test applicability. It spreads picks across entry points and puts provider disagreements first.
-4. **Strata and routing.** It counts each stratum's production units. Every record gets its stratum, `routing_reason` (`random`, `label_stratum`, `provider_disagreement`, `na_check`, `scope_probe` or `signal:NAME`), stream and instructions version.
+It draws the random stream first, then the signals, the label strata (provider disagreements first, spread across entry points) and the not-applicable checks. Each record gets its stratum, `routing_reason`, stream, period and instructions version. How and why it picks each are in [references/sampling.md](references/sampling.md).
 
 It writes `plan.md`, `plan.json`, `config_values.json` and the record sources. Targeted records go to `record_sources.*` (the gold queue), and random records go to `random_sources.*` (the calibration queue). Arize accepts at most 7 days per record source and at most 2 sources per call, so each set is split into a `*.create.json` (for `create`) and `*.add_N.json` files (for `add-records`). Periods where the evaluator's column has no values are skipped and listed in `plan.md`. The script retries rate limits itself; run one evaluator at a time rather than several in parallel.
 
@@ -153,7 +149,7 @@ Then ask the user to approve or adjust. **Do not create anything in the same tur
    ```
 
    Instructions are limited to 5000 characters. Create queues one at a time; if a call fails part way, check what exists (`ax annotation-configs get`, `ax annotation-queues get`) before retrying, so nothing is created twice.
-4. **Hide evaluator output.** ax can't set a queue's Annotator Columns. Ask the user to edit each queue in the Arize UI and leave out every `eval.*`, `trace_eval.*` and `session_eval.*` column. Then open one record as an annotator and confirm no evaluator label, score or explanation shows. If it can't be hidden, record that the labels aren't blind.
+4. **Hide evaluator output.** ax can't set a queue's Annotator Columns, so ask the user to set them in the Arize UI and check one record as an annotator: [Keeping labelers blind](references/rubric-and-instructions.md#keeping-labelers-blind).
 5. **Verify.** Run `ax annotation-queues list-records QUEUE --space SPACE --limit 100 -o json` for each queue. Confirm the record counts match the plan, every planned span ID is present, and no session appears twice. If any are missing, report which ones. Re-run `add-records` with the plan's source file that holds them, or explain why they were dropped.
 
 ## Phase 6: Check partway, then top up

@@ -78,11 +78,15 @@ Example: 3 decisive labels gives `ceil(max(3, 3.33) / 0.7)` = 5 per label in dis
 
 ## Strata and weights
 
-Each picked record carries a `stratum` in `plan.json`, and `strata` lists every stratum with its `stream` and:
-- `population`: distinct production units in the window with that stored label (and root filter), counted in full by splitting any period that fills an export page. `population_lower_bound` is true if a 30-minute period still filled a page.
-- `picked` and `selection_rate` (picked / population, or picked / frame for the random stream).
+Each picked record carries a `stratum` and a `period` in `plan.json`, and `strata` lists every stratum with its `stream`, `label`, `subgroup`, `period` and:
+- `population`: distinct production units in the window with that stored label (and root filter), counted in full. `population_lower_bound` is true if a 30-minute period still filled an export page.
+- `frame`: what `selection_rate` divides by. It is the population for a label stratum, and the scored units not already queued for the random stream.
+- `picked` and `selection_rate` (picked / frame).
+- On the random stratum, `label_counts`: the evaluator's label mix over every scored unit in the period, which the report uses for corrected production rates.
 
-With `--compare-eval`, each label splits into `LABEL|disagree` and `LABEL|agree`. The disagreement population is counted in full with its own export, and agree is the rest. An estimated population would not be a known selection probability, so nothing is estimated. Scope probes and signals get a stratum with no population; they are reported separately and never weighted.
+The random stream's enumeration already holds every scored unit, so the label and disagreement populations are counted from it. Without a random stream (`--random 0`), each is counted with its own export.
+
+With `--compare-eval`, each label splits into `LABEL|disagree` and `LABEL|agree`, both counted in full. An estimated population would not be a known selection probability, so nothing is estimated. Scope probes and signals have a stratum with no population or frame, so they are never weighted.
 
 `--skip-population` skips the label counts, for example on a very large window. The evaluator report then can't weight the targeted stream. The random stream still has its rate.
 
@@ -92,7 +96,7 @@ Arize's own "run continuously" option on a queue samples new spans at random, bu
 - **Window.** It starts at the plan's `intake_cursor` (the end of the last run, or of the first plan) and ends `--settle-hours` (default 2) before now. The gap gives evaluator tasks time to score the newest units; a unit counted before it is scored would be missed for good. For a session evaluator, set it at least as long as a session usually stays open.
 - **Same design.** It reuses the plan's saved `settings` (root filter, compare copy, sizing, labels, signals, instructions version) and quota per label (`--per-label` overrides it for each run). Scope probes are left out. Units already in either queue are excluded.
 - **Random stream.** Add `--random-queue CAL --random N` to draw N random records per run into the calibration queue. This is the stream to track weekly. The confident-wrong rate (random records humans failed that the evaluator passed) is the number to watch; if it stops falling, start a new round of error analysis.
-- **Its own strata.** Each run's strata are tagged `@intake-N` and counted over that run's window only. Pooling them with earlier strata would mix different selection rates, so each period carries its own weight. A low-volume label simply has fewer picks that run.
+- **Its own strata.** Each run's records and strata carry `period: intake-N` (the stratum names get an `@intake-N` suffix to stay unique), and are counted over that run's window only. Pooling them with earlier strata would mix different selection rates, so each period carries its own weight. A low-volume label simply has fewer picks that run.
 - **Recording.** `--execute` adds the records, then appends the records, the strata, an `intakes` entry and the new cursor to `plan.json`, writing it atomically. If a batch fails, the records already added are recorded, the strata's picked counts match them, and the cursor still moves, so no period is counted twice. Without `--execute`, nothing changes.
 - **Version guard.** If the evaluator's version no longer matches the plan, the run stops. A new version is a different evaluator and needs its own queue.
 

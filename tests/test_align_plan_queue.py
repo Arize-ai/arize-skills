@@ -294,7 +294,7 @@ def test_provider_disagreements_are_their_own_stratum(monkeypatch, tmp_path):
     p = run(monkeypatch, tmp_path, fake, "--compare-eval", "my_eval_anthropic")
     strata = {s["stratum"]: s for s in p["strata"]}
     # Counted in full, not estimated from the candidate pool.
-    assert strata["good|disagree"]["population"] == 5 and not strata["good|disagree"]["population_estimated"]
+    assert strata["good|disagree"]["population"] == 5 and strata["good|disagree"]["subgroup"] == "disagree"
     assert any("my_eval_anthropic.label != 'good'" in f for f in fake.filters)
     assert strata["good|agree"]["population"] == 15
     assert strata["good|disagree"]["picked"] == 2 and strata["good|agree"]["picked"] == 3
@@ -331,7 +331,9 @@ def test_probes_are_kept_out_of_weighting_strata(monkeypatch, tmp_path):
     p = run(monkeypatch, tmp_path, FakeAx(spans), "--na-probe-eval", "v1_eval", "--na-probe-count", "3")
     probes = [r for r in p["records"] if "probe" in r["sampled_as"]]
     assert {r["stratum"] for r in probes} == {"probe:not_applicable probe vs v1_eval"}
-    assert not any(s["stratum"].startswith("probe:") for s in p["strata"])
+    # Probes have a stratum entry, with no population or frame, so they are never weighted.
+    st = next(s for s in p["strata"] if s["stratum"].startswith("probe:"))
+    assert st["population"] is None and st["frame"] is None and st["picked"] == 3
 
 
 # ---------------------------------------------------------------------------
@@ -384,7 +386,8 @@ def test_intake_samples_only_units_since_the_plan_with_their_own_strata(monkeypa
     assert {r["stratum"] for r in new} == {"good@intake-1", "bad@intake-1", "wrong@intake-1",
                                             "not_applicable@intake-1"}
     good = next(s for s in p["strata"] if s["stratum"] == "good@intake-1")
-    assert good["population"] == 6 and good["picked"] == 2 and good["intake"] == "intake-1"
+    assert good["population"] == 6 and good["picked"] == 2 and good["period"] == "intake-1"
+    assert {r["period"] for r in new} == {"intake-1"} and {r["period"] for r in first["records"]} == {""}
     assert p["strata"][:len(first["strata"])] == first["strata"]
     assert p["intake_cursor"] == plan.parse_time((END + timedelta(days=3)).isoformat()).isoformat().replace(
         "+00:00", "Z")
@@ -544,7 +547,8 @@ def test_signals_pick_by_a_judge_independent_filter_and_are_not_weighted(monkeyp
     p = run(monkeypatch, tmp_path, fake, "--signal", "thumbs_down=attributes.feedback = 'down'", "--signal-count", "3")
     sig = [r for r in p["records"] if r["routing_reason"] == "signal:thumbs_down"]
     assert len(sig) == 3 and all(r["stratum"] == "signal:thumbs_down" for r in sig)
-    assert not any(s["stratum"].startswith("signal:") for s in p["strata"])
+    st = next(s for s in p["strata"] if s["stratum"] == "signal:thumbs_down")
+    assert st["population"] is None and st["selection_rate"] is None and st["picked"] == 3
     assert any("(attributes.feedback = 'down') AND session_eval.my_eval.label IS NOT NULL" in f for f in fake.filters)
 
 
@@ -583,3 +587,18 @@ def test_intake_random_needs_its_queue(monkeypatch, tmp_path):
         intake(monkeypatch, tmp_path, fake, "--random", "4")
     with pytest.raises(SystemExit):
         intake(monkeypatch, tmp_path, fake, "--random-queue", "CAL")
+
+
+def test_random_enumeration_supplies_label_counts_without_more_exports(monkeypatch, tmp_path):
+    spans = plentiful()
+    for s in spans[:4]:  # good, disagreeing with the provider copy
+        s["evaluations"].append({"name": "my_eval_anthropic", "label": "bad"})
+    fake = FakeAx(spans)
+    p = run(monkeypatch, tmp_path, fake, "--random", "10", "--compare-eval", "my_eval_anthropic")
+    st = {s["stratum"]: s for s in p["strata"]}
+    assert st["random"]["label_counts"] == {"good": 20, "bad": 20, "wrong": 20, "not_applicable": 20}
+    assert st["good|disagree"]["population"] == 4 and st["good|agree"]["population"] == 16
+    assert st["bad|agree"]["population"] == 20 and st["bad|disagree"]["population"] == 0
+    # Only the random enumeration ran at full page size; no per-label or disagreement counts.
+    full = [f for f, l in zip(fake.filters, fake.limits) if l == plan.PAGE]
+    assert full and all(f.endswith("session_eval.my_eval.label IS NOT NULL") for f in full)
