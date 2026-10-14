@@ -53,7 +53,7 @@ If you skip this step, Devin installs `ax` itself the first time a skill needs i
 `ax` authenticates only through a profile, and every Devin session starts from a fresh snapshot with no profile. Create one at the start of each session that uses the skills, in a terminal you open yourself, so the API key never passes through Devin:
 
 1. In the session, open the **IDE** tab and open a new terminal in VS Code ([session tools](https://docs.devin.ai/work-with-devin/devin-session-tools)). Don't type into one of Devin's shell terminals: Devin runs its commands there and logs their output.
-2. Run `ax profiles create` and enter an API key from [app.arize.com/admin](https://app.arize.com/admin) → **API Keys** when the wizard prompts for it.
+2. Run `ax profiles create` and enter an API key from [app.arize.com/admin](https://app.arize.com/admin) → **API Keys** when the wizard prompts for it. For an on-prem or self-hosted Arize, choose **Advanced → Single endpoint** and enter your host, with port `443`.
 3. Tell Devin the profile is ready.
 
 Don't store the key as a Devin Secret. Devin binds secrets into the commands it runs, so the agent can read them. Don't create the profile in the blueprint either: anything a build writes is saved into the snapshot that every session in your organization starts from.
@@ -98,7 +98,7 @@ If the wizard reports `Detected ARIZE_API_KEY` and asks to create the config fro
 
 Name your Arize space and project in your prompts. If you don't name a space, the skills check `ax spaces list` and ask you to pick one when there are several.
 
-See [Authentication](../README.md#authentication) in the README for more profile options, including on-prem deployments.
+For an on-prem or self-hosted Arize, choose **Advanced → Single endpoint** in the wizard and enter the host your operations team provides, with port `443`.
 
 ### 4. Verify
 
