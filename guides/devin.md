@@ -94,6 +94,8 @@ Create an `ax` profile once with the interactive wizard. Run it in your own term
 ax profiles create
 ```
 
+If the wizard reports `Detected ARIZE_API_KEY` and asks to create the config from environment variables, answer **No**, or `unset ARIZE_API_KEY` and start again. Otherwise the profile reads the key from your environment on every run, where Devin can read it too.
+
 Name your Arize space and project in your prompts. If you don't name a space, the skills check `ax spaces list` and ask you to pick one when there are several.
 
 See [Authentication](../README.md#authentication) in the README for more profile options, including on-prem deployments.

@@ -124,7 +124,7 @@ ax profiles use staging
 ax profiles delete staging
 ```
 
-`ax` authenticates only through a profile; it doesn't read API keys from environment variables. Don't export `ARIZE_API_KEY` for it: that doesn't log you in, and a key in the environment is easy for an agent to read.
+`ax` always authenticates through a profile; setting `ARIZE_API_KEY` without one doesn't log you in. Don't keep `ARIZE_API_KEY` in your environment either. If it's set when you run the wizard, the wizard offers to create the profile from it (the default is yes), and that profile then reads the key from the environment on every run, where an agent can read it too. Answer **No** to that prompt, or `unset ARIZE_API_KEY` first, so the key is stored in the profile.
 
 Most commands also need a space. Name your space and project in your prompts. If you don't name a space, the skills check `ax spaces list` and ask you to pick one when there are several.
 
