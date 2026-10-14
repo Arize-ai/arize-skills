@@ -102,7 +102,7 @@ pip install arize-ax-cli
 
 ### Authentication
 
-**`ax` CLI profile**:
+**Option A — `ax` CLI profile** (recommended):
 
 Set up your API key once and it persists across all sessions and projects:
 ```bash
@@ -124,9 +124,20 @@ ax profiles use staging
 ax profiles delete staging
 ```
 
-`ax` always authenticates through a profile; setting `ARIZE_API_KEY` without one doesn't log you in. Don't keep `ARIZE_API_KEY` in your environment either. If it's set when you run the wizard, the wizard offers to create the profile from it (the default is yes), and that profile then reads the key from the environment on every run, where an agent can read it too. Answer **No** to that prompt, or `unset ARIZE_API_KEY` first, so the key is stored in the profile.
+You'll also need a space name or ID. Find yours by running `ax spaces list -o json` (use the `name` or base64 `id`), then persist it:
+```bash
+# macOS/Linux — add to ~/.zshrc or ~/.bashrc
+export ARIZE_SPACE="my-workspace"        # name, or base64 ID like U3BhY2U6...
+```
 
-Most commands also need a space. Name your space and project in your prompts. If you don't name a space, the skills check `ax spaces list` and ask you to pick one when there are several.
+**Option B — Environment variables**:
+```bash
+export ARIZE_API_KEY="your-api-key"       # from https://app.arize.com/admin > API Keys
+export ARIZE_SPACE="my-workspace"         # space name or base64 ID from ax spaces list
+# export ARIZE_DEFAULT_PROJECT=my-project # optional default project
+# export OPENAI_API_KEY="sk-..."          # for AI integrations and evaluators
+# export ANTHROPIC_API_KEY="sk-ant-..."   # for AI integrations and evaluators
+```
 
 ### Verify
 
