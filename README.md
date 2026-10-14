@@ -95,18 +95,13 @@ pip install arize-ax-cli
 
 **Option A — `ax` CLI profile** (recommended):
 
-Set up your API key once and it persists across all sessions and projects:
+Set up your API key once with the interactive wizard and it persists across all sessions and projects. Run it in your own terminal, not through your coding agent: the wizard prompts for the key, so it never appears in a command, your shell history, or the agent's context.
 ```bash
-# Interactive wizard: prompts for the key, so it never appears in a command or shell history
-ax profiles create
+# Interactive wizard (also asks for the region)
+ax profiles create            # creates 'default' when no profiles exist
+ax profiles create staging    # a named profile
 
-# Non-interactive (scripts, CI, agents): name the profile and read the key from an env var.
-# Without a name, `create` still prompts for one and saves nothing in a non-interactive shell.
-ax profiles create default --api-key "$ARIZE_API_KEY"
-ax profiles create staging --api-key "$ARIZE_STAGING_API_KEY"
-
-# Update an existing profile (patches only what you specify)
-ax profiles update --api-key "$ARIZE_API_KEY"
+# Update settings that aren't secret (patches only what you specify)
 ax profiles update --region us-east-1b
 
 # Other profile management
@@ -115,6 +110,8 @@ ax profiles show
 ax profiles use staging
 ax profiles delete staging
 ```
+
+To replace a key, create a new profile with the wizard; it becomes the active one.
 
 You'll also need a space name or ID. Find yours by running `ax spaces list -o json` (use the `name` or base64 `id`), then persist it:
 ```bash
@@ -139,15 +136,14 @@ ax --version && ax profiles show 2>&1
 
 ### On-prem / self-hosted Arize
 
-Point the CLI at your deployment with a **single-endpoint** profile (hostname and HTTPS port, usually `443`). Replace the host with the value your operations team provides:
+Point the CLI at your deployment with a **single-endpoint** profile (hostname and HTTPS port, usually `443`). Run the wizard, choose **Advanced → Single endpoint**, and enter the host your operations team provides (for example `arize.yourcompany.com`) and port `443`:
 
 ```bash
-ax profiles create my-onprem --api-key "$ARIZE_API_KEY" --single-host arize.yourcompany.com --single-port 443
-ax profiles use my-onprem
+ax profiles create my-onprem
 ax profiles validate
 ```
 
-For interactive setup, `ax profiles create` also offers **Advanced → Single endpoint**. More options (TOML, Flight/OTLP splits) are documented in the [arize-ax-cli README](https://github.com/Arize-ai/arize-ax-cli/blob/main/README.md#on-premise-deployments).
+More options (TOML, Flight/OTLP splits) are documented in the [arize-ax-cli README](https://github.com/Arize-ai/arize-ax-cli/blob/main/README.md#on-premise-deployments).
 
 ## Available Skills
 

@@ -206,7 +206,7 @@ Omit `--force` to get a confirmation prompt instead of deleting immediately.
 |---------|----------|
 | `ax: command not found` | See [references/ax-setup.md](references/ax-setup.md) |
 | `401 Unauthorized` | API key may not have access to this space. Verify key and space ID at https://app.arize.com/admin > API Keys |
-| `No profile found` | Run `ax profiles show --expand`; set `ARIZE_API_KEY` env var or write `~/.arize/config.toml` |
+| `No profile found` | Run `ax profiles show --expand`; if no profile exists, ask the user to run `ax profiles create` in their own terminal (see [references/ax-profiles.md](references/ax-profiles.md)) |
 | `Integration not found` | Verify with `ax ai-integrations list --space SPACE` |
 | `has_api_key: false` after create | Credentials were not saved — re-run `update` with the correct `--api-key` or `--provider-metadata` |
 | Evaluator runs fail with LLM errors | Check integration credentials with `ax ai-integrations get INT_ID`; rotate the API key if needed |
