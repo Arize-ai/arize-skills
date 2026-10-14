@@ -34,7 +34,7 @@ The thresholds are defaults. If the user wants different ones, state the new thr
 | **VALIDATED** | Every gate passes, and ≥ 2 classes have ≥ 30 gold records in both dev and test (about 71 each in all) | Agreement on those classes is evidence of alignment, once re-run on the current version. Classes below 30 in dev or test are listed as not validated. |
 | **DIRECTIONAL** | Every gate passes, below the VALIDATED sizes | Quote every rate with its interval and don't claim a target is met. Fix clear rubric or scope errors in one batch, then label more before further tuning: tuning a prompt record by record on a small set overfits it. |
 | **EXPLORATORY** | At least 5 gold records in 2 or more classes, but some gate fails | Patterns worth investigating. No rate is evidence of alignment. |
-| **NOT USABLE** | Anything else | Fix the queue first. |
+| **NOT USABLE** | Anything else: too few gold records, or only one class | Fix the queue first. Don't propose evaluator changes from it. |
 
 A single-annotator queue can reach any verdict, but the report must say that every gold label rests on one person.
 

@@ -46,10 +46,12 @@ If an `ax` command fails, troubleshoot based on the error:
 
 ### The bundled report script
 
-[scripts/align_report.py](scripts/align_report.py) uses only the Python standard library. It has two read-only subcommands:
+[scripts/align_report.py](scripts/align_report.py) uses only the Python standard library. It has four read-only subcommands:
 
 - `fetch` saves the queue, all of its records (every page) and the evaluator as JSON.
 - `report` joins those files and prints the pre-alignment report as Markdown. With `--json-out`, it also writes per-record results.
+- `compare` compares two `report --json-out` files: before and after a revision, the dev → test gap, a second judge and the ship gate (Phase 6).
+- `lint` flags template lines a revision added that name records or copy dev wording (Phase 6).
 
 Find the installed skill's root and run the script by absolute path, so it works from any workspace. Use a scratch directory for its output, not the user's repo.
 
@@ -117,12 +119,12 @@ The report sorts every record into one of these buckets: **gold** (applicable, d
 
 It then applies the quality gates and gives one verdict:
 
-| Verdict | Meaning | What you may claim |
-|---|---|---|
-| **VALIDATED** | Every gate passes, and ≥ 2 classes have ≥ 30 gold records in both dev and test (about 71 each in all) | Agreement on those classes is evidence, once re-run on the current version (Phase 6) |
-| **DIRECTIONAL** | Every gate passes, below the VALIDATED sizes | Report rates with their intervals. Fix clear rubric or scope errors in one batch, then label more before further tuning; don't tune prompt by prompt, and don't claim a target is met. |
-| **EXPLORATORY** | At least 5 gold records in 2 or more classes, but some gate fails | Patterns worth investigating. No rate is evidence of alignment. |
-| **NOT USABLE** | Too few gold records, or only one class | Do not propose evaluator changes from this queue. Fix the queue first. |
+- **VALIDATED:** every gate passes, and 2+ classes have 30+ gold records in both dev and test. Agreement on those classes is evidence, once re-run on the current version.
+- **DIRECTIONAL:** every gate passes, below those sizes. Report with intervals and fix clear errors in one batch; don't tune prompt by prompt or claim a target.
+- **EXPLORATORY:** some gate fails. Patterns only.
+- **NOT USABLE:** too few gold records or classes. Fix the queue first.
+
+The exact rules are in [Verdicts](references/gates-and-agreement.md#verdicts).
 
 The two passing tiers exist because 10 gold records can start an alignment but can't confirm one: at 10 records, 9/10 agreement has a 95% interval of about 60–98%. Tuning prompts on a small set overfits it, so DIRECTIONAL allows one batch of fixes, not a tuning loop. The report prints an interval next to every rate.
 

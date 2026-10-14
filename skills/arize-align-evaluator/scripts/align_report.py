@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Pre-alignment report for an Arize evaluator against human ground truth.
 
-Two subcommands, standard library only (Python 3.9+):
+Four subcommands, standard library only (Python 3.9+):
 
   fetch   Read-only. Calls `ax` to save a queue, all of its records (every
           page), and an evaluator to a directory. With --count-turns, also
@@ -194,29 +194,38 @@ def short_email(email):
     return email.split("@")[0] if email else "(unattributed)"
 
 
-def cohen_kappa(pairs):
+def n_agree(pairs):
+    return sum(1 for x, y in pairs if x == y)
+
+
+def chance_corrected(pairs, pe_of):
+    """(p_o − p_e) / (1 − p_e) for rater pairs, with p_e from pe_of(pairs, n); 1 when chance agreement is certain."""
     n = len(pairs)
     if n == 0:
         return None
-    po = sum(1 for x, y in pairs if x == y) / n
-    ca, cb = Counter(x for x, _ in pairs), Counter(y for _, y in pairs)
-    pe = sum(ca[k] * cb.get(k, 0) for k in ca) / (n * n)
-    if pe == 1:
-        return 1.0 if po == 1 else 0.0
-    return (po - pe) / (1 - pe)
+    po, pe = n_agree(pairs) / n, pe_of(pairs, n)
+    return 1.0 if pe == 1 else (po - pe) / (1 - pe)
+
+
+def cohen_kappa(pairs):
+    def pe(pairs, n):
+        ca, cb = Counter(x for x, _ in pairs), Counter(y for _, y in pairs)
+        return sum(ca[k] * cb.get(k, 0) for k in ca) / (n * n)
+    return chance_corrected(pairs, pe)
 
 
 def gwet_ac1(pairs):
     """Gwet's AC1 for two raters; stable when one label dominates, where κ collapses."""
-    n = len(pairs)
-    if n == 0:
-        return None
-    labels = {x for p in pairs for x in p}
-    q = max(2, len(labels))
-    po = sum(1 for x, y in pairs if x == y) / n
-    share = Counter(x for p in pairs for x in p)
-    pe = sum((share[k] / (2 * n)) * (1 - share[k] / (2 * n)) for k in labels) / (q - 1)
-    return 1.0 if pe == 1 else (po - pe) / (1 - pe)
+    def pe(pairs, n):
+        share = Counter(x for p in pairs for x in p)
+        return sum((c / (2 * n)) * (1 - c / (2 * n)) for c in share.values()) / (max(2, len(share)) - 1)
+    return chance_corrected(pairs, pe)
+
+
+def scott_pi(pairs):
+    """Scott's π: chance-corrected agreement with one pooled label distribution for both raters."""
+    return chance_corrected(pairs, lambda pairs, n: sum((c / (2 * n)) ** 2
+                                                        for c in Counter(v for p in pairs for v in p).values()))
 
 
 def pabak(pairs):
@@ -224,19 +233,7 @@ def pabak(pairs):
     if not pairs:
         return None
     q = max(2, len({x for p in pairs for x in p}))
-    po = sum(1 for x, y in pairs if x == y) / len(pairs)
-    return (q * po - 1) / (q - 1)
-
-
-def scott_pi(pairs):
-    """Scott's π: chance-corrected agreement with one pooled label distribution for both raters."""
-    n = len(pairs)
-    if n == 0:
-        return None
-    po = sum(1 for x, y in pairs if x == y) / n
-    share = Counter(v for p in pairs for v in p)
-    pe = sum((c / (2 * n)) ** 2 for c in share.values())
-    return 1.0 if pe == 1 else (po - pe) / (1 - pe)
+    return (q * n_agree(pairs) / len(pairs) - 1) / (q - 1)
 
 
 def boot_ci(pairs, stat, b=1000, seed=0):
@@ -244,18 +241,27 @@ def boot_ci(pairs, stat, b=1000, seed=0):
     if len(pairs) < 2:
         return None
     rng = random.Random(seed)
-    vals = sorted(v for v in (stat([pairs[rng.randrange(len(pairs))] for _ in pairs]) for _ in range(b))
-                  if v is not None)
+    vals = sorted(v for v in (stat(rng.choices(pairs, k=len(pairs))) for _ in range(b)) if v is not None)
     return (vals[int(0.025 * len(vals))], vals[min(len(vals) - 1, int(0.975 * len(vals)))]) if vals else None
 
 
-def pi_ci(pairs):
-    """Scott's π with its interval, e.g. 'π 0.62 (95% CI 0.41–0.80)'."""
-    v = scott_pi(pairs)
-    if v is None:
+def pi_with_ci(pairs):
+    return {"pi": scott_pi(pairs), "ci": boot_ci(pairs, scott_pi)}
+
+
+def fmt_pi(m):
+    """Scott's π with its interval, e.g. 'π 0.62 (95% CI 0.41–0.80)', from pi_with_ci."""
+    if m["pi"] is None:
         return "π —"
-    ci = boot_ci(pairs, scott_pi)
-    return f"π {v:.2f}" + (f" (95% CI {ci[0]:.2f}–{ci[1]:.2f})" if ci else "")
+    return f"π {m['pi']:.2f}" + (f" (95% CI {m['ci'][0]:.2f}–{m['ci'][1]:.2f})" if m["ci"] else "")
+
+
+def pi_ci(pairs):
+    return fmt_pi(pi_with_ci(pairs))
+
+
+def fmt_rate(x):
+    return "—" if x is None else f"{100 * x:.0f}%"
 
 
 def wilson(x, n, z=1.96):
@@ -373,7 +379,7 @@ def build(a):
     granularity = (tc.get("data_granularity") or "SPAN").upper()
     eval_column = a.eval_column or f"{GRANULARITY_PREFIX.get(granularity, 'eval')}.{tc.get('name')}"
     test_from = None
-    if getattr(a, "test_from", None):
+    if a.test_from:
         test_from = parse_iso(a.test_from)
         if not test_from or not test_from.tzinfo:
             sys.exit(f"--test-from must be an ISO 8601 time with a zone, e.g. 2026-10-14T00:00:00Z; got {a.test_from!r}")
@@ -381,9 +387,7 @@ def build(a):
     judge = {"evaluator_version": version.get("id"),
              "prompt_sha": hashlib.sha256((tc.get("template") or "").encode()).hexdigest()[:12],
              "model": (tc.get("llm_config") or {}).get("model_name"),
-             "rubric_version": getattr(a, "rubric_version", None),
-             "admission_filter": getattr(a, "admission_filter", None),
-             "test_from": getattr(a, "test_from", None)}
+             "rubric_version": a.rubric_version, "admission_filter": a.admission_filter, "test_from": a.test_from}
 
     configs = [config_of(c) for c in queue.get("annotation_configs", [])]
     if a.config:
@@ -482,7 +486,7 @@ def build(a):
             top = Counter(v for p in pairs for v in p).most_common(1)[0][1] / (2 * len(pairs))
             kappa, ac1 = cohen_kappa(pairs), gwet_ac1(pairs)
             skewed = top >= SKEW_SHARE
-            iaa.append({"a": x, "b": y, "n": len(pairs), "agree": sum(1 for p, q in pairs if p == q),
+            iaa.append({"a": x, "b": y, "n": len(pairs), "agree": n_agree(pairs),
                         "kappa": kappa, "pi": scott_pi(pairs), "ac1": ac1, "pabak": pabak(pairs), "majority_share": top,
                         "skewed": skewed,
                         "ok": kappa >= MIN_KAPPA or (skewed and ac1 is not None and ac1 >= MIN_KAPPA)})
@@ -521,7 +525,8 @@ def build(a):
     app_pairs = [("applicable" if row["bucket"] == "gold" else "not_applicable",
                   "not_applicable" if row["stored"].get("label") in na else "applicable")
                  for row in rows if row["bucket"] in ("gold", "not_applicable") and row["stored"] and not row["stale"]]
-    ceiling_human, ceiling_judge = held_out_ceiling(rows, [c for c in choices if c not in na])
+    decisive = [c for c in choices if c not in na]
+    ceiling_human, ceiling_judge = held_out_ceiling(rows, decisive)
 
     # Held-out split of the gold records, by session and human label, stable across runs.
     splits = assign_splits(gold, test_from)
@@ -529,8 +534,8 @@ def build(a):
         row["split"] = splits.get(row["record_id"])
     split_counts = {s: Counter(row["consensus"] for row in gold if row["split"] == s) for s in ("train", "dev", "test")}
 
-    plan = load(a.plan) if getattr(a, "plan", None) else None
-    weighted = weight_by_plan(plan, rows, gold_scored) if plan else None
+    plan = load(a.plan) if a.plan else None
+    weighted = weight_by_plan(plan, gold_scored) if plan else None
     production = ppi_rates(plan, rows, choices) if plan else None
     na_rows = [row for row in rows if row["bucket"] == "not_applicable" and row["stored"]]
     applicability = Counter(row["stored"].get("label") for row in na_rows)
@@ -558,7 +563,6 @@ def build(a):
     if "{turn_data}" in template:
         fit.append("The evaluator template reads `{turn_data}` (per-turn data from the task's query mappings), not the "
                    "whole session. If humans judged the whole session, the two sides graded different inputs.")
-    decisive = [c for c in choices if c not in na]
     instructions = queue.get("instructions") or ""
     undefined = [c for c in decisive
                  if not re.search(r"(?<![\w-])" + r"[_ ]".join(map(re.escape, re.split(r"[_ ]", c))) + r"(?![\w-])",
@@ -619,7 +623,7 @@ def build(a):
     return {
         "queue": queue, "evaluator": evaluator, "version": version, "tc": tc, "choices": choices,
         "granularity": granularity, "eval_column": eval_column, "config_name": config_name, "rubric": rubric,
-        "assigned": assigned, "completion": completion, "rows": rows, "vote_labels": vote_labels,
+        "assigned": assigned, "completion": completion, "rows": rows,
         "iaa": iaa, "multi": multi, "disputed": disputed, "dup_sessions": dup_sessions,
         "with_stored": with_stored, "older": older, "gold": gold, "gold_scored": gold_scored,
         "confusion": confusion, "per_label": per_label, "agree": agree, "na_rows": na_rows,
@@ -627,13 +631,17 @@ def build(a):
         "gold_classes": gold_classes, "annotators": annotators, "mismatches": mismatches, "stale": stale,
         "turns_fetched": bool(turns), "marker": LAST_TURN_MARKER in template,
         "balanced": balanced, "split_counts": split_counts, "weighted": weighted, "small_classes": small_classes,
-        "judge": judge, "judge_pairs": judge_pairs, "app_pairs": app_pairs,
+        "judge": judge, "judge_pi": pi_with_ci(judge_pairs), "app_pairs": app_pairs,
         "ceiling_human": ceiling_human, "ceiling_judge": ceiling_judge, "production": production,
-        "test_from": test_from,
     }
 
 
-def weight_by_plan(plan, rows, gold_scored):
+def plan_index(plan):
+    """span_id -> planned record; every reader of plan.json goes through this."""
+    return {r.get("span_id"): r for r in plan.get("records") or []}
+
+
+def weight_by_plan(plan, gold_scored):
     """Production-weighted agreement and per-label recall, from the queue builder's strata.
 
     The queue oversamples rare stored labels and provider disagreements, so raw agreement on it is
@@ -642,19 +650,18 @@ def weight_by_plan(plan, rows, gold_scored):
 
     Records from the plan's random stream are a uniform sample, so a queue of only those is already a
     measurement and needs no weights; they are never pooled into the targeted strata."""
-    stream_of = {r.get("span_id"): r.get("stream", "targeted") for r in plan.get("records") or []}
-    streams = Counter(stream_of.get(row["span_id"], "unplanned") for row in gold_scored)
+    planned = plan_index(plan)
+    streams = Counter((planned.get(row["span_id"]) or {}).get("stream", "unplanned") for row in gold_scored)
     if gold_scored and streams["random"] == len(gold_scored):
-        frame = next((s.get("frame") for s in plan.get("strata") or [] if s.get("stream") == "random"), None)
-        return {"random_only": True, "streams": dict(streams), "frame": frame}
-    strata = {s["stratum"]: s for s in plan.get("strata") or []
-              if s.get("population") and s.get("stream", "targeted") != "random"}
+        frames = [s.get("frame") for s in plan.get("strata") or [] if s.get("stream") == "random"]
+        return {"random_only": True, "streams": dict(streams),
+                "frame": sum(frames) if frames and None not in frames else None}
+    strata = {s["stratum"]: s for s in plan.get("strata") or [] if s.get("population") and s.get("stream") == "targeted"}
     if not strata:
         return {"error": "plan.json has no strata with production counts (re-plan with a current plan_queue.py)"}
-    by_span = {r.get("span_id"): r.get("stratum") for r in plan.get("records") or []}
     groups = defaultdict(list)
     for row in gold_scored:
-        h = by_span.get(row["span_id"])
+        h = (planned.get(row["span_id"]) or {}).get("stratum")
         if h in strata:
             groups[h].append(row)
     covered = {h: s["population"] for h, s in strata.items() if groups.get(h)}
@@ -679,28 +686,26 @@ def weight_by_plan(plan, rows, gold_scored):
 def ppi_rates(plan, rows, labels):
     """Production rate of each human label, corrected with PPI++ from the plan's random-stream labels.
 
-    The judge's labels on all production units come from the plan's label strata counts; the human labels
-    come only from random-stream records, because PPI assumes the labeled set is a random sample of that
-    traffic. Each period (the first plan and every intake run) is estimated on its own and combined by
-    its production size. λ is tuned per label and clipped to [0, 1]: 0 is the human-only estimate, 1 is
-    plain PPI. The human-only estimate is reported too; use whichever interval is narrower."""
-    period = lambda name: name.split("@", 1)[1] if "@" in name else ""
-    planned = {r.get("span_id"): r for r in plan.get("records") or []}
-    pops = defaultdict(Counter)
-    for s in plan.get("strata") or []:
-        if s.get("stream", "targeted") == "targeted" and s.get("label") is not None and s.get("population") is not None:
-            pops[period(s["stratum"])][s["label"]] += s["population"]
+    The judge's labels on all production units are the random stratum's label_counts (every scored unit
+    in that period); the human labels come only from random-stream records, because PPI assumes the
+    labeled set is a random sample of that traffic. Each period (the first plan and every intake run) is
+    estimated on its own and combined by its production size. λ is tuned per label and clipped to
+    [0, 1]: 0 is the human-only estimate, 1 is plain PPI. The human-only estimate is reported too; use
+    whichever interval is narrower."""
+    planned = plan_index(plan)
+    pops = {s.get("period", ""): Counter(s.get("label_counts") or {})
+            for s in plan.get("strata") or [] if s.get("stream") == "random"}
     labeled = defaultdict(list)
     for row in rows:
         p = planned.get(row["span_id"])
         if (p and p.get("stream") == "random" and row["bucket"] in ("gold", "not_applicable")
                 and row["stored"] and not row["stale"]):
-            labeled[period(p["stratum"])].append((row["consensus"], row["stored"].get("label")))
+            labeled[p.get("period", "")].append((row["consensus"], row["stored"].get("label")))
     if not labeled:
         return {"error": "no labeled records from the plan's random stream; corrected rates need a random sample"}
-    missing = sorted(p or "first plan" for p in labeled if not sum(pops[p].values()))
+    missing = sorted(p or "first plan" for p in labeled if not sum(pops.get(p, Counter()).values()))
     if missing:
-        return {"error": f"no production label counts for {missing} (re-plan without --skip-population)"}
+        return {"error": f"no production label counts for {missing} (re-plan with a current plan_queue.py)"}
     total = sum(sum(pops[p].values()) for p in labeled)
 
     def wald(est, var):
@@ -866,7 +871,7 @@ def render(r):
         if r["balanced"] is not None:
             w(f"- Balanced accuracy (mean of the above): {100 * r['balanced']:.0f}%")
         w("")
-        w(f"Exact agreement: {pct_ci(r['agree'], len(gs))}; Scott's {pi_ci(r['judge_pairs'])}. "
+        w(f"Exact agreement: {pct_ci(r['agree'], len(gs))}; Scott's {fmt_pi(r['judge_pi'])}. "
           + ("Evidence of alignment on this gold set." if r["verdict"] == "VALIDATED"
              else "Directional only: the interval is too wide to confirm a target." if r["verdict"] == "DIRECTIONAL"
              else "Descriptive only.")
@@ -884,9 +889,8 @@ def render(r):
         w("Percent agreement alone can hide large scoring errors, so quote π and the failing label's recall with it.\n")
     ap = r["app_pairs"]
     if ap:
-        hits = sum(1 for h, j in ap if h == j)
         w("### Applicability and grade\n")
-        w(f"- Applicability (in scope or not, per human vs judge): {pct_ci(hits, len(ap))}; Scott's {pi_ci(ap)}")
+        w(f"- Applicability (in scope or not, per human vs judge): {pct_ci(n_agree(ap), len(ap))}; Scott's {pi_ci(ap)}")
         w(f"- Grade (gold records only): {pct_ci(r['agree'], len(gs))}")
         w("A disagreement about scope needs a scope rule, not a grading rule. Keep the two kinds of rule apart in "
           "the template.\n")
@@ -895,8 +899,8 @@ def render(r):
         w("### Human ceiling (one rater held out)\n")
         w(f"Each rater is held out in turn and scored against the majority of the others; the judge is scored "
           f"against the same reference on the same {len(ch)} comparisons.\n")
-        w(f"- Held-out humans: {pct_ci(sum(1 for x, y in ch if x == y), len(ch))}; Scott's {pi_ci(ch)}")
-        w(f"- Judge: {pct_ci(sum(1 for x, y in cj if x == y), len(cj))}; Scott's {pi_ci(cj)}")
+        w(f"- Held-out humans: {pct_ci(n_agree(ch), len(ch))}; Scott's {pi_ci(ch)}")
+        w(f"- Judge: {pct_ci(n_agree(cj), len(cj))}; Scott's {pi_ci(cj)}")
         w("Don't tune the judge past the human ceiling: past it, gains fit these raters, not the criterion.\n")
     wt = r["weighted"]
     if wt:
@@ -917,7 +921,7 @@ def render(r):
               "assumed random within a stratum.\n")
             w(f"- Agreement: {100 * wt['agreement']:.0f}%")
             for lbl, rec in wt["recall"].items():
-                w(f"- Recall for `{lbl}`: {'—' if rec is None else f'{100 * rec:.0f}%'}")
+                w(f"- Recall for `{lbl}`: {fmt_rate(rec)}")
             w(f"- Strata with gold records cover {100 * (wt['covered_share'] or 0):.0f}% of the planned production "
               "units" + (f"; no gold in: {wt['uncovered']}" if wt["uncovered"] else "")
               + (". Some production counts are lower bounds." if wt["lower_bound"] else "."))
@@ -949,7 +953,7 @@ def render(r):
         w("Gold records are split by session within each human label, stably by hash: **train** may supply "
           "few-shot examples, **dev** is for reading disagreements and iterating, **test** is scored once per "
           "judge version, after the last revision. `--json-out` records each record's split.\n")
-        if r["test_from"]:
+        if r["judge"]["test_from"]:
             w(f"Test is every gold session that started at or after `{r['judge']['test_from']}`: a later batch, "
               "labeled after the prompt was frozen.\n")
         else:
@@ -990,7 +994,7 @@ def cmd_report(a):
                 "gold_classes": dict(r["gold_classes"]), "annotators": r["annotators"],
                 "disagreements": len(r["mismatches"]), "stale": len(r["stale"]),
                 "balanced_accuracy": r["balanced"], "weighted": r["weighted"],
-                "pi": scott_pi(r["judge_pairs"]), "pi_ci": boot_ci(r["judge_pairs"], scott_pi),
+                "pi": r["judge_pi"]["pi"], "pi_ci": r["judge_pi"]["ci"],
                 "applicability_pi": scott_pi(r["app_pairs"]),
                 "ceiling": {"comparisons": len(r["ceiling_human"]), "human_pi": scott_pi(r["ceiling_human"]),
                             "judge_pi": scott_pi(r["ceiling_judge"])},
@@ -1021,7 +1025,7 @@ def stats(recs):
     for lbl in sorted({h for h, _ in pairs}):
         has = [j for h, j in pairs if h == lbl]
         recall[lbl] = sum(1 for j in has if j == lbl) / len(has)
-    return {"n": len(pairs), "agree": sum(1 for h, j in pairs if h == j), "pi": scott_pi(pairs), "pairs": pairs,
+    return {"n": len(pairs), "agree": n_agree(pairs), "pi": scott_pi(pairs), "pairs": pairs,
             "recall": recall}
 
 
@@ -1029,10 +1033,10 @@ def cmd_compare(a):
     """Before/after on the same gold set: agreement and π with intervals, recall per label, flipped records,
     label-mix shift; then the dev-to-test gap, a second judge, the ship gate and the look ledger."""
     before, after = load(a.before), load(a.after)
-    split = getattr(a, "split", None)
+    split = a.split
     b_all, c_all = gold_by_split(before), {x["record_id"]: x for x in after["records"]}
-    split_of = {rid: x.get("split") for rid, x in b_all.items()}
-    b = {rid: x for rid, x in b_all.items() if split is None or split_of[rid] == split}
+    on_split = lambda src, name: stats([src[rid] for rid, x in b_all.items() if x.get("split") == name and rid in src])
+    b = {rid: x for rid, x in b_all.items() if split is None or x.get("split") == split}
     c = {rid: c_all[rid] for rid in b if rid in c_all}
     both = [rid for rid in b if b[rid].get("eval_label") and c.get(rid, {}).get("eval_label")]
     hit = lambda x: x["eval_label"] == x["consensus"]
@@ -1044,8 +1048,7 @@ def cmd_compare(a):
     print(f"- After: {pct_ci(sa['agree'], sa['n'])}; Scott's {pi_ci(sa['pairs'])}")
     for lbl in sorted(set(sb["recall"]) | set(sa["recall"])):
         rb, ra = sb["recall"].get(lbl), sa["recall"].get(lbl)
-        print(f"- Recall for `{lbl}`: " + ("—" if rb is None else f"{100 * rb:.0f}%") + " → "
-              + ("—" if ra is None else f"{100 * ra:.0f}%"))
+        print(f"- Recall for `{lbl}`: {fmt_rate(rb)} → {fmt_rate(ra)}")
     print(f"- Fixed (wrong before, right after): {len(fixed)}" + (f" — {fixed}" if fixed else ""))
     print(f"- Broken (right before, wrong after): {len(broke)}" + (f" — {broke}" if broke else ""))
     mix_b, mix_a = Counter(b[r]["eval_label"] for r in both), Counter(c[r]["eval_label"] for r in both)
@@ -1055,28 +1058,26 @@ def cmd_compare(a):
           "candidate once and compare it with itself to measure that floor.")
 
     # Dev-to-test gap on the AFTER judge: dev was used to choose the revision, test wasn't.
-    after_split = lambda name: stats([c_all[rid] for rid in b_all if split_of[rid] == name and rid in c_all])
-    dev, test = after_split("dev"), after_split("test")
+    dev, test = on_split(c_all, "dev"), on_split(c_all, "test")
     gap = dev["pi"] - test["pi"] if dev["n"] and test["n"] and dev["pi"] is not None and test["pi"] is not None else None
     if gap is not None:
         print(f"\n## Dev → test\n\n- After: dev π {dev['pi']:.2f} on {dev['n']}, test π {test['pi']:.2f} on {test['n']}, "
               f"gap {gap:+.2f}." + (f" **Over {MAX_DEV_TEST_GAP:.2f}: the revision fit dev; don't ship it.**"
                                    if gap > MAX_DEV_TEST_GAP else ""))
 
-    second = load(a.second_judge) if getattr(a, "second_judge", None) else None
+    second = load(a.second_judge) if a.second_judge else None
     s_test = None
     if second:
-        s_all = {x["record_id"]: x for x in second["records"]}
-        s_test = stats([s_all[rid] for rid in b_all if split_of[rid] == "test" and rid in s_all])
+        s_test = on_split({x["record_id"]: x for x in second["records"]}, "test")
         print(f"\n## Second judge model\n\n- {(second.get('judge') or {}).get('model') or 'second judge'} on test: "
               f"{pct_ci(s_test['agree'], s_test['n'])}; Scott's {pi_ci(s_test['pairs'])}")
         if s_test["pi"] is not None and test["pi"] is not None and abs(s_test["pi"] - test["pi"]) > MAX_DEV_TEST_GAP:
             print(f"- The two judges differ by {abs(s_test['pi'] - test['pi']):.2f} π on the same records: part of "
                   "the measured agreement is a property of the judge model, not of the criterion.")
 
-    if getattr(a, "gate", False):
-        bt = stats([b_all[rid] for rid in b_all if split_of[rid] == "test"])
-        fails = getattr(a, "fail_label", None) or sorted(bt["recall"])
+    if a.gate:
+        bt = on_split(b_all, "test")
+        fails = a.fail_label or sorted(bt["recall"])
         checks = [
             ("Test agreement holds (π after ≥ before)",
              bt["pi"] is not None and test["pi"] is not None and test["pi"] >= bt["pi"],
@@ -1087,7 +1088,7 @@ def cmd_compare(a):
         for lbl in fails:
             rb, ra = bt["recall"].get(lbl), test["recall"].get(lbl)
             checks.append((f"Recall for `{lbl}` on test didn't drop", rb is not None and ra is not None and ra >= rb,
-                           f"{'—' if rb is None else f'{100 * rb:.0f}%'} → {'—' if ra is None else f'{100 * ra:.0f}%'}"))
+                           f"{fmt_rate(rb)} → {fmt_rate(ra)}"))
         if second:
             checks.append(("Second judge model scored on test", bool(s_test and s_test["n"]),
                            f"{s_test['n'] if s_test else 0} records"))
@@ -1098,7 +1099,7 @@ def cmd_compare(a):
         if not second:
             print("- Score the frozen candidate with one other judge model (`--second-judge`) before promoting.")
 
-    ledger_path = getattr(a, "ledger", None)
+    ledger_path = a.ledger
     if ledger_path:
         ledger = load(ledger_path) if os.path.exists(ledger_path) else []
         entry = {"at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"), "after": os.path.basename(a.after),

@@ -59,7 +59,8 @@ def build(tmp_path, records, q=None, ev=None, turns=None, **overrides):
         (tmp_path / f"{name}.json").write_text(json.dumps(obj))
     if turns is not None:
         (tmp_path / "turns.json").write_text(json.dumps(turns))
-    args = dict(dir=str(tmp_path), adjudications=None, eval_column=None, config=None,
+    args = dict(dir=str(tmp_path), adjudications=None, eval_column=None, config=None, plan=None, test_from=None,
+                rubric_version=None, admission_filter=None,
                 not_applicable=list(align.DEFAULT_NOT_APPLICABLE), unscorable=list(align.DEFAULT_UNSCORABLE))
     args.update(overrides)
     return align.build(argparse.Namespace(**args))
@@ -300,7 +301,8 @@ def test_report_writes_json_summary(tmp_path, capsys):
     out = tmp_path / "report.json"
     align.cmd_report(argparse.Namespace(dir=str(tmp_path), adjudications=None, eval_column=None, config=None,
                                         not_applicable=["not_applicable"], unscorable=["cannot_judge", "unclear"],
-                                        json_out=str(out)))
+                                        json_out=str(out), plan=None, test_from=None, rubric_version=None,
+                                        admission_filter=None))
     assert "**Verdict: DIRECTIONAL.**" in capsys.readouterr().out
     slim = json.loads(out.read_text())
     assert slim["summary"]["gold"] == 12 and slim["summary"]["disagreements"] == 2
@@ -412,7 +414,8 @@ def test_weighted_estimates_undo_oversampling(tmp_path):
         recs.append(record(f"b{i}", {A: "good" if i < 4 else "bad"}, stored="bad"))
         plan_records.append({"span_id": f"sp-b{i}", "stratum": "bad"})
     plan = tmp_path / "plan.json"
-    plan.write_text(json.dumps({"strata": [{"stratum": "good", "population": 90}, {"stratum": "bad", "population": 10}],
+    plan.write_text(json.dumps({"strata": [{"stratum": "good", "stream": "targeted", "population": 90},
+                                           {"stratum": "bad", "stream": "targeted", "population": 10}],
                                 "records": plan_records}))
     r = build(tmp_path, recs, plan=str(plan))
     wt = r["weighted"]
@@ -465,7 +468,7 @@ def test_compare_reports_flips_and_label_mix(tmp_path, capsys):
     after = tmp_path / "a.json"
     before.write_text(json.dumps({"records": [rec("1", "good", "bad"), rec("2", "good", "good"), rec("3", "bad", "bad")]}))
     after.write_text(json.dumps({"records": [rec("1", "good", "good"), rec("2", "good", "bad"), rec("3", "bad", "bad")]}))
-    align.cmd_compare(argparse.Namespace(before=str(before), after=str(after), split="test"))
+    align.cmd_compare(compare_args(str(before), str(after), split="test"))
     out = capsys.readouterr().out
     assert "Fixed (wrong before, right after): 1 — ['1']" in out
     assert "Broken (right before, wrong after): 1 — ['2']" in out
@@ -496,7 +499,7 @@ def test_bootstrap_interval_is_seeded_and_brackets_the_estimate():
 
 def test_judge_vs_human_pi_is_reported_next_to_agreement(tmp_path):
     r = build(tmp_path, usable_records())
-    assert align.scott_pi(r["judge_pairs"]) == pytest.approx(2 / 3)
+    assert r["judge_pi"]["pi"] == pytest.approx(2 / 3)
     assert "Exact agreement: 10/12 (83%, 95% CI 55–95%); Scott's π 0.67" in align.render(r)
 
 
@@ -575,11 +578,13 @@ def test_judge_version_tuple_is_reported(tmp_path):
 
 
 def ppi_plan(tmp_path, recs, pops, random_ids):
+    """A plan in the queue builder's shape: the random stratum carries the judge's label counts."""
     plan = tmp_path / "plan.json"
     plan.write_text(json.dumps({
-        "strata": [{"stratum": "random", "stream": "random", "population": sum(pops.values()), "frame": 100}]
-        + [{"stratum": k, "stream": "targeted", "label": k, "population": v} for k, v in pops.items()],
-        "records": [{"span_id": f"sp-{rid}", "stratum": "random", "stream": "random"} for rid in random_ids]}))
+        "strata": [{"stratum": "random", "stream": "random", "period": "", "population": sum(pops.values()),
+                    "frame": 100, "label_counts": pops}],
+        "records": [{"span_id": f"sp-{rid}", "stratum": "random", "stream": "random", "period": ""}
+                    for rid in random_ids]}))
     return str(plan)
 
 
@@ -690,3 +695,24 @@ def test_lint_flags_case_specific_rules(tmp_path, capsys):
     assert "3 added line(s), 2 flagged" in out
     assert "names a record, session or trace ID" in out and "repeats 8+ words" in out
     assert "retried" not in out.split("flagged")[1].split("Rewrite")[0]
+
+
+def test_ppi_and_frames_combine_intake_periods(tmp_path):
+    """Two periods: the first plan (judge good on 900/1,000) and an intake run (good on 50/100).
+    The judge is right on every random record, so each period's rate is its judge rate."""
+    recs = [record(f"a{i}", {A: "good" if i < 9 else "bad"}, stored="good" if i < 9 else "bad") for i in range(10)]
+    recs += [record(f"b{i}", {A: "good" if i < 5 else "bad"}, stored="good" if i < 5 else "bad") for i in range(10)]
+    plan = tmp_path / "plan.json"
+    plan.write_text(json.dumps({
+        "strata": [{"stratum": "random", "stream": "random", "period": "", "frame": 1000,
+                    "label_counts": {"good": 900, "bad": 100}},
+                   {"stratum": "random@intake-1", "stream": "random", "period": "intake-1", "frame": 100,
+                    "label_counts": {"good": 50, "bad": 50}}],
+        "records": [{"span_id": f"sp-a{i}", "stratum": "random", "stream": "random", "period": ""} for i in range(10)]
+        + [{"span_id": f"sp-b{i}", "stratum": "random@intake-1", "stream": "random", "period": "intake-1"}
+           for i in range(10)]}))
+    r = build(tmp_path, recs, plan=str(plan))
+    pr = r["production"]
+    assert pr["periods"] == 2 and pr["units"] == 1100
+    assert pr["rates"]["good"]["ppi"] == pytest.approx((900 + 50) / 1100)
+    assert r["weighted"] == {"random_only": True, "streams": {"random": 20}, "frame": 1100}
