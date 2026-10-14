@@ -143,7 +143,7 @@ Service keys can only write traces to their scoped space — they cannot access 
 
 | Error | Cause | Fix |
 |---|---|---|
-| `403 Forbidden` | Profile lacks admin privileges | Authenticate with an admin API key (`ax profiles update --api-key $ARIZE_API_KEY`) |
+| `403 Forbidden` | Profile lacks admin privileges | Ask the user to create a profile with an admin API key by running `ax profiles create admin` in their own terminal (see [ax-profiles.md](ax-profiles.md)) |
 | `401 Unauthorized` | Missing or invalid API key | See [ax-profiles.md](ax-profiles.md) |
 | Role binding already exists | Idempotent — not an error | Safe to ignore; the existing binding is unchanged |
 | User not found in space add-user | User not yet an org member | Run `ax organizations add-user` first, then `ax spaces add-user` |

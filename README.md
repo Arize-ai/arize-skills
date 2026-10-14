@@ -93,19 +93,15 @@ pip install arize-ax-cli
 
 ### Authentication
 
-**Option A — `ax` CLI profile** (recommended):
+**`ax` CLI profile**:
 
-Set up your API key once and it persists across all sessions and projects:
+Set up your API key once with the interactive wizard and it persists across all sessions and projects. Run it in your own terminal, not through your coding agent: the wizard prompts for the key, so it never appears in a command, your shell history, or the agent's context. If `ARIZE_API_KEY` is set, the wizard offers to create the profile from it (default yes); answer **No**, or `unset ARIZE_API_KEY` first. Otherwise the profile reads the key from your environment on every run.
 ```bash
-# Interactive wizard (creates 'default' profile if no profiles exist)
-ax profiles create
+# Interactive wizard (also asks for the region)
+ax profiles create            # creates 'default' when no profiles exist
+ax profiles create staging    # a named profile
 
-# Or pass the key directly (optional profile name as positional arg)
-ax profiles create --api-key YOUR_API_KEY
-ax profiles create staging --api-key YOUR_STAGING_KEY
-
-# Update an existing profile (patches only what you specify)
-ax profiles update --api-key NEW_API_KEY
+# Update settings that aren't secret (patches only what you specify)
 ax profiles update --region us-east-1b
 
 # Other profile management
@@ -115,20 +111,9 @@ ax profiles use staging
 ax profiles delete staging
 ```
 
-You'll also need a space name or ID. Find yours by running `ax spaces list -o json` (use the `name` or base64 `id`), then persist it:
-```bash
-# macOS/Linux — add to ~/.zshrc or ~/.bashrc
-export ARIZE_SPACE="my-workspace"        # name, or base64 ID like U3BhY2U6...
-```
+To replace a key, create a new profile with the wizard; it becomes the active one.
 
-**Option B — Environment variables**:
-```bash
-export ARIZE_API_KEY="your-api-key"       # from https://app.arize.com/admin > API Keys
-export ARIZE_SPACE="my-workspace"         # space name or base64 ID from ax spaces list
-# export ARIZE_DEFAULT_PROJECT=my-project # optional default project
-# export OPENAI_API_KEY="sk-..."          # for AI integrations and evaluators
-# export ANTHROPIC_API_KEY="sk-ant-..."   # for AI integrations and evaluators
-```
+Most commands also need a space. Name your space and project in your prompts. If you don't name a space, the skills check `ax spaces list` and ask you to pick one when there are several. `ax` itself doesn't read `ARIZE_SPACE` or `ARIZE_DEFAULT_PROJECT`; some skills check them as defaults and pass the value to `ax` as a flag.
 
 ### Verify
 
@@ -138,15 +123,14 @@ ax --version && ax profiles show 2>&1
 
 ### On-prem / self-hosted Arize
 
-Point the CLI at your deployment with a **single-endpoint** profile (hostname and HTTPS port, usually `443`). Replace the host with the value your operations team provides:
+Point the CLI at your deployment with a **single-endpoint** profile (hostname and HTTPS port, usually `443`). Run the wizard, choose **Advanced → Single endpoint**, and enter the host your operations team provides (for example `arize.yourcompany.com`) and port `443`:
 
 ```bash
-ax profiles create my-onprem --api-key <key> --single-host arize.yourcompany.com --single-port 443
-ax profiles use my-onprem
+ax profiles create my-onprem
 ax profiles validate
 ```
 
-For interactive setup, `ax profiles create` also offers **Advanced → Single endpoint**. More options (TOML, Flight/OTLP splits) are documented in the [arize-ax-cli README](https://github.com/Arize-ai/arize-ax-cli/blob/main/README.md#on-premise-deployments).
+More options (TOML, Flight/OTLP splits) are documented in the [arize-ax-cli README](https://github.com/Arize-ai/arize-ax-cli/blob/main/README.md#on-premise-deployments).
 
 ## Available Skills
 

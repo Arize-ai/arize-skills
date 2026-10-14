@@ -20,17 +20,11 @@ Look at the output to understand what's configured:
 
 If a profile exists but one or more settings are wrong, patch only what's broken.
 
-**Never pass a raw API key value as a flag.** Always reference it via the `ARIZE_API_KEY` environment variable. If the variable is not already set in the shell, instruct the user to set it first, then run the command:
+**Never handle the API key yourself.** A wrong or expired key is fixed by the user in their own terminal (see section 4). Settings with no secret in them are safe to fix directly:
 
 ```bash
-# If ARIZE_API_KEY is already exported in the shell:
-ax profiles update --api-key $ARIZE_API_KEY
-
 # Fix the region (no secret involved — safe to run directly)
 ax profiles update --region us-east-1b
-
-# Fix both at once
-ax profiles update --api-key $ARIZE_API_KEY --region us-east-1b
 ```
 
 `update` only changes the fields you specify — all other settings are preserved. If no profile name is given, the active profile is updated.
@@ -39,18 +33,14 @@ ax profiles update --api-key $ARIZE_API_KEY --region us-east-1b
 
 If no profile exists, or if the existing profile needs to point to a completely different setup (different org, different region):
 
-**Always reference the key via `$ARIZE_API_KEY`, never inline a raw value.**
+Ask the user to run the interactive wizard in their own terminal (see section 4). Don't run it yourself: it prompts for the API key.
 
 ```bash
-# Requires ARIZE_API_KEY to be exported in the shell first
-ax profiles create --api-key $ARIZE_API_KEY
-
-# Create with a region
-ax profiles create --api-key $ARIZE_API_KEY --region us-east-1b
-
-# Create a named profile
-ax profiles create work --api-key $ARIZE_API_KEY --region us-east-1b
+ax profiles create        # creates 'default' when no profiles exist
+ax profiles create work   # a named profile
 ```
+
+The wizard also asks for the region, and its **Advanced → Single endpoint** option covers on-prem deployments. Creating a profile makes it the active one.
 
 To use a named profile with any `ax` command, add `-p NAME`:
 ```bash
@@ -59,17 +49,15 @@ ax spans export PROJECT -p work
 
 ## 4. Getting the API key
 
-**Never ask the user to paste their API key into the chat. Never log, echo, or display an API key value.**
+**Never ask the user to paste their API key into the chat, and never read, log, echo, or pass an API key value.** Don't inspect `ARIZE_API_KEY` or other key variables (no `echo`, `env`, or reading `.env` files), don't ask the user to export one for `ax`, and don't run any command that takes `--api-key`. Never suggest a profile that references an environment variable (`${ARIZE_API_KEY}` in the profile or a `--from-file` TOML): `ax` resolves it on every run, which keeps the key in the environment.
 
-If `ARIZE_API_KEY` is not already set, instruct the user to export it in their shell:
-
-```bash
-export ARIZE_API_KEY="..."   # user pastes their key here in their own terminal
-```
+Instead, ask the user to run `ax profiles create` in **their own terminal**, not through your shell tool or a `!` command (both put the output in your context). The wizard prompts for the key, so it never appears in a command or in this conversation. If `ARIZE_API_KEY` is set in their shell, the wizard offers to create the profile from it (default yes); tell them to answer **No**, or `unset ARIZE_API_KEY` first, so the key is stored in the profile.
 
 They can find their key at https://app.arize.com/admin > API Keys. Recommend they create a **scoped service key** (not a personal user key) — service keys are not tied to an individual account and are safer for programmatic use. Keys are space-scoped — make sure they copy the key for the correct space.
 
-Once the user confirms the variable is set, proceed with `ax profiles create --api-key $ARIZE_API_KEY` or `ax profiles update --api-key $ARIZE_API_KEY` as described above.
+To replace a wrong or expired key, have them create a new profile the same way (for example `ax profiles create work`); it becomes the active one.
+
+Once the user confirms the wizard finished, verify as in section 5.
 
 ## 5. Verify
 
@@ -102,7 +90,7 @@ Restart terminal for it to take effect.
 At the **end of the session**, if the user manually provided any credentials during this conversation **and** those values were NOT already loaded from a saved profile or environment variable, offer to save them.
 
 **Skip this entirely if:**
-- The API key was already loaded from an existing profile or `ARIZE_API_KEY` env var
+- The API key was already loaded from an existing profile
 - The space was already set via `ARIZE_SPACE` env var
 - The user only used base64 project IDs (no space was needed)
 
@@ -110,6 +98,6 @@ At the **end of the session**, if the user manually provided any credentials dur
 
 **If the user says yes:**
 
-1. **API key** — Run `ax profiles show` to check the current state. Then run `ax profiles create --api-key $ARIZE_API_KEY` or `ax profiles update --api-key $ARIZE_API_KEY` (the key must already be exported as an env var — never pass a raw key value).
+1. **API key** — Run `ax profiles show` to check the current state. If no profile holds the key, ask the user to run `ax profiles create` in their own terminal (see section 4). Never pass a key value yourself.
 
 2. **Space** — See the Space section above to persist it as an environment variable.
