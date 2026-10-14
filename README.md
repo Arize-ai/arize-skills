@@ -102,7 +102,7 @@ pip install arize-ax-cli
 
 ### Authentication
 
-**Option A — `ax` CLI profile** (recommended):
+**`ax` CLI profile**:
 
 Set up your API key once and it persists across all sessions and projects:
 ```bash
@@ -124,21 +124,9 @@ ax profiles use staging
 ax profiles delete staging
 ```
 
-You'll also need a space name or ID. Find yours by running `ax spaces list -o json` (use the `name` or base64 `id`), then persist it:
-```bash
-# macOS/Linux — add to ~/.zshrc or ~/.bashrc
-export ARIZE_SPACE="my-workspace"        # name, or base64 ID like U3BhY2U6...
-```
+`ax` authenticates only through a profile; it doesn't read API keys from environment variables. Don't export `ARIZE_API_KEY` for it: that doesn't log you in, and a key in the environment is easy for an agent to read.
 
-**Skill defaults (environment variables)**:
-
-`ax` authenticates only through a profile (Option A). It does not read these variables; the skills do, and pass the values to `ax` as flags. Don't export `ARIZE_API_KEY` for `ax`: it doesn't log you in, and a key in the environment is easy for an agent to read.
-```bash
-export ARIZE_SPACE="my-workspace"         # space name or base64 ID from ax spaces list; passed as --space
-# export ARIZE_DEFAULT_PROJECT=my-project # optional default project when a prompt doesn't name one
-# export OPENAI_API_KEY="sk-..."          # for AI integrations and evaluators
-# export ANTHROPIC_API_KEY="sk-ant-..."   # for AI integrations and evaluators
-```
+Most commands also need a space. Name your space and project in your prompts. If you don't name a space, the skills check `ax spaces list` and ask you to pick one when there are several.
 
 ### Verify
 

@@ -94,11 +94,7 @@ Create an `ax` profile once with the interactive wizard. Run it in your own term
 ax profiles create
 ```
 
-Then set your space. `ax` doesn't read this variable; the skills do, and pass it to `ax` as `--space`:
-
-```bash
-export ARIZE_SPACE="my-workspace"   # add to ~/.zshrc or ~/.bashrc; find it with: ax spaces list -o json
-```
+Name your Arize space and project in your prompts. If you don't name a space, the skills check `ax spaces list` and ask you to pick one when there are several.
 
 See [Authentication](../README.md#authentication) in the README for more profile options, including on-prem deployments.
 
@@ -106,7 +102,7 @@ See [Authentication](../README.md#authentication) in the README for more profile
 
 Run `ax --version && ax profiles show` in your terminal, then start `devin` in your project and ask:
 
-> Use the arize-trace skill to export and summarize the most recent traces from my project.
+> Use the arize-trace skill to export and summarize the most recent traces from project `my-project` in space `my-workspace`.
 
 ## Troubleshooting
 
