@@ -148,6 +148,15 @@ def export_all(a, filt, start, end, min_span=timedelta(minutes=30), require=True
     return spans, trunc
 
 
+def id_attr(gran):
+    """The span attribute that identifies a unit, e.g. attributes.session.id."""
+    return ".".join(UNIT_FIELD.get(gran, UNIT_FIELD["SPAN"]))
+
+
+def ids_filter(base, gran, ids):
+    return f"({base}) AND {id_attr(gran)} IN ({', '.join(quote(x) for x in ids)})"
+
+
 def unit_of(span, gran):
     group, key = UNIT_FIELD.get(gran, UNIT_FIELD["SPAN"])
     return (span.get(group) or {}).get(key)
@@ -250,7 +259,6 @@ def admitted_units(a, clauses, expr, gran, quiet=False):
         say(f"- Clause {cid} `{filt}`: {len(sets[cid])} {gran.lower()}(s){' (truncated: at least)' if t else ''}")
     # Re-check each truncated (sampled) clause only for units the complete clauses found but the sample missed.
     complete = set().union(*(sets[c] for c in clauses if c not in truncated))
-    id_attr = ".".join(UNIT_FIELD.get(gran, UNIT_FIELD["SPAN"]))
     recheck = bool(truncated and complete)
     if complete:
         t0, t1 = parse_time(a.start_time), parse_time(a.end_time)
@@ -259,8 +267,7 @@ def admitted_units(a, clauses, expr, gran, quiet=False):
 
             def check(batch):
                 nonlocal found, capped
-                page, _ = export_page(a, f"({clauses[cid]}) AND {id_attr} IN ({', '.join(quote(x) for x in batch)})",
-                                      t0, t1, PAGE)
+                page, _ = export_page(a, ids_filter(clauses[cid], gran, batch), t0, t1, PAGE)
                 if len(page) >= PAGE and len(batch) > 1:
                     # Page cap hit; split so no unit is missed.
                     check(batch[:len(batch) // 2])
@@ -345,12 +352,28 @@ def granularity(tc):
     return (tc.get("data_granularity") or "SPAN").upper()
 
 
+def choices(tc):
+    return list(tc.get("classification_choices") or {})
+
+
+def fmt_agreement(x):
+    """'agree/n, κ = 0.82' from agreement()."""
+    return f"{x['agree']}/{x['n']}" + (f", κ = {x['kappa']:.2f}" if x["kappa"] is not None else "")
+
+
+def admission_verdict(off_a, off_b, union, tolerance, what=""):
+    """Print the admission verdict; each side's share of unmatched units must be within tolerance."""
+    ok = bool(union) and off_a / len(union) <= tolerance and off_b / len(union) <= tolerance
+    print(f"\n**Admission {'MATCHES' if ok else 'DOES NOT MATCH'}{what}** (tolerance {tolerance:.0%} each way).")
+    if not ok:
+        print("Do not run the historical window. See the skill's 'If the admission check fails' section.")
+    return ok
+
+
 def write_units(path, admitted, gran, root_filter):
     """Write the admitted unit IDs, plus ready-to-use task filters in batches of ID_BATCH."""
     ids = sorted(map(str, admitted))
-    id_attr = ".".join(UNIT_FIELD.get(gran, UNIT_FIELD["SPAN"]))
-    filters = [f"({root_filter}) AND {id_attr} IN ({', '.join(quote(x) for x in ids[i:i + ID_BATCH])})"
-               for i in range(0, len(ids), ID_BATCH)]
+    filters = [ids_filter(root_filter, gran, ids[i:i + ID_BATCH]) for i in range(0, len(ids), ID_BATCH)]
     with open(path, "w") as f:
         json.dump({"units": ids, "query_filters": filters}, f, indent=1)
     print(f"\nWrote the {len(ids)} admitted units to {path}, with {len(filters)} `--query-filter` string(s) that "
@@ -375,7 +398,7 @@ def cmd_estimate(a):
     admitted, trunc = admitted_units(a, clauses, expr, gran)
     print(f"\nExpression `{expr}` evaluated per {gran.lower()}: **{len(admitted)}{'+' if trunc else ''} admitted**.")
     if a.root_filter:
-        scored, _ = labels_by_unit(a, tc.get("name"), list(tc.get("classification_choices") or {}), gran, require=False)
+        scored, _ = labels_by_unit(a, tc.get("name"), choices(tc), gran, require=False)
         print(f"Already scored by `{tc.get('name')}` in this window: {len(set(scored) & admitted)} of the admitted.")
     check = "calibrate" if task else "check-admission"
     print(f"\nSingle-string filter for the candidate task (verify with `{check}`):\n\n    {single_string(clauses, expr)}\n")
@@ -479,23 +502,23 @@ def cmd_calibrate(a):
     rep_tc = None
     if a.repeat_evaluator:
         rep_ev, rep_tc = evaluator_config(a, a.repeat_evaluator)
-        if copy_diffs(cand_tc, rep_tc):
+        rep_diffs = copy_diffs(cand_tc, rep_tc)
+        if rep_diffs:
             sys.exit(f"`{rep_ev.get('name')}` is not a copy of `{cand_ev.get('name')}`: they differ in "
-                     f"{copy_diffs(cand_tc, rep_tc)}. The noise floor needs two identical copies.")
-    gran, labels = granularity(cand_tc), list(cand_tc.get("classification_choices") or {})
+                     f"{rep_diffs}. The noise floor needs two identical copies.")
+    gran, labels = granularity(cand_tc), choices(cand_tc)
     prod_name, cand_name = prod_tc.get("name"), cand_tc.get("name")
     prod_expl, cand_expl = {}, {}
     prod, t1 = labels_by_unit(a, prod_name, labels, gran, explanations=prod_expl)
     cand, t2 = labels_by_unit(a, cand_name, labels, gran, explanations=cand_expl)
     both, union = set(prod) & set(cand), set(prod) | set(cand)
     p_only, c_only = len(set(prod) - set(cand)), len(set(cand) - set(prod))
-    ok = union and p_only / len(union) <= a.tolerance and c_only / len(union) <= a.tolerance
 
     # Disagreements where the two runs saw different turn counts are not label noise: production scored
     # the session before it ended (or the backfill did). Set them aside before comparing with the noise floor.
-    turns_differ = {u for u in both if prod[u] != cand[u]
-                    and None not in (last_turn_seen(prod_expl.get(u)), last_turn_seen(cand_expl.get(u)))
-                    and last_turn_seen(prod_expl.get(u)) != last_turn_seen(cand_expl.get(u))}
+    seen = {u: (last_turn_seen(prod_expl.get(u)), last_turn_seen(cand_expl.get(u)))
+            for u in both if prod[u] != cand[u]}
+    turns_differ = {u for u, (sp, sc) in seen.items() if None not in (sp, sc) and sp != sc}
     raw = agreement(prod, cand)
     same_input = agreement({u: prod[u] for u in both - turns_differ}, cand)
 
@@ -504,20 +527,19 @@ def cmd_calibrate(a):
     models = {model_of(prod_tc), model_of(cand_tc)}
     print(f"- Model: `{model_of(cand_tc)}`" + (" (looks like an alias, not a pinned snapshot: history and this run may "
                                                 "come from different model versions)" if any(map(looks_like_alias, models)) else ""))
-    if param_note(prod_tc, cand_tc):
-        print(f"- {param_note(prod_tc, cand_tc)} Label disagreements may partly reflect that.")
+    note = param_note(prod_tc, cand_tc)
+    if note:
+        print(f"- {note} Label disagreements may partly reflect that.")
     if prod_tc.get("use_structured_output") != cand_tc.get("use_structured_output"):
         print("- Structured output differs (the CLI cannot set it). Output mode can shift the label distribution, "
               "not just add noise; compare the label mix below.")
     print(f"- Scored by production `{prod_name}`: {len(prod)}; by candidate `{cand_name}`: {len(cand)}"
           + (" (export truncated; raise --slices)" if t1 or t2 else ""))
     print(f"- Both: {len(both)}; production only: {p_only}; candidate only: {c_only}")
-    print(f"- Label agreement where both scored: {raw['agree']}/{raw['n']}"
-          + (f", κ = {raw['kappa']:.2f}" if raw["kappa"] is not None else ""))
+    print(f"- Label agreement where both scored: {fmt_agreement(raw)}")
     if turns_differ:
         print(f"- {len(turns_differ)} disagreement(s) saw different turn counts ({LAST_TURN_MARKER}); one side scored "
-              f"the session before it ended. Excluding them: {same_input['agree']}/{same_input['n']}"
-              + (f", κ = {same_input['kappa']:.2f}" if same_input["kappa"] is not None else ""))
+              f"the session before it ended. Excluding them: {fmt_agreement(same_input)}")
     if both:
         print("- Confusion (production → candidate): " + ", ".join(
             f"{p}→{c}: {n}" for (p, c), n in raw["confusion"].most_common()))
@@ -527,8 +549,7 @@ def cmd_calibrate(a):
     if rep_tc is not None:
         rep, _ = labels_by_unit(a, rep_tc.get("name"), labels, gran)
         floor = agreement(cand, rep)
-        print(f"- Noise floor (candidate vs repeat copy `{rep_tc.get('name')}`): {floor['agree']}/{floor['n']}"
-              + (f", κ = {floor['kappa']:.2f}" if floor["kappa"] is not None else ""))
+        print(f"- Noise floor (candidate vs repeat copy `{rep_tc.get('name')}`): {fmt_agreement(floor)}")
         if floor["n"] and same_input["n"]:
             gap = floor["agree"] / floor["n"] - same_input["agree"] / same_input["n"]
             if gap > a.noise_margin:
@@ -540,9 +561,7 @@ def cmd_calibrate(a):
     else:
         print("- Noise floor not measured. Without `--repeat-evaluator`, the label gap can't be attributed to "
               "run-to-run noise; it may come from settings that didn't copy or a model change.")
-    print(f"\n**Admission {'MATCHES' if ok else 'DOES NOT MATCH'}** (tolerance {a.tolerance:.0%} each way).")
-    if not ok:
-        print("Do not run the historical window. See the skill's 'If the admission check fails' section.")
+    admission_verdict(p_only, c_only, union, a.tolerance)
 
 
 def cmd_check_admission(a):
@@ -552,27 +571,24 @@ def cmd_check_admission(a):
     print(f"# Admission check on {a.start_time} → {a.end_time}\n")
     print(f"- Candidate `{cand_ev.get('name')}` (`{cand_tc.get('name')}`) against the rule in {source}: `{expr}`")
     intended, trunc = admitted_units(a, clauses, expr, gran, quiet=True)
-    scored, t2 = labels_by_unit(a, cand_tc.get("name"), list(cand_tc.get("classification_choices") or {}), gran)
+    scored, t2 = labels_by_unit(a, cand_tc.get("name"), choices(cand_tc), gran)
     scored = set(scored)
     missed, extra = intended - scored, scored - intended
     union = intended | scored
-    ok = union and len(missed) / len(union) <= a.tolerance and len(extra) / len(union) <= a.tolerance
     print(f"- The rule admits {len(intended)}{'+' if trunc else ''} {gran.lower()}(s), reading each clause across the "
           f"unit's spans; the candidate scored {len(scored)}{'+' if t2 else ''}")
     print(f"- Both: {len(intended & scored)}; rule only (missed): {len(missed)}; candidate only (extra): {len(extra)}")
     for title, us in (("Missed", missed), ("Extra", extra)):
         if us:
             print(f"  - {title}, first 5: " + ", ".join(sorted(map(str, us))[:5]))
-    print(f"\n**Admission {'MATCHES' if ok else 'DOES NOT MATCH'} the rule** (tolerance {a.tolerance:.0%} each way).")
-    if not ok:
-        print("Do not run the historical window. See the skill's 'If the admission check fails' section.")
+    admission_verdict(len(missed), len(extra), union, a.tolerance, " the rule")
     if a.write_units:
         write_units(a.write_units, intended, gran, a.root_filter)
 
 
 def cmd_verify(a):
     ev, tc = evaluator_config(a, a.cand_evaluator)
-    cand, trunc = labels_by_unit(a, tc.get("name"), list(tc.get("classification_choices") or {}), granularity(tc))
+    cand, trunc = labels_by_unit(a, tc.get("name"), choices(tc), granularity(tc))
     print(f"# Backfill results for `{tc.get('name')}`, {a.start_time} → {a.end_time}\n")
     print(f"- Units scored: {len(cand)}{'+' if trunc else ''}")
     for lbl, n in Counter(cand.values()).most_common():
