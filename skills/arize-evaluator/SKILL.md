@@ -51,7 +51,7 @@ Evaluators are **versioned** — every prompt or model change creates a new immu
 
 ### What is a Task?
 
-A **task** is how you run one or more evaluators against real data. Tasks are attached to a **project** (live traces/spans) or a **dataset** (experiment runs). A task contains:
+A **task** is how you run one or more evaluators against real data. Tasks are attached to a **project** (live traces/spans) or a **dataset** (the dataset's own rows, or experiment runs on that dataset). A task contains:
 
 | Field | Description |
 |-------|-------------|
@@ -65,7 +65,7 @@ A **task** is how you run one or more evaluators against real data. Tasks are at
 
 ## Data Granularity
 
-Set `--data-granularity` when creating the evaluator (`ax evaluators create-template-evaluator` / `create-code-evaluator`), not on the task — it controls what unit of data that evaluator scores whenever it runs against a **project task** (not dataset/experiment tasks — those evaluate experiment runs directly). It defaults to `span`.
+Set `--data-granularity` when creating the evaluator (`ax evaluators create-template-evaluator` / `create-code-evaluator`), not on the task — it controls what unit of data that evaluator scores whenever it runs against a **project task** (not dataset tasks — those score the dataset rows or experiment runs). It defaults to `span`.
 
 | Level | What it evaluates | Use for | Result column prefix |
 |-------|-------------------|---------|---------------------|
@@ -269,10 +269,9 @@ Review scores and explanations before widening to the full backfill or enabling 
 
 Use this when the user says something like *"create an evaluator for my experiment"* or *"evaluate my dataset runs"*.
 
-**If the user says "dataset" but doesn't have an experiment:** A task must target an experiment (not a bare dataset). Ask:
-> "Evaluation tasks run against experiment runs, not datasets directly. Would you like help creating an experiment on that dataset first?"
+**If the user says "dataset" but doesn't have an experiment:** You can evaluate the dataset directly. The task resolves the latest dataset version and writes eval columns back onto the dataset rows. No experiment is required. Create an experiment instead when the user wants to compare versions of their system against the same rows — use the **arize-experiment** skill, then return here.
 
-If yes, use the **arize-experiment** skill to create one, then return here.
+Dataset-only eval tasks cannot currently be created through the v2 REST API or `ax` (both require `experiment_ids` when a dataset is set). Use the GraphQL `createEvalTask` mutation and omit `experiments`. That schema requires `samplingRate` and `runContinuously`; pass `runContinuously: false`. Code evaluators on a dataset need no LLM config. The `ax` steps below score experiment runs — do not follow them for a dataset-only task.
 
 ### Step 1: Find the dataset and experiment names
 
@@ -412,7 +411,7 @@ The labels in `--classification-choices` must exactly match the labels reference
 | `Integration not found` | `ax ai-integrations list --space SPACE` |
 | `Task not found` | `ax tasks list --space SPACE` |
 | `project and dataset-id are mutually exclusive` | Use only one when creating a task |
-| `experiment-ids required for dataset tasks` | Add `--experiment-ids` to `create` and `trigger-run` |
+| `experiment-ids required for dataset tasks` | v2 REST and `ax` only. A dataset-only task is valid via GraphQL `createEvalTask` with `experiments` omitted and `runContinuously: false`. Add `--experiment-ids` only when scoring experiment runs. |
 | `sampling-rate only valid for project tasks` | Remove `--sampling-rate` from dataset tasks |
 | `project '...' not found` or validation error on `ax spans export` | Add `--space SPACE`; if it persists, look up the base64 project ID via `ax projects list --space SPACE -o json` and use the `id` field instead |
 | Template validation errors | Use single-quoted `--template '...'` in bash; single braces `{var}`, not `{{var}}` (the CLI's `--help` wrongly says `{{variable}}`) |
