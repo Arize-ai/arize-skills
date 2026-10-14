@@ -26,6 +26,14 @@ An evaluator that reads `{turn_data}` gets per-turn data from its task's `query_
 
 This changes what the evaluator sees, so it needs its own approval, separate from any rubric change.
 
+## Changelog
+
+Keep a changelog per evaluator, one line per promoted version, with the judge version the report prints (rubric version, prompt hash, model, admission filter). Mark each entry as one of two kinds:
+- **Criterion change:** what "pass" means changed. Bump the rubric version, and flag older gold labels on that criterion for re-review. Scores before and after aren't comparable.
+- **Judge change:** the prompt, model or filter changed, but the criterion didn't. This is tuning, and the held-out and ship-gate rules apply.
+
+Either kind changes the judge, so re-measure, and re-collect random-stream labels before reporting corrected production rates.
+
 ## Provider copies
 
 Projects often run a second copy of an evaluator on another model provider (for example `*_anthropic`), with the same template, to compare providers. Search for copies with `ax evaluators list --name KEYWORD` and compare templates. If the copies share a template, change them together. Otherwise the comparison measures the wording difference, not the provider.

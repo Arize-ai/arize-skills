@@ -56,7 +56,11 @@ OUTPUT
 ## Using it
 
 1. Fill the placeholders from `ax evaluators get` (template and choices), the queue (rubric and instructions), and the Phase 6 report (baseline and disagreements). For each disagreement, include the session excerpt that decides it, not the whole transcript.
-2. Review the output. Every placeholder and label must be preserved, and no record may be named.
-3. Show the user the diff. Apply it as a new version of the candidate evaluator only, re-run on the gold set, and compare with `align_report.py compare BEFORE.json AFTER.json --split dev`. It prints both rates with intervals, the records that flipped each way, and the shift in the label mix.
-4. Treat a gain smaller than run-to-run noise as no gain: re-run the unchanged candidate once and compare it with itself to see the noise floor.
-5. After the last revision, score the test split once (`--split test`) and report it separately.
+2. Review the output. Every placeholder and label must be preserved, and no record may be named. Run `align_report.py lint OLD.txt NEW.txt --records BEFORE.json` and rewrite any flagged line as a general rule.
+3. **Batch the edits.** Collect the changes for several patterns into one revision, then score dev once. Don't re-score after every tweak.
+4. **Reproduce check.** Summarize the revision in 2–3 sentences. Give a fresh agent only the baseline template and that summary, never the dev records, and have it write its own revision. Score both on dev. If the fresh agent's version doesn't reproduce most of the gain, the gain came from fitting the records.
+5. Show the user the diff. Apply it as a new version of the candidate evaluator only, re-run on the gold set, and compare with `align_report.py compare BEFORE.json AFTER.json --split dev --ledger LOOKS.json`. It prints both rates and Scott's π with intervals, recall per label, the records that flipped each way, the shift in the label mix and the number of dev looks.
+6. Treat a gain smaller than run-to-run noise as no gain: re-run the unchanged candidate once and compare it with itself to see the noise floor.
+7. After the last revision, freeze the template and score test once, ideally on a batch labeled after freezing (`report --test-from`). Use `compare --gate` with a second judge model's report before proposing promotion.
+
+If an optimizer drafts revisions instead of this prompt, give it train and dev only. Have it maximize π or macro-F1, not accuracy, which can collapse to the majority label. Keep a rollback to the best dev version.

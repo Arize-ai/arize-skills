@@ -215,11 +215,15 @@ def test_too_many_exclusions_fails_the_excluded_rate_gate(tmp_path):
     assert r["verdict"] == "EXPLORATORY"
 
 
-def test_large_balanced_queue_is_validated(tmp_path):
+def test_validated_needs_30_per_label_in_both_dev_and_test(tmp_path):
+    # 75 per label: 11 train, 32 dev, 32 test.
+    recs = [record(f"r{i}", {A: "good" if i < 75 else "bad"}, stored="good" if i < 75 else "bad") for i in range(150)]
+    r = build(tmp_path, recs)
+    assert r["verdict"] == "VALIDATED" and r["small_classes"] == []
+    # 30 per label in all clears the old tier but leaves about 13 per label in test.
     recs = [record(f"r{i}", {A: "good" if i < 30 else "bad"}, stored="good" if i < 30 else "bad") for i in range(60)]
     r = build(tmp_path, recs)
-    assert r["verdict"] == "VALIDATED"
-    assert r["small_classes"] == []
+    assert r["verdict"] == "DIRECTIONAL" and r["small_classes"] == ["bad", "good"]
 
 
 def test_low_annotator_agreement_fails_the_kappa_gate(tmp_path):
@@ -466,3 +470,223 @@ def test_compare_reports_flips_and_label_mix(tmp_path, capsys):
     assert "Fixed (wrong before, right after): 1 — ['1']" in out
     assert "Broken (right before, wrong after): 1 — ['2']" in out
     assert "`bad` 2→2" in out and "`good` 1→1" in out
+
+
+# ---------------------------------------------------------------------------
+# alignment SOP: π, ceiling, applicability, splits, judge version, PPI
+# ---------------------------------------------------------------------------
+
+def test_scott_pi_known_values():
+    assert align.scott_pi([]) is None
+    assert align.scott_pi([("x", "x"), ("y", "y")]) == 1.0
+    assert align.scott_pi([("x", "x"), ("x", "y"), ("y", "x"), ("y", "y")]) == 0.0
+    # Rater 1 says x on 3 of 4, rater 2 on 1 of 4: po 0.5, pooled x share 0.5, pe 0.5 -> 0, while κ is 0 too.
+    assert align.scott_pi([("x", "x"), ("x", "y"), ("x", "y"), ("y", "y")]) == 0.0
+    # κ credits the raters' different label mixes; π does not, so π ≤ κ.
+    pairs = [("x", "x")] * 6 + [("x", "y")] * 3 + [("y", "y")]
+    assert align.scott_pi(pairs) < align.cohen_kappa(pairs)
+
+
+def test_bootstrap_interval_is_seeded_and_brackets_the_estimate():
+    pairs = [("good", "good")] * 8 + [("good", "bad"), ("bad", "bad"), ("bad", "bad"), ("bad", "good")]
+    lo, hi = align.boot_ci(pairs, align.scott_pi)
+    assert lo <= align.scott_pi(pairs) <= hi
+    assert align.boot_ci(pairs, align.scott_pi) == (lo, hi)
+
+
+def test_judge_vs_human_pi_is_reported_next_to_agreement(tmp_path):
+    r = build(tmp_path, usable_records())
+    assert align.scott_pi(r["judge_pairs"]) == pytest.approx(2 / 3)
+    assert "Exact agreement: 10/12 (83%, 95% CI 55–95%); Scott's π 0.67" in align.render(r)
+
+
+def test_stale_results_are_left_out_of_agreement(tmp_path):
+    recs = [record("r1", {A: "good"}, stored="bad", explanation="LAST_TURN_CHECK: Turn 2", session="s1"),
+            record("r2", {A: "good"}, stored="good", explanation="LAST_TURN_CHECK: Turn 5", session="s2")]
+    r = build(tmp_path, recs, turns={"s1": 5, "s2": 5})
+    assert [row["record_id"] for row in r["gold_scored"]] == ["r2"] and r["agree"] == 1
+    assert "left out of agreement" in align.render(r)
+
+
+def test_session_evaluator_without_the_turn_marker_is_flagged(tmp_path):
+    r = build(tmp_path, usable_records(), ev=evaluator(template="Grade the {conversation}."))
+    assert any("LAST_TURN_CHECK" in f for f in r["fit"])
+
+
+def test_applicability_is_scored_apart_from_grade(tmp_path):
+    recs = usable_records() + [record("na1", {A: "not_applicable"}, stored="not_applicable"),
+                               record("na2", {A: "not_applicable"}, stored="good")]
+    r = build(tmp_path, recs)
+    assert sorted(r["app_pairs"]).count(("not_applicable", "applicable")) == 1
+    assert len(r["app_pairs"]) == 14
+    out = align.render(r)
+    assert "Applicability (in scope or not, per human vs judge): 13/14" in out
+    assert "Grade (gold records only): 10/12" in out
+
+
+def test_human_ceiling_holds_one_rater_out(tmp_path):
+    C = "ann.c@example.com"
+    recs = []
+    for i in range(6):
+        votes = {A: "good", B: "good", C: "good" if i else "bad"}
+        recs.append(record(f"r{i}", votes, stored="good" if i > 1 else "bad"))
+    r = build(tmp_path, recs)
+    human, judge = r["ceiling_human"], r["ceiling_judge"]
+    # r0 (C said bad): holding out C gives reference good; holding out A or B leaves a tie, skipped.
+    # r1-r5: each of 3 raters held out against the other two.
+    assert len(human) == len(judge) == 1 + 5 * 3
+    assert sum(1 for x, y in human if x == y) == 15  # C's bad on r0 is the only human miss
+    assert sum(1 for x, y in judge if x == y) == 4 * 3  # the judge said bad on r0 and r1
+    assert "Human ceiling (one rater held out)" in align.render(r)
+
+
+def test_splits_keep_a_session_together(tmp_path):
+    recs = [record(f"r{i}", {A: "good" if i % 2 else "bad"}, stored="good", session=f"s{i // 2}") for i in range(40)]
+    r = build(tmp_path, recs)
+    by_session = {}
+    for row in r["rows"]:
+        by_session.setdefault(row["session_id"], set()).add(row["split"])
+    assert all(len(v) == 1 for v in by_session.values())
+
+
+def test_test_from_makes_a_later_batch_the_test_split(tmp_path):
+    recs = []
+    for i in range(30):
+        rec = record(f"r{i}", {A: "good" if i % 2 else "bad"}, stored="good")
+        rec["data"]["start_time"] = str(1780000000000 + (i >= 20) * 30 * 86400 * 1000)
+        recs.append(rec)
+    late = align.parse_ms(str(1780000000000 + 30 * 86400 * 1000)).isoformat()
+    r = build(tmp_path, recs, test_from=late)
+    split = {row["record_id"]: row["split"] for row in r["rows"]}
+    assert all(split[f"r{i}"] == "test" for i in range(20, 30))
+    assert all(split[f"r{i}"] in ("train", "dev") for i in range(20))
+    assert "a later batch, labeled after the prompt was frozen" in align.render(r)
+    with pytest.raises(SystemExit, match="ISO 8601"):
+        build(tmp_path, recs, test_from="yesterday")
+
+
+def test_judge_version_tuple_is_reported(tmp_path):
+    r = build(tmp_path, usable_records(), rubric_version="v3", admission_filter="parent_id IS NULL")
+    j = r["judge"]
+    assert j["evaluator_version"] == "v-1" and len(j["prompt_sha"]) == 12 and j["rubric_version"] == "v3"
+    out = align.render(r)
+    assert "rubric `v3`, admission filter `parent_id IS NULL`" in out and "Pass `--rubric-version`" not in out
+    assert "Pass `--rubric-version`" in align.render(build(tmp_path, usable_records()))
+
+
+def ppi_plan(tmp_path, recs, pops, random_ids):
+    plan = tmp_path / "plan.json"
+    plan.write_text(json.dumps({
+        "strata": [{"stratum": "random", "stream": "random", "population": sum(pops.values()), "frame": 100}]
+        + [{"stratum": k, "stream": "targeted", "label": k, "population": v} for k, v in pops.items()],
+        "records": [{"span_id": f"sp-{rid}", "stratum": "random", "stream": "random"} for rid in random_ids]}))
+    return str(plan)
+
+
+def test_ppi_corrects_a_judge_that_over_calls_good(tmp_path):
+    # Production: the judge says good on 900 of 1,000. Random labels: humans say good on 14 of 20, and the
+    # judge says good on 18 of them (it calls 4 human-bad records good).
+    recs = [record(f"g{i}", {A: "good"}, stored="good") for i in range(14)]
+    recs += [record(f"b{i}", {A: "bad"}, stored="good") for i in range(4)]
+    recs += [record(f"c{i}", {A: "bad"}, stored="bad") for i in range(2)]
+    plan = ppi_plan(tmp_path, recs, {"good": 900, "bad": 100, "not_applicable": 0}, [x["id"] for x in recs])
+    r = build(tmp_path, recs, plan=plan)
+    good = r["production"]["rates"]["good"]
+    assert good["judge_only"] == pytest.approx(0.9)
+    assert good["ppi"] == pytest.approx(0.7, abs=0.01)
+    assert good["ppi_ci"][0] < 0.7 < good["ppi_ci"][1]
+    assert "Production rates (PPI++)" in align.render(r)
+
+
+def test_ppi_uses_only_random_stream_labels(tmp_path):
+    recs = usable_records()
+    plan = ppi_plan(tmp_path, recs, {"good": 90, "bad": 10}, [])
+    r = build(tmp_path, recs, plan=plan)
+    assert "random sample" in r["production"]["error"]
+
+
+# ---------------------------------------------------------------------------
+# compare: gap, second judge, gate, ledger; lint
+# ---------------------------------------------------------------------------
+
+def report_json(path, labels, judge=None):
+    """labels: list of (record_id, split, human, judge_label)."""
+    path.write_text(json.dumps({"judge": judge or {"prompt_sha": "p1", "model": "m1"}, "records": [
+        {"record_id": rid, "bucket": "gold", "split": sp, "consensus": h, "eval_label": j} for rid, sp, h, j in labels]}))
+    return str(path)
+
+
+def compare_args(before, after, **kw):
+    base = dict(before=before, after=after, split=None, second_judge=None, gate=False, fail_label=None,
+                ledger=None, look_budget=align.LOOK_BUDGET)
+    base.update(kw)
+    return argparse.Namespace(**base)
+
+
+def records_for(dev_hits, test_hits, n=10):
+    out = []
+    for sp, hits in (("dev", dev_hits), ("test", test_hits)):
+        for i in range(n):
+            h = "good" if i % 2 else "bad"
+            out.append((f"{sp}{i}", sp, h, h if i < hits else ("bad" if h == "good" else "good")))
+    return out
+
+
+def test_compare_flags_a_dev_to_test_drop(tmp_path, capsys):
+    before = report_json(tmp_path / "b.json", records_for(6, 6))
+    after = report_json(tmp_path / "a.json", records_for(10, 6))
+    align.cmd_compare(compare_args(before, after, split="dev"))
+    out = capsys.readouterr().out
+    assert "Scott's π" in out and "gap +" in out and "the revision fit dev" in out
+
+
+def test_ship_gate_passes_only_when_test_holds_and_recall_does_not_drop(tmp_path, capsys):
+    before = report_json(tmp_path / "b.json", records_for(6, 6))
+    good = report_json(tmp_path / "a.json", records_for(8, 8))
+    align.cmd_compare(compare_args(before, good, gate=True))
+    assert "## Ship gate: PASS" in capsys.readouterr().out
+    bad = report_json(tmp_path / "a2.json", records_for(10, 5))
+    align.cmd_compare(compare_args(before, bad, gate=True, fail_label=["bad"]))
+    out = capsys.readouterr().out
+    assert "## Ship gate: FAIL" in out and "❌ Test agreement holds" in out
+
+
+def test_second_judge_is_scored_on_test(tmp_path, capsys):
+    before = report_json(tmp_path / "b.json", records_for(6, 6))
+    after = report_json(tmp_path / "a.json", records_for(8, 8))
+    other = report_json(tmp_path / "o.json", records_for(8, 4), judge={"model": "other-model"})
+    align.cmd_compare(compare_args(before, after, second_judge=other, gate=True))
+    out = capsys.readouterr().out
+    assert "other-model on test" in out and "property of the judge model" in out
+
+
+def test_ledger_counts_looks_and_warns(tmp_path, capsys):
+    before = report_json(tmp_path / "b.json", records_for(6, 6))
+    after = report_json(tmp_path / "a.json", records_for(8, 8))
+    ledger = str(tmp_path / "looks.json")
+    for _ in range(3):
+        align.cmd_compare(compare_args(before, after, split="dev", ledger=ledger, look_budget=2))
+    out = capsys.readouterr().out
+    assert "Dev scored 3 time(s)" in out and "Over budget" in out
+    for _ in range(2):
+        align.cmd_compare(compare_args(before, after, split="test", ledger=ledger))
+    assert "Test has been scored 2 times for this prompt" in capsys.readouterr().out
+    assert len(json.loads(Path(ledger).read_text())) == 5
+
+
+def test_lint_flags_case_specific_rules(tmp_path, capsys):
+    old = tmp_path / "v1.txt"
+    new = tmp_path / "v2.txt"
+    old.write_text("Grade the session.\nLabel bad when the answer is wrong.\n")
+    new.write_text("Grade the session.\nLabel bad when the answer is wrong.\n"
+                   "If session sess-abc123 asks for a refund, label good.\n"
+                   "Treat the user asked twice for the same report as good.\n"
+                   "When a tool call fails and is retried, judge the final result.\n")
+    recs = tmp_path / "r.json"
+    recs.write_text(json.dumps({"records": [{"record_id": "rec-1", "session_id": "sess-abc123", "split": "dev",
+                                              "eval_explanation": "The user asked twice for the same report and got it."}]}))
+    align.cmd_lint(argparse.Namespace(before_template=str(old), after_template=str(new), records=str(recs)))
+    out = capsys.readouterr().out
+    assert "3 added line(s), 2 flagged" in out
+    assert "names a record, session or trace ID" in out and "repeats 8+ words" in out
+    assert "retried" not in out.split("flagged")[1].split("Rewrite")[0]

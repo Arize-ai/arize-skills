@@ -3,7 +3,7 @@ name: arize-align-evaluator
 description: Aligns an Arize LLM-as-judge evaluator with human ground truth from annotation queues, span annotations, or dataset label columns. Checks label fit and quality, measures annotator agreement, reports record-level disagreements, and stops for approval before any evaluator change. Use when the user mentions align evaluator, calibrate LLM judge, evaluator vs human labels, judge agreement, gold labels, labeling queue ground truth, or inter-annotator agreement.
 metadata:
   author: arize
-  version: "1.1"
+  version: "1.2"
 compatibility: Requires the ax CLI (≥ 0.38.0), Python 3.9+, and a configured Arize profile.
 ---
 
@@ -105,11 +105,13 @@ Useful flags:
 - `--eval-column session_eval.X` overrides the derived output column.
 - `--not-applicable` and `--unscorable` set the human labels to exclude. The defaults are `not_applicable`, and `cannot_judge` plus `unclear`.
 - `--adjudications FILE` takes a JSON file mapping `record_id` to a resolved label, once disputes are adjudicated.
+- `--rubric-version` and `--admission-filter` record the rest of the judge's identity. A judge is its rubric, prompt, model and admission filter. The report prints all four, and a change to any one means the numbers must be re-measured.
+- `--test-from ISO_TIME` makes every gold session that started at or after that time the test split. Use it for a batch labeled after the prompt was frozen (Phase 6).
 - `--plan WORK_DIR/plan.json` takes the plan from **arize-align-queue-builder**. The queue builder makes two queues:
   - On its **calibration queue** (the random stream, a uniform sample), the report's agreement and recall are measurement estimates. Quote these, and take the verdict from this queue.
   - On its **gold queue** (targeted records), the report adds production-weighted agreement and recall as a secondary estimate. Use that queue to find and fix disagreements.
 
-  Without a plan, agreement on a queue that oversamples rare labels is not a production rate.
+  Without a plan, agreement on a queue that oversamples rare labels is not a production rate. With a plan whose random stream has labels, the report also gives each label's production rate corrected with PPI++, next to the judge-only and human-only rates.
 
 The report sorts every record into one of these buckets: **gold** (applicable, decisive and resolved), **not_applicable**, **unscorable**, **off_rubric** (a human label the evaluator cannot output), **disputed** or **unlabeled**. Only gold records count toward human-vs-evaluator agreement. Every other bucket is reported with its share of the records, never silently dropped.
 
@@ -117,12 +119,19 @@ It then applies the quality gates and gives one verdict:
 
 | Verdict | Meaning | What you may claim |
 |---|---|---|
-| **VALIDATED** | Every gate passes, ≥ 50 gold records, and ≥ 2 classes with ≥ 30 each | Agreement on those classes is evidence, once re-run on the current version (Phase 6) |
-| **DIRECTIONAL** | Every gate passes, below the VALIDATED sizes | Enough to start aligning and propose changes. Quote rates with their intervals; don't claim a target is met. |
+| **VALIDATED** | Every gate passes, and ≥ 2 classes have ≥ 30 gold records in both dev and test (about 71 each in all) | Agreement on those classes is evidence, once re-run on the current version (Phase 6) |
+| **DIRECTIONAL** | Every gate passes, below the VALIDATED sizes | Report rates with their intervals. Fix clear rubric or scope errors in one batch, then label more before further tuning; don't tune prompt by prompt, and don't claim a target is met. |
 | **EXPLORATORY** | At least 5 gold records in 2 or more classes, but some gate fails | Patterns worth investigating. No rate is evidence of alignment. |
 | **NOT USABLE** | Too few gold records, or only one class | Do not propose evaluator changes from this queue. Fix the queue first. |
 
-The two passing tiers exist because 10 gold records can start an alignment but can't confirm one: at 10 records, 9/10 agreement has a 95% interval of about 60–98%. The report prints an interval next to every rate, and leads with recall per human label (TPR and TNR for a binary evaluator) because exact agreement hides a judge that misses the rare label.
+The two passing tiers exist because 10 gold records can start an alignment but can't confirm one: at 10 records, 9/10 agreement has a 95% interval of about 60–98%. Tuning prompts on a small set overfits it, so DIRECTIONAL allows one batch of fixes, not a tuning loop. The report prints an interval next to every rate.
+
+It leads with recall per human label (TPR and TNR for a binary evaluator), because exact agreement hides a judge that misses the rare label. Next to exact agreement it gives Scott's π, which corrects for chance. Judges with over 90% agreement have still mis-scored by 10 points or more, so never quote percent agreement alone.
+
+It also reports:
+- applicability (in scope or not) apart from grade
+- a human ceiling, with one rater held out at a time against the same reference as the judge
+- results scored before a session ended, which it leaves out of agreement
 
 If the gold-count or class gates fail, say so before reading any sessions: no amount of review or adjudication adds records or classes. Offer **arize-align-queue-builder**, and review the existing queue only for failure patterns.
 
@@ -134,7 +143,8 @@ The script checks the structure: label sets, granularity, other configs and cove
 
 1. **Is the unit the same?** Queue records are usually `SPAN` records, while many evaluators score the whole `SESSION`. Confirm that each record's `attributes.session.id` identifies the session the labeler judged, and that the evaluator's input variable (for example `{conversation}`) covers that whole session. A label on one span in a multi-turn session can disagree with a correct session-level verdict.
 2. **Does the rubric mean the same thing?** Read the evaluator template next to the queue instructions and label definitions. Watch for one label meaning different things on each side. A common case is `no_output_produced` vs `wrong`, where one side treats "the agent didn't produce an artifact" as a failure and the other treats it as a separate class.
-3. **Read the not-applicable records.** If humans marked records `not_applicable` and the evaluator gave a substantive label, the disagreement is about applicability, not grading quality. Check the evaluator's `not_applicable` instruction and the task's admission filter before touching the grading criteria.
+3. **Read the not-applicable records.** If humans marked records `not_applicable` and the evaluator gave a substantive label, the disagreement is about applicability, not grading quality. The report's applicability line measures it. Check the evaluator's `not_applicable` instruction and the task's admission filter before touching the grading criteria. Keep scope rules and grading rules in separate parts of the template.
+   - **Audit the admission filter too.** Export a handful of sessions the task's filter excluded in the same window, and check whether any should have been graded. Gold drawn after the filter can't show sessions the filter wrongly drops.
 4. **Read every discrepancy.** For each row in the report's discrepancy table, open the session (use **arize-trace** to export it, and **arize-link** for a UI link). Decide whether the human or the evaluator is right, or whether the record is ambiguous. Quote the specific evidence. For many discrepancies, see [references/disagreement-review.md](references/disagreement-review.md).
 5. **When the session supports the evaluator, adjudicate the human label; don't edit the template.** Follow [references/disagreement-review.md](references/disagreement-review.md#adjudicating).
 6. **Is the judge grading its own model's output?** If the evaluator's model is the same as the application's, say so in the report: judges tend to favor their own outputs.
@@ -156,6 +166,7 @@ End by asking the user to approve, edit or reject the proposal. **Do not continu
 - the session shows the evaluator was right (step 5)
 - the only evidence is a class the queue has no examples of
 - the change would turn `cannot_judge` into an evaluator class
+- the verdict is DIRECTIONAL and a batch of fixes was already made; label more first
 
 In those cases, recommend fixing the queue, the filter or the mapping instead.
 
@@ -167,14 +178,33 @@ Approval must name the change: "approve the proposed edit to the not_applicable 
 
 1. **Create a candidate copy, not a new production version.** Copy the evaluator and give it a distinct `template_config.name`, such as `<name>_candidate`, so its results go to their own column and never overwrite production output. See **arize-evaluator** for the create command. Check the subcommand names with `ax evaluators --help`, because CLI releases have renamed them. Use the **current** production template first, unchanged.
 2. **Re-run the baseline on the gold sessions only.** Create a non-continuous task for the candidate on the same project. Set `--query-filter` so it selects only the gold sessions, and set `--data-start-time` and `--data-end-time` to cover their timestamps. First trigger a run with a small `--max-spans` and confirm that only the intended sessions were scored. Then run the full set with `--wait`.
-3. **Measure the baseline.** Re-run `report` with `--eval-column` set to the candidate's column and `--json-out WORK_DIR/baseline.json`. This number is the real baseline. The report assigns each gold record to a **train**, **dev** or **test** split; iterate on dev only.
-4. **Apply the approved change** as a new version of the **candidate**, then re-run and re-measure. To draft revisions from dev-split disagreements, use [references/alignment-meta-prompt.md](references/alignment-meta-prompt.md). The rules there prevent overfitting.
-5. **Report before and after on the same gold set** with `align_report.py compare WORK_DIR/baseline.json WORK_DIR/after.json --split dev`. It gives both rates with intervals, the records that flipped in each direction and the shift in the evaluator's label mix. A gain inside the run-to-run noise is no gain: re-run the unchanged candidate once to see the noise floor. After the last revision, score the **test** split once and report it separately.
-6. **Promoting to production is a separate decision.** Present the candidate's results and the exact diff. Create a new version of the production evaluator only after the user explicitly approves promotion.
+3. **Measure the baseline.** Re-run `report` with `--eval-column` set to the candidate's column and `--json-out WORK_DIR/baseline.json`. This number is the real baseline. The report assigns each gold record, by session, to a **train**, **dev** or **test** split; iterate on dev only.
+4. **Apply the approved change** as a new version of the **candidate**, then re-run and re-measure. To draft revisions from dev-split disagreements, use [references/alignment-meta-prompt.md](references/alignment-meta-prompt.md). Its rules prevent overfitting:
+   - Each edit states a general rule.
+   - Edits are batched, and dev is scored once per batch.
+   - Before re-running, check the new template with `align_report.py lint OLD.txt NEW.txt --records WORK_DIR/baseline.json`. It flags added lines that name a record, session or trace, or copy wording from dev records. Rewrite those as general rules.
+   - Use the reproduce check before trusting a dev gain: summarize the change in 2–3 sentences, have a fresh agent that never saw the dev records rewrite the baseline template from that summary alone, and score its version on dev. A gain that doesn't reproduce came from fitting the records.
+5. **Report before and after on the same gold set** with `align_report.py compare WORK_DIR/baseline.json WORK_DIR/after.json --split dev --ledger WORK_DIR/looks.json`. It gives:
+   - both rates and Scott's π with intervals
+   - recall per label, and the records that flipped in each direction
+   - the shift in the evaluator's label mix
+   - the number of times dev has been scored (it warns past `--look-budget`, default 5)
+
+   A gain inside the run-to-run noise is no gain: re-run the unchanged candidate once to see the noise floor.
+6. **Freeze, then test once.** After the last revision, freeze the template. Test is scored once per judge version; the ledger warns on a second look.
+   - **Use a later batch for test.** Better than the same-batch test split is a batch labeled after freezing: queue intake into the calibration queue, then `report --test-from FREEZE_TIME`.
+   - **Score a second judge model.** Run the frozen candidate's template on one other judge model as a second candidate, on the same records, and pass its report as `--second-judge`. Judges can agree well overall and still carry a model-specific bias. A tuning judge that collapses on held-out data while others hold is a property of the judge, not the criterion.
+7. **Apply the ship gate:** `align_report.py compare WORK_DIR/baseline.json WORK_DIR/final.json --gate --fail-label FAILING_LABEL --second-judge WORK_DIR/second.json --ledger WORK_DIR/looks.json`. It passes only when:
+   - test π didn't fall
+   - the dev → test gap in π is 0.10 or less (a heuristic; larger gaps mean the revision fit dev)
+   - test recall on the failing label didn't drop
+
+   If several candidates were tried, re-score the winner on fresh sessions before claiming the gain. The best of several on the same data looks better than it is.
+8. **Promoting to production is a separate decision.** Present the candidate's results, the gate and the exact diff. Create a new version of the production evaluator only after the user explicitly approves promotion. Record it in the evaluator's changelog as a **judge change** (prompt, model or filter: tuning) or a **criterion change** (what pass means changed: new rubric version, older labels on that criterion re-reviewed, and scores before and after not comparable). See [references/changing-evaluators.md](references/changing-evaluators.md#changelog).
 
 Before writing any version, and before agreeing to skip the candidate, read [references/changing-evaluators.md](references/changing-evaluators.md): the API drops or can't set some settings, and provider copies must change together.
 
-**When to stop iterating:** stop when the target threshold is met on a VALIDATED gold set, when agreement plateaus between iterations, when the remaining disagreements are ones reasonable annotators also dispute, or after 3–4 iterations. Further gains are rarely available from template edits alone. For targets by evaluator type, see [references/gates-and-agreement.md](references/gates-and-agreement.md#target-thresholds).
+**When to stop iterating:** stop when the target threshold is met on a VALIDATED gold set, when agreement plateaus between iterations, when the judge reaches the human ceiling, when the remaining disagreements are ones reasonable annotators also dispute, when dev looks run past the budget, or after 3–4 iterations. Further gains are rarely available from template edits alone. For targets by evaluator type, see [references/gates-and-agreement.md](references/gates-and-agreement.md#target-thresholds).
 
 ---
 

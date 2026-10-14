@@ -18,10 +18,12 @@ Nothing has been changed in Arize.
 - Unit: <span records vs session evaluator: verified / not verified, and how>.
 - Rubric: <label sets, label definitions that diverge, classes with no human examples>.
 - Applicability: <how many human-not-applicable records the evaluator scored substantively, and why>.
-- Version: <current version and date; how many records predate it>.
+- Version: <the judge version: evaluator version, prompt hash, model, rubric version, admission filter; how many records predate it>.
+- Applicability vs grade: <applicability agreement, and grade agreement on gold, as separate lines>.
 
 ## Is the queue good enough to align against?
 <Gate table from the script, then one line per failed gate on what it means for this decision.>
+<Recall on the failing label, exact agreement and Scott's π, each with its interval; the human ceiling if records have 2+ raters. Never percent agreement alone.>
 
 ## Annotator disagreements
 <Table of disputed records with both votes and the proposed adjudication, or: "Only one annotator labeled these records; human-human agreement is unknown.">
