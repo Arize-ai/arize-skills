@@ -95,7 +95,7 @@ pip install arize-ax-cli
 
 **Option A — `ax` CLI profile** (recommended):
 
-Set up your API key once with the interactive wizard and it persists across all sessions and projects. Run it in your own terminal, not through your coding agent: the wizard prompts for the key, so it never appears in a command, your shell history, or the agent's context.
+Set up your API key once with the interactive wizard and it persists across all sessions and projects. Run it in your own terminal, not through your coding agent: the wizard prompts for the key, so it never appears in a command, your shell history, or the agent's context. If `ARIZE_API_KEY` is set, the wizard offers to create the profile from it (default yes); answer **No**, or `unset ARIZE_API_KEY` first. Otherwise the profile reads the key from your environment on every run.
 ```bash
 # Interactive wizard (also asks for the region)
 ax profiles create            # creates 'default' when no profiles exist

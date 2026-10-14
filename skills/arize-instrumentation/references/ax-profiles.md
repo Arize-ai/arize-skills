@@ -50,9 +50,9 @@ To switch between profiles later, use `ax profiles use NAME` (see **Managing Mul
 
 ## 4. Getting the API key
 
-**Never ask the user to paste their API key into the chat, and never read, log, echo, or pass an API key value.** Don't inspect `ARIZE_API_KEY` or other key variables (no `echo`, `env`, or reading `.env` files), don't ask the user to export one for `ax`, and don't run any command that takes `--api-key`. `ax` doesn't read the variable anyway; it authenticates only through a profile.
+**Never ask the user to paste their API key into the chat, and never read, log, echo, or pass an API key value.** Don't inspect `ARIZE_API_KEY` or other key variables (no `echo`, `env`, or reading `.env` files), don't ask the user to export one for `ax`, and don't run any command that takes `--api-key`. Never suggest a profile that references an environment variable (`${ARIZE_API_KEY}` in the profile or a `--from-file` TOML): `ax` resolves it on every run, which keeps the key in the environment.
 
-Instead, ask the user to run `ax profiles create` in **their own terminal**, not through your shell tool or a `!` command (both put the output in your context). The wizard prompts for the key, so it never appears in a command or in this conversation.
+Instead, ask the user to run `ax profiles create` in **their own terminal**, not through your shell tool or a `!` command (both put the output in your context). The wizard prompts for the key, so it never appears in a command or in this conversation. If `ARIZE_API_KEY` is set in their shell, the wizard offers to create the profile from it (default yes); tell them to answer **No**, or `unset ARIZE_API_KEY` first, so the key is stored in the profile.
 
 They can find their key at https://app.arize.com/admin > API Keys. Recommend they create a **scoped service key** (not a personal user key) — service keys are not tied to an individual account and are safer for programmatic use. Keys are space-scoped — make sure they copy the key for the correct space.
 
