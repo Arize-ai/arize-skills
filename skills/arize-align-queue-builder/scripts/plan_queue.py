@@ -10,6 +10,9 @@ Builds two streams of records from a project:
             (provider disagreements first), judge-independent signals (--signal), not-applicable
             checks and scope probes. Use them for failure finding and dev/few-shot examples.
 
+Session evaluators skip sessions longer than --max-turns turns (default 40), which take far longer to label;
+both streams, their strata and the production counts then cover only sessions up to the cap.
+
 Every record carries a routing_reason (random, label_stratum, provider_disagreement, na_check,
 scope_probe, signal:NAME) and the instructions version it was queued under. Writes:
 
@@ -59,19 +62,22 @@ SIZING = {"discovery": {"target_gold": 10, "min_per_class": 3, "random": 30},
           "validation": {"target_gold": 142, "min_per_class": 71, "random": 100}}
 MODE_ALIASES = {"directional": "discovery"}  # the old name for discovery
 EXPECTED_EXCLUSION = 0.30
+DEFAULT_MAX_TURNS = 40  # longer sessions take far longer to label (about 15 seconds a turn)
 
 # Routing reasons. Only RANDOM records are a measurement sample.
 RANDOM, LABEL, DISAGREE, NA_CHECK, PROBE = "random", "label_stratum", "provider_disagreement", "na_check", "scope_probe"
 
 # Arize limits.
 PAGE = 500  # spans per export call
+SESSIONS_PER_EXPORT = 50  # sessions per turn-count export
 SOURCE_MAX_DAYS = 7  # time range of one queue record source
 SOURCES_PER_CALL = 2  # record sources per create/add-records call
 CONFIG_NAME_MAX = 40  # annotation config name length
 
 # Settings saved in plan.json so each intake run samples the way the first plan did.
 CARRIED = ("root_filter", "eval_name", "compare_eval", "max_disagreement_share", "mode", "expected_exclusion",
-           "labels", "not_applicable", "na_count", "pool", "slices", "signal", "signal_count", "instructions_version")
+           "labels", "not_applicable", "na_count", "pool", "slices", "signal", "signal_count", "instructions_version",
+           "max_turns")
 SETTLE_HOURS = 2  # leave time for evaluator tasks to score the newest units before an intake counts them
 
 
@@ -182,9 +188,32 @@ def export_units(ax, project_id, space, filt, lo, hi, unit_key, min_span=timedel
     return fetch(lo, hi)
 
 
-def count_units(ax, project_id, space, filt, lo, hi, unit_key):
-    units, capped = export_units(ax, project_id, space, filt, lo, hi, unit_key)
-    return len(units), capped
+def count_turns(ax, project_id, space, root_filter, starts):
+    """Turns (spans matching root_filter) per session, for {session_id: start_time}. A single session that fills
+    an export page counts as PAGE turns, a lower bound that is still over any sensible cap."""
+    turns, now = {}, datetime.now(timezone.utc)
+    todo = sorted(starts, key=lambda u: starts[u] or "")
+
+    def export(batch):
+        times = [t for t in (parse_time(starts[u]) for u in batch) if t]
+        if not times:
+            turns.update({u: 0 for u in batch})
+            return
+        spans = run_ax(ax, ["spans", "export", project_id, "--space", space, "--filter",
+                            f"({root_filter}) AND attributes.session.id IN ({', '.join(quote(u) for u in batch)})",
+                            "--start-time", (min(times) - timedelta(hours=1)).isoformat(),
+                            "--end-time", min(max(times) + timedelta(days=3), now).isoformat(),
+                            "-l", str(PAGE), "--stdout"], allow_empty=True)
+        if len(spans) >= PAGE and len(batch) > 1:
+            export(batch[:len(batch) // 2])
+            export(batch[len(batch) // 2:])
+            return
+        counts = Counter(str((sp.get("attributes") or {}).get("session.id")) for sp in spans)
+        turns.update({u: counts.get(str(u), 0) for u in batch})
+
+    for i in range(0, len(todo), SESSIONS_PER_EXPORT):
+        export(todo[i:i + SESSIONS_PER_EXPORT])
+    return turns
 
 
 def unit_of(span, unit_key):
@@ -295,6 +324,9 @@ def main():
     p.add_argument("--signal-count", type=int, default=5)
     p.add_argument("--instructions-version", help="Version line of the queue instructions, stored on each record "
                                                   "so labels made under older definitions can be found")
+    p.add_argument("--max-turns", type=int,
+                   help=f"Session evaluators: skip sessions with more than this many turns (spans matching --root-filter), "
+                        f"which take far longer to label. Default {DEFAULT_MAX_TURNS}; 0 turns the cap off")
     p.add_argument("--exclude-queue", nargs="*", default=[], help="Skip units already in these queues")
     p.add_argument("--intake", metavar="PLAN_JSON",
                    help="Sample units that arrived since this plan's last run, for the queue in --queue")
@@ -322,6 +354,8 @@ def main():
         for k, v in (base.get("settings") or {}).items():
             if getattr(a, k, None) == p.get_default(k):
                 setattr(a, k, v)
+        if "max_turns" not in (base.get("settings") or {}) and a.max_turns is None:
+            a.max_turns = 0  # a plan from before the turn cap: keep sampling uncapped, as it did
         a.evaluator, a.project = a.evaluator or base["evaluator_id"], a.project or base["project_id"]
         a.na_probe_eval = None
         a.exclude_queue = list(dict.fromkeys(a.exclude_queue + [q for q in (a.queue, a.random_queue) if q]))
@@ -360,6 +394,14 @@ def main():
     na = set(a.not_applicable)
     wanted = a.labels or choices
     unit_key = {"SESSION": "session_id", "TRACE": "trace_id"}.get(gran, "span_id")
+    # Turns are root-filter spans per session, so the cap needs a session evaluator and a root filter.
+    if gran != "SESSION" or not a.root_filter:
+        if a.max_turns:
+            print("Ignoring --max-turns: it needs a session evaluator and --root-filter to count turns.")
+        a.max_turns = 0
+    elif a.max_turns is None:
+        a.max_turns = DEFAULT_MAX_TURNS
+    cap = a.max_turns
 
     project = run_ax(a.ax, ["projects", "get", a.project, "--space", a.space, "-o", "json"])
     excluded_units = set()
@@ -422,8 +464,23 @@ def main():
             "instructions_version": a.instructions_version,
         }
 
+    turns = {}
+
+    def within_cap(rows):
+        """Drop rows whose session has more than --max-turns turns. Returns (kept, number dropped)."""
+        if not cap:
+            return rows, 0
+        need = {r[unit_key]: r["start_time"] for r in rows if r[unit_key] not in turns}
+        if need:
+            turns.update(count_turns(a.ax, project["id"], a.space, a.root_filter, need))
+        kept = [r for r in rows if turns.get(r[unit_key], 0) <= cap]
+        for r in kept:
+            r["turns"] = turns.get(r[unit_key])
+        return kept, len(rows) - len(kept)
+
     def candidates(filt, label):
-        """One candidate per unit not already used, keeping the unit's earliest matching span."""
+        """One candidate per unit not already used and within the turn cap, keeping the unit's earliest matching
+        span. Returns (candidates, skipped as used, skipped as too long)."""
         cands, dup = {}, 0
         for s in export_slices(with_root(filt)):
             row = row_of(s, label)
@@ -432,9 +489,15 @@ def main():
                 dup += 1
             else:
                 keep_earliest(cands, unit, row)
-        return list(cands.values()), dup
+        kept, long = within_cap(list(cands.values()))
+        return kept, dup, long
 
-    def take(chosen, tag, label, quota, pool, dup, **extra):
+    def population_of(filt):
+        """Every unit matching filt in the window, within the turn cap. Returns (count, lower_bound)."""
+        units, lower = export_units(a.ax, project["id"], a.space, with_root(filt), start, end, unit_key)
+        return len(within_cap([row_of(sp) for sp in units.values()])[0]), lower
+
+    def take(chosen, tag, label, quota, pool, dup, long=0, **extra):
         """Add picks (each already carrying its stratum and routing_reason) and return their summary row."""
         for c in chosen:
             c["sampled_as"] = tag(c)
@@ -444,6 +507,7 @@ def main():
         return {"label": label, "pool_units": pool, "quota": quota, "picked": len(chosen),
                 "provider_disagreements": sum(1 for c in chosen if c.get("disagree")),
                 "span_names": len({c["span_name"] for c in chosen}), "skipped_dupes_or_excluded": dup,
+                "skipped_over_max_turns": long,
                 "shortfall": max(0, quota - len(chosen)), **extra}
 
     picks, summary, strata, used = [], [], [], set(excluded_units)
@@ -456,7 +520,9 @@ def main():
     if a.random:
         units, rand_lower = export_units(a.ax, project["id"], a.space, with_root(f"{column} IS NOT NULL"),
                                          start, end, unit_key)
-        rows = {u: row_of(sp) for u, sp in units.items()}
+        kept, long = within_cap([row_of(sp) for sp in units.values()])
+        rows = {r[unit_key]: r for r in kept}
+        units = {u: sp for u, sp in units.items() if u in rows}
         label_counts = Counter(r["stored_label"] for r in rows.values())
         dis_counts = Counter(r["stored_label"] for r in rows.values()
                              if r["compare_label"] and r["compare_label"] != r["stored_label"])
@@ -464,23 +530,24 @@ def main():
         chosen = [rows[u] for u in rng.sample(frame, min(a.random, len(frame)))]
         for c in chosen:
             c["stratum"], c["routing_reason"] = "random", RANDOM
-        rand = take(chosen, lambda c: "random", "random", a.random, len(frame), len(units) - len(frame))
+        rand = take(chosen, lambda c: "random", "random", a.random, len(frame), len(units) - len(frame), long)
         strata.append({**stratum("random", "random", population=len(units), frame=len(frame), lower=rand_lower),
-                       "label_counts": dict(label_counts)})
+                       "label_counts": dict(label_counts), "max_turns": cap or None})
 
     # Judge-independent signals (user feedback, severity): targeted, never weighted.
     for name, filt in a.signal:
-        items, dup = candidates(f"({filt}) AND {column} IS NOT NULL", None)
+        items, dup, long = candidates(f"({filt}) AND {column} IS NOT NULL", None)
         chosen = spread_pick(items, a.signal_count, rng)
         for c in chosen:
             c["stratum"] = c["routing_reason"] = f"signal:{name}"
-        summary.append(take(chosen, lambda c, n=name: f"signal: {n}", f"signal: {name}", a.signal_count, len(items), dup))
+        summary.append(take(chosen, lambda c, n=name: f"signal: {n}", f"signal: {name}", a.signal_count, len(items),
+                            dup, long))
         strata.append(stratum(f"signal:{name}", "targeted"))
 
     decisive_picked = 0
     cmp_col = f"{prefix}.{a.compare_eval}.label" if a.compare_eval else None
     for label in wanted:
-        items, dup = candidates(f"{column} = {quote(label)}", label)
+        items, dup, long = candidates(f"{column} = {quote(label)}", label)
         quota = a.na_count if label in na else per
         disagree, rest = [], []
         for i in items:
@@ -494,7 +561,7 @@ def main():
         for c in chosen:
             c["stratum"] = label if not a.compare_eval else f"{label}|{'disagree' if c['disagree'] else 'agree'}"
             c["routing_reason"] = DISAGREE if c["disagree"] else NA_CHECK if label in na else LABEL
-        summary.append(take(chosen, lambda c, l=label: l, label, quota, len(items), dup))
+        summary.append(take(chosen, lambda c, l=label: l, label, quota, len(items), dup, long))
         # Populations are counted in full (an estimate is not a known selection probability): from the random
         # stream's enumeration when there is one, otherwise with their own exports.
         if a.skip_population:
@@ -502,8 +569,7 @@ def main():
         elif label_counts is not None:
             population, lower = label_counts[label], rand_lower
         else:
-            population, lower = count_units(a.ax, project["id"], a.space, with_root(f"{column} = {quote(label)}"),
-                                            start, end, unit_key)
+            population, lower = population_of(f"{column} = {quote(label)}")
         if not a.compare_eval:
             pops = {"all": population}
         elif population is None:
@@ -512,10 +578,8 @@ def main():
             if dis_counts is not None:
                 dis = dis_counts[label]
             else:
-                dis, dis_lower = count_units(
-                    a.ax, project["id"], a.space,
-                    with_root(f"{column} = {quote(label)} AND {cmp_col} IS NOT NULL AND {cmp_col} != {quote(label)}"),
-                    start, end, unit_key)
+                dis, dis_lower = population_of(
+                    f"{column} = {quote(label)} AND {cmp_col} IS NOT NULL AND {cmp_col} != {quote(label)}")
                 lower = lower or dis_lower
             pops = {"disagree": dis, "agree": population - dis}
         for sub, pop in pops.items():
@@ -529,7 +593,7 @@ def main():
     if a.na_probe_eval and a.na_probe_count:
         na_label = next((l for l in choices if l in na), "not_applicable")
         probe_col = (a.na_probe_eval if "." in a.na_probe_eval else f"{prefix}.{a.na_probe_eval}") + ".label"
-        items, dup = candidates(f"{column} = {quote(na_label)} AND {probe_col} IS NOT NULL", na_label)
+        items, dup, long = candidates(f"{column} = {quote(na_label)} AND {probe_col} IS NOT NULL", na_label)
         by_probe = defaultdict(list)
         for i in items:
             if i["probe_label"] and i["probe_label"] not in na:
@@ -544,7 +608,7 @@ def main():
         for c in chosen:
             c["stratum"], c["routing_reason"] = name, PROBE
         probe = take(chosen, lambda c: f"{na_label} (probe: {a.na_probe_eval}={c['probe_label']})",
-                     f"{na_label} probe vs {a.na_probe_eval}", n, sum(len(g) for g in by_probe.values()), dup,
+                     f"{na_label} probe vs {a.na_probe_eval}", n, sum(len(g) for g in by_probe.values()), dup, long,
                      probe_labels=dict(Counter(c["probe_label"] for c in chosen)))
         summary.append(probe)
         strata.append(stratum(name, "targeted"))
@@ -569,7 +633,7 @@ def main():
 
     run_plan = {"evaluator": ev.get("name"), "evaluator_id": ev.get("id"), "version_id": (ev.get("version") or {}).get("id"),
                 "column": column, "granularity": gran, "project_id": project["id"], "per_label_quota": per,
-                "config_name": config_name, "critique_config_name": critique_name, "mode": a.mode,
+                "config_name": config_name, "critique_config_name": critique_name, "mode": a.mode, "max_turns": cap or None,
                 "window": {"start": z(start), "end": z(end)}, "settings": {k: getattr(a, k) for k in CARRIED},
                 "summary": summary, "random_stream": rand, "strata": strata, "records": picks}
     with open(os.path.join(a.out_dir, "plan.json"), "w") as f:
@@ -594,6 +658,9 @@ def main():
         f"- Evaluator version `{(ev.get('version') or {}).get('id')}`, granularity `{gran}`, stored column `{column}`",
         f"- Project `{project.get('name')}`, {window}" + (f", root filter `{a.root_filter}`" if a.root_filter else ""),
         f"- One record per {unit_key.replace('_id', '')}; {excluded}",
+        (f"- Sessions over {cap} turns are left out (`--max-turns`; 0 turns this off)"
+         + (f": {rand['skipped_over_max_turns']} of {rand['skipped_over_max_turns'] + rand['pool_units'] + rand['skipped_dupes_or_excluded']} "
+            "scored sessions" if rand else "") if cap else "- No turn cap (`--max-turns 0`, or not a session evaluator)"),
         f"- Sizing mode `{a.mode}`: per-label quota {per} = max({a.min_per_class}, {a.target_gold}/{k}) / "
         f"(1 − {a.expected_exclusion:.0%} expected exclusions), about {per * (1 - a.expected_exclusion):.1f} gold "
         "records per label" + (" (enough to start aligning, not to validate; use `--mode validation` for that)"
@@ -631,7 +698,7 @@ def main():
         f"{a.expected_exclusion:.0%} of the decisive targeted picks, about {expected_gold:.0f} gold records remain "
         f"(target {a.target_gold}).\n",
         f"Proposed annotation configs: `{config_name}` with values {config_values}, and `{critique_name}` "
-        "(free text) for the critique the instructions require with every label.\n",
+        "(free text) for an optional one-line critique on close calls and `cannot_judge`.\n",
         "Caveats:",
         "- Targeted records were chosen using the evaluator's own labels and other signals, so they over-represent "
         "rare labels and hard cases. Use them to find failures and for dev and few-shot examples; take agreement from "
@@ -640,6 +707,12 @@ def main():
         "Columns in the Arize UI to leave out every eval column, then open a record as an annotator to check.",
         "- Ask annotators to stop after about 100 records per sitting; missed defects rise with fatigue.",
     ]
+    if cap:
+        long_total = sum(s["skipped_over_max_turns"] for s in summary)
+        out.append(f"- Sessions over {cap} turns were skipped ({long_total} targeted candidates"
+                   + (f", {rand['skipped_over_max_turns']} from the random frame" if rand else "")
+                   + f"). Agreement and production estimates from this plan cover sessions of up to {cap} turns "
+                   "only; say so when quoting them. The evaluator is unchecked on longer sessions.")
     if a.signal:
         out.append("- Signals " + ", ".join(f"`{n}`" for n, _ in a.signal) + " pick records by span filters that don't "
                    "depend on the evaluator. They are targeted and never weighted.")

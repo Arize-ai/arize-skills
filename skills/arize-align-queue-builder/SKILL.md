@@ -72,9 +72,9 @@ If an `ax` command fails, troubleshoot based on the error:
 
 Follow [references/rubric-and-instructions.md](references/rubric-and-instructions.md). In short:
 - **Label values** are the evaluator's choices, spelled exactly the same, plus `not_applicable` (if the evaluator lacks it) and `cannot_judge`. The script writes these to `config_values.json`. Don't add labels the evaluator cannot output. They become off-rubric records that can't be compared.
-- **A critique config:** a free-text config attached next to the label config. Every label needs a critique detailed enough to reuse as a few-shot example.
+- **A critique config:** an optional free-text config attached next to the label config. Labeling time is the main cost, so a critique is asked for only on close calls and `cannot_judge`. Fuller critiques for few-shot examples are written during adjudication, on the records that need them.
 - **Reuse existing configs** if they already have exactly these values, so labels stay comparable across rounds. Otherwise propose new ones with dated names.
-- **Instructions** define every label in the template's own terms. They say which unit to judge (the whole session for session evaluators), when `cannot_judge` is allowed, that a critique is required, and to work in sittings of about 100 records. They tell annotators not to look at evaluator output. For session evaluators, they also say to put the label on the **session**, not on an individual span. They start with a version line, which you also pass to the script as `--instructions-version`.
+- **Instructions** define every label in the template's own terms. They say which unit to judge (the whole session for session evaluators), when `cannot_judge` is allowed, when a critique is wanted (optional, but asked for on close calls and `cannot_judge`), and to work in sittings of about 100 records. They tell annotators not to look at evaluator output. For session evaluators, they also say to put the label on the **session**, not on an individual span. They start with a version line, which you also pass to the script as `--instructions-version`.
 
 ## Phase 3: Plan the records
 
@@ -98,6 +98,7 @@ python3 SKILL_ROOT/scripts/plan_queue.py \
 - `--compare-eval` is the `template_config.name` of another copy of the evaluator. Disagreements between the copies are picked first, up to 40% of each label's quota, and counted in full as their own stratum.
 - `--signal NAME=FILTER` (repeatable) adds `--signal-count` records (default 5) matching a judge-independent span filter.
 - `--na-probe-eval` is the template name of another evaluator that grades the same sessions, for example the version this one replaces. It adds `--na-probe-count` records (default 5) that this evaluator called not applicable but the other graded decisively. Use it when a label comes up empty because the new scope rule moved those sessions to not applicable. If humans label the probes decisively, the scope rule is too strict. The other evaluator only chooses records; labelers stay blind to it.
+- `--max-turns N` (session evaluators, default 40) skips sessions with more than N turns, counted as spans matching `--root-filter`. Long sessions take far longer to label (roughly 1 minute plus 15 seconds a turn), and a few 100+ turn sessions can cost more than the rest of the queue. Both streams, their strata and the production counts then cover only sessions up to the cap, so the evaluator is unchecked on longer ones; say so when quoting results. `--max-turns 0` turns it off.
 - `--expected-exclusion` is the share of records you expect humans to mark not applicable or cannot judge. The default is 0.30. If an earlier queue for this evaluator exists, use its actual excluded rate from the **arize-align-evaluator** report.
 
 It draws the random stream first, then the signals, the label strata (provider disagreements first, spread across entry points) and the not-applicable checks. Each record gets its stratum, `routing_reason`, stream, period and instructions version. How and why it picks each are in [references/sampling.md](references/sampling.md).
@@ -109,7 +110,7 @@ If a label is short of candidates, widen `--days` first. If the continuous task 
 ## Phase 4: Present the plan and STOP
 
 Show the user:
-- the evaluator, version, unit and admission filter the plan is based on
+- the evaluator, version, unit and admission filter the plan is based on, and the turn cap with how many scored sessions it left out
 - the random stream: its size, the frame it was drawn from, and its rate
 - the targeted table from `plan.md`, including any shortfall, and the expected number of gold records
 - the proposed label and critique configs (or existing ones to reuse), and the full instructions text with its version line

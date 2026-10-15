@@ -36,7 +36,8 @@ def span(i, label, t, session=None, name="ROUTER-CHAT", compare=None, probe=None
 
 
 def matches(s, filt):
-    """The filter clauses plan_queue builds: eval label =, != and IS NOT NULL, and attribute equality."""
+    """The filter clauses plan_queue builds: eval label =, != and IS NOT NULL, attribute equality, and a session.id
+    IN list (turn counts)."""
     labels = {e["name"]: e["label"] for e in s["evaluations"]}
     for name, op, value in re.findall(r"(?:session_eval|eval)\.(\w+)\.label (=|!=|IS NOT NULL)\s*(?:'([^']*)')?", filt):
         got = labels.get(name)
@@ -45,7 +46,14 @@ def matches(s, filt):
     for key, value in re.findall(r"attributes\.(\w+) = '([^']*)'", filt):
         if s["attributes"].get(key) != value:
             return False
+    ids = re.search(r"attributes\.session\.id IN \(([^)]*)\)", filt)
+    if ids and s["attributes"]["session.id"] not in re.findall(r"'([^']*)'", ids.group(1)):
+        return False
     return True
+
+
+def is_turn_count(filt):
+    return "session.id IN (" in filt
 
 
 class FakeAx:
@@ -170,7 +178,7 @@ def test_root_filter_is_parenthesized_before_the_label_filter(monkeypatch, tmp_p
 def test_window_is_drawn_from_every_slice(monkeypatch, tmp_path):
     fake = FakeAx(plentiful())
     run(monkeypatch, tmp_path, fake, "--skip-population")
-    assert len(fake.filters) == 4 * 4  # 4 labels x 4 slices
+    assert len([f for f in fake.filters if not is_turn_count(f)]) == 4 * 4  # 4 labels x 4 slices
 
 
 def test_periods_without_the_column_are_skipped_and_listed(monkeypatch, tmp_path):
@@ -600,5 +608,73 @@ def test_random_enumeration_supplies_label_counts_without_more_exports(monkeypat
     assert st["good|disagree"]["population"] == 4 and st["good|agree"]["population"] == 16
     assert st["bad|agree"]["population"] == 20 and st["bad|disagree"]["population"] == 0
     # Only the random enumeration ran at full page size; no per-label or disagreement counts.
-    full = [f for f, l in zip(fake.filters, fake.limits) if l == plan.PAGE]
+    full = [f for f, l in zip(fake.filters, fake.limits) if l == plan.PAGE and not is_turn_count(f)]
     assert full and all(f.endswith("session_eval.my_eval.label IS NOT NULL") for f in full)
+
+
+# ---------------------------------------------------------------------------
+# turn cap
+# ---------------------------------------------------------------------------
+
+def with_turns(spans, session, n):
+    """Give a session n turns: its labeled span plus n - 1 unlabeled root spans after it."""
+    first = next(s for s in spans if s["attributes"]["session.id"] == session)
+    t = datetime.fromisoformat(first["start_time"])
+    return spans + [{"name": "ROUTER-CHAT", "start_time": (t + timedelta(minutes=i + 1)).isoformat(),
+                     "attributes": {"session.id": session}, "context": {"trace_id": f"{session}-t{i}",
+                     "span_id": f"{session}-sp{i}"}, "evaluations": []} for i in range(n - 1)]
+
+
+def long_bad_sessions(n_long=15, turns=41):
+    spans = plentiful()
+    for i in range(n_long):
+        spans = with_turns(spans, f"s-bad-{i}", turns)
+    return spans
+
+
+def test_sessions_over_the_turn_cap_are_skipped_by_default(monkeypatch, tmp_path):
+    p = run(monkeypatch, tmp_path, FakeAx(long_bad_sessions()))
+    assert p["max_turns"] == plan.DEFAULT_MAX_TURNS and p["settings"]["max_turns"] == plan.DEFAULT_MAX_TURNS
+    bad = [r for r in p["records"] if r["sampled_as"] == "bad"]
+    assert len(bad) == 5 and all(int(r["session_id"].rsplit("-", 1)[1]) >= 15 for r in bad)
+    assert all(r["turns"] == 1 for r in p["records"])
+    assert next(s for s in p["summary"] if s["label"] == "bad")["skipped_over_max_turns"] == 15
+    assert "cover sessions of up to 40 turns only" in (tmp_path / "plan.md").read_text()
+
+
+def test_a_session_at_the_cap_is_kept(monkeypatch, tmp_path):
+    spans = with_turns(plentiful(per_label=5), "s-bad-0", 40)
+    p = run(monkeypatch, tmp_path, FakeAx(spans), "--per-label", "5")
+    assert next(r for r in p["records"] if r["session_id"] == "s-bad-0")["turns"] == 40
+
+
+def test_turn_cap_off_counts_no_turns(monkeypatch, tmp_path):
+    fake = FakeAx(long_bad_sessions())
+    p = run(monkeypatch, tmp_path, fake, "--max-turns", "0")
+    assert p["max_turns"] is None and not any(is_turn_count(f) for f in fake.filters)
+    assert "No turn cap" in (tmp_path / "plan.md").read_text()
+
+
+def test_random_frame_and_label_counts_leave_out_long_sessions(monkeypatch, tmp_path):
+    p = run(monkeypatch, tmp_path, FakeAx(long_bad_sessions()), "--random", "10")
+    st = {s["stratum"]: s for s in p["strata"]}
+    assert st["random"]["population"] == 80 - 15 and st["random"]["max_turns"] == plan.DEFAULT_MAX_TURNS
+    assert st["random"]["label_counts"]["bad"] == 5 and st["bad"]["population"] == 5
+    assert p["random_stream"]["skipped_over_max_turns"] == 15
+    assert "15 of 80 scored sessions" in (tmp_path / "plan.md").read_text()
+
+
+def test_populations_without_a_random_stream_leave_out_long_sessions(monkeypatch, tmp_path):
+    p = run(monkeypatch, tmp_path, FakeAx(long_bad_sessions()))
+    st = {s["stratum"]: s for s in p["strata"]}
+    assert st["bad"]["population"] == 5 and st["good"]["population"] == 20
+
+
+def test_turn_counts_split_batches_that_fill_a_page(monkeypatch):
+    spans = []
+    for i in range(3):
+        spans += [span(i, "good", START + timedelta(minutes=j), session=f"s{i}") for j in range(300)]
+    fake = FakeAx(spans)
+    monkeypatch.setattr(plan, "run_ax", fake)
+    turns = plan.count_turns("ax", "proj-1", "S", ROOT_FILTER, {f"s{i}": START.isoformat() for i in range(3)})
+    assert turns == {"s0": 300, "s1": 300, "s2": 300}

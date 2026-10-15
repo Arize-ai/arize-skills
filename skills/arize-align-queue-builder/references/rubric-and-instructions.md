@@ -18,7 +18,13 @@ Use a categorical config with optimization direction `NONE`, so the UI doesn't i
 
 ## Critique config
 
-Attach a second, free-text config (`critique_config_name` in `plan.json`, for example `my_eval-critique`) to both queues, and make a critique required in the instructions. A good critique says what was wrong or right and why, in enough detail to reuse as a few-shot example in the evaluator's prompt. One-line critiques are the most common mistake. They also make adjudication faster, because the reason behind each label is on the record.
+Attach a second, free-text config (`critique_config_name` in `plan.json`, for example `my_eval-critique`) to both queues. The critique is **optional**, because labeling time is the main cost of alignment. The instructions ask for one line in two cases, where it pays off most:
+- **Close calls**, where two labels seemed to fit. These are the records most likely to end up in adjudication.
+- **`cannot_judge`**, to say what evidence was missing.
+
+A useful line names the decisive turn and what decided it, like the judge's own explanation (for example "T4 saved a widget grouped by model; the user asked for grouping by project"). That makes adjudication faster.
+
+Critiques detailed enough to reuse as few-shot examples (Husain's "critique shadowing") are written later, during adjudication. The reviewer is already rereading those records, and only the ones picked as dev or few-shot examples need them. Don't require a critique on every label unless labeling time isn't a constraint.
 
 ```bash
 ax annotation-configs create freeform --name "CRITIQUE_CONFIG_NAME" --space SPACE -o json
@@ -57,10 +63,10 @@ Labels:
 - cannot_judge: the evidence needed to decide is missing or truncated. Use sparingly; say
   what is missing in the critique.
 
-Critique (required): in the critique field, say why you chose the label, citing the
-evidence, in a few sentences that someone else could check and reuse as an example.
-You may go back and change an earlier label if your reading of a definition changes;
-update its critique too.
+Critique (optional): if two labels seemed to fit, or you chose cannot_judge, add one line
+in the critique field naming the decisive turn and why, e.g. "T4 saved the widget grouped
+by model; the user asked for grouping by project". Otherwise the label alone is enough.
+You may go back and change an earlier label if your reading of a definition changes.
 
 Work in sittings of about 100 records at most. Take a break before continuing.
 
@@ -77,5 +83,5 @@ If two labels seem to fit, <tie-break rule from the template>.
 - The blindness line is present.
 - The length is under 5000 characters: `wc -c instructions.txt`.
 - The instructions carry a version line (for example `Instructions v2, 2026-10-06`). Pass the same text to the planner as `--instructions-version`, so each record in `plan.json` carries it. Change it whenever a definition changes. Labels made under the older version, on the labels whose definitions changed, then need re-review.
-- The critique line and the sitting limit are present.
+- The optional-critique line and the sitting limit are present.
 - Spot-check 2–3 planned records with **arize-trace**: open the session and confirm an annotator could reach a label from what is visible. If not, the unit or the instructions need adjusting before creation.
