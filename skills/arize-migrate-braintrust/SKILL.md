@@ -43,7 +43,7 @@ Proceed with the task. If something fails, troubleshoot from the error:
 |------|-------|------|
 | Historical project logs / spans | **Yes** | `scripts/migrate_vendor_traces.py --vendor braintrust` |
 | Datasets | Yes | BTQL / API → `ax datasets create` |
-| Prompts | **Yes** | `GET /v1/prompt` → `ax prompts create` / `create_version` + labels |
+| Prompts | **Yes** | `GET /v1/prompt` → `ax prompts create` / `ax prompts create-version` / `ax prompts set-version-labels` |
 | Live traffic going forward | Separate | Point new traffic at AX after import (not part of this skill) |
 | Scorers / experiments | Recreate / re-run for now | Do not import old scores as AX experiment truth |
 
@@ -118,7 +118,7 @@ Ask **latest only** vs versions / environments. Then:
 1. For each prompt, fetch by id; use `version` / `environment` query params when importing history
 1. Map `prompt_data.prompt` messages → AX roles; flatten text blocks to `content` strings
 1. Infer `F_STRING` vs `MUSTACHE` from template syntax; ask if unclear
-1. `ax prompts create` then `create_version` oldest→newest; map Braintrust environments to AX labels when the user wants them
+1. `ax prompts create` then `ax prompts create-version` oldest→newest; map Braintrust environments to AX labels with `ax prompts set-version-labels VERSION_ID --label NAME` when the user wants them (version ID from the `create` or `create-version` output; repeat `--label`, since it replaces existing labels)
 1. Copy model/provider from prompt options when present; otherwise ask
 
 Skip non-prompt functions (tools/scorers) unless the user explicitly wants those recreated separately.

@@ -5,13 +5,13 @@ description: "INVOKE THIS SKILL for Arize Prompt Hub and `ax prompts` workflows:
 
 # Arize Prompts Skill
 
-> **`SPACE`** — `--space` flags accept a space **name** (e.g., `my-workspace`) or a base64 space **ID** (e.g., `U3BhY2U6...`). Find yours with `ax spaces list`.
+> **`SPACE`** — `--space` flags accept a space **name** (e.g., `my-workspace`) or a base64 space **ID** (e.g., `U3BhY2U6...`). Resolve a known name with `ax spaces get NAME`; `ax spaces list` is for human browsing.
 
 Official references (read the skill body first; open docs only if the user needs UI walkthroughs):
 - CLI: https://arize.com/docs/api-clients/cli/prompts
 - Creating prompts in the product (Prompt Playground, variables, params): https://arize.com/docs/ax/prompts/tutorial/create-a-prompt
 
-See [references/cli-prompts.md](references/cli-prompts.md) for full flag tables.
+For flags, run `ax prompts <sub> --help`. Gotchas and the messages shape: [references/cli-prompts.md](references/cli-prompts.md).
 
 ---
 
@@ -37,7 +37,7 @@ Each prompt includes:
 - **Messages** — an ordered chat transcript (system, user, assistant, tool roles) as stored JSON. Typically a system message for behavior and a user message as the template that receives dataset or runtime variables.
 - **Template variables** — **must** be written with **single curly braces** around each name: `{` + identifier + `}` (same shape as `{}` with the variable name inside), e.g. `{question}`, `{context}`. Filled at runtime by experiments or your app. Always use `--input-variable-format F_STRING` for this style. **Do not ask the user which variable format to use** — default to `F_STRING` unless the template clearly uses Mustache `{{...}}` (use `MUSTACHE`) or you need `NONE` for literal braces with no substitution.
 - **Provider and model** — the vendor and model this version targets. `--provider` is required by the CLI on every `create` and `create-version`. `--model` must always appear in commands this skill proposes — pick an explicit model string, propose a sensible default if unknown, and confirm before running.
-- **Invocation parameters** — optional model settings like temperature and max tokens, configured under Params in the UI. CLI flows still require provider and explicit model alongside messages and format.
+- **Invocation parameters** — optional model settings like temperature and max tokens (Params in the UI). On `create` / `create-version`, pass `--invocation-params` (JSON file or inline JSON); see `ax prompts create --help`.
 - **Version history** — every material change creates a new immutable version. Labels like `production` and `staging` are mutable pointers to specific versions so your app code never needs to change when you promote a new version.
 - **Version description** — the optional text on Save New Version in the Hub UI is the same concept as `--commit-message` in the CLI.
 
@@ -60,7 +60,7 @@ If a command fails:
 
 ### When you must ask the user first
 
-Prefer resolving gaps with `ax` (e.g. `ax spaces list`, `ax prompts list`, `ax prompts get`) instead of pausing. If something is still ambiguous or unsafe without confirmation, use this framing:
+Prefer resolving gaps with `ax` instead of pausing: when the prompt name is known, run `ax prompts get NAME_OR_ID --space SPACE` directly; `ax prompts list` is for human browsing. If something is still ambiguous or unsafe without confirmation, use this framing:
 
 1. **I found the arize-prompts skill in this repo**
 2. **A few clarifying questions before I invoke it:**
@@ -135,7 +135,7 @@ Once you have their template, propose the following in one block:
 | Prompt name | `--name` | Infer from context or ask |
 | Description | `--description` | Optional, one sentence |
 | Version description | `--commit-message` | Default: "Initial version" |
-| Tags | UI only | Not a CLI flag — suggest tags in prose and have user add them in Hub after create |
+| Tags | Hub UI | Suggest tags in prose; the user adds them in Hub after create |
 | Provider | `--provider` | Infer from their stack or ask |
 | Model | `--model` | Propose a sensible default e.g. `gpt-4o` |
 
@@ -336,7 +336,7 @@ ax prompts delete pr_abc123 --force
 ax prompts delete "old-prompt" --space SPACE --force
 ```
 
-### Step 4d: Duplicate (no `ax prompts duplicate` command)
+### Step 4d: Duplicate (`get` then `create`)
 
 Treat **Duplicate** as **get → extract → create** with a **new** `--name`:
 
@@ -369,23 +369,7 @@ Confirm the new name and space before `create`. Labels are **not** copied — us
 
 ## CLI quick reference
 
-| Goal | Command |
-|------|---------|
-| List prompts | `ax prompts list --space SPACE` |
-| Create | `ax prompts create --name NAME --space SPACE --provider PROVIDER --model MODEL --input-variable-format F_STRING --messages ...` |
-| Get (latest) | `ax prompts get NAME_OR_ID [--space SPACE]` |
-| Get by version | `ax prompts get NAME_OR_ID --version-id prv_...` |
-| Get by label | `ax prompts get NAME_OR_ID --label LABEL` |
-| New version | `ax prompts create-version NAME_OR_ID --provider PROVIDER --model MODEL --input-variable-format F_STRING --messages ...` |
-| List versions | `ax prompts list-versions NAME_OR_ID [--space SPACE]` |
-| Resolve label | `ax prompts get-version-by-label NAME_OR_ID --label LABEL [--space SPACE]` |
-| Set labels | `ax prompts set-version-labels VERSION_ID --label L ...` |
-| Remove label | `ax prompts remove-version-label VERSION_ID --label LABEL` |
-| Update description | `ax prompts update NAME_OR_ID --description "..." [--space SPACE]` |
-| Delete (all versions) | `ax prompts delete NAME_OR_ID [--space SPACE] --force` |
-| Duplicate (no single command) | `get -o json` → extract fields → `create` with new `--name` (see **Workflow D** step 4d) |
-
-For exhaustive flags and defaults, see [references/cli-prompts.md](references/cli-prompts.md).
+Run `ax prompts --help` for the command list and `ax prompts <sub> --help` for flags. To duplicate a prompt, use `ax prompts get -o json` then `ax prompts create` with a new `--name` (**Workflow D** step 4d).
 
 ---
 

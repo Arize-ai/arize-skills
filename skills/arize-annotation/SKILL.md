@@ -4,12 +4,12 @@ description: Creates and manages annotation configs (categorical, continuous, fr
 metadata:
   author: arize
   version: "1.0"
-compatibility: Requires the ax CLI (≥ 0.33.0) and a configured Arize profile.
+compatibility: Requires the ax CLI (≥ 0.39.0) and a configured Arize profile.
 ---
 
 # Arize Annotation Skill
 
-> **`SPACE`** — `--space` flags accept a space **name** (e.g., `my-workspace`) or a base64 space **ID** (e.g., `U3BhY2U6...`). Find yours with `ax spaces list`.
+> **`SPACE`** — `--space` flags accept a space **name** (e.g., `my-workspace`) or a base64 space **ID** (e.g., `U3BhY2U6...`). Resolve a known name with `ax spaces get NAME`; `ax spaces list` is for human browsing.
 
 This skill covers **annotation configs** (the label schema) and **annotation queues** (human review workflows), as well as programmatically annotating project spans via the Python SDK.
 
@@ -29,9 +29,7 @@ If an `ax` command fails, troubleshoot based on the error:
 
 ---
 
-## Concepts
-
-### What is an Annotation Config?
+## What is an Annotation Config?
 
 An **annotation config** defines the schema for a single type of human feedback label. Before anyone can annotate a span, dataset record, experiment output, or queue item, a config must exist for that label in the space.
 
@@ -39,11 +37,11 @@ An **annotation config** defines the schema for a single type of human feedback 
 |-------|-------------|
 | **Name** | Descriptive identifier (e.g. `Correctness`, `Helpfulness`). Must be unique within the space. |
 | **Type** | `CATEGORICAL` (pick from a list), `CONTINUOUS` (numeric range), or `FREEFORM` (free text). |
-| **Values** | For categorical: array of `{"label": str, "score": number}` pairs. |
+| **Values** | For categorical: label strings, one `--value` per label. |
 | **Min/Max Score** | For continuous: numeric bounds. |
-| **Optimization Direction** | Whether higher scores are better (`MINIMIZE`) or worse (`MAXIMIZE`). Used to render trends in the UI. |
+| **Optimization Direction** | `MAXIMIZE`, `MINIMIZE`, or `NONE`. Used to render trends in the UI. |
 
-### Where labels get applied (surfaces)
+## Where labels get applied (surfaces)
 
 | Surface | Typical path |
 |---------|----------------|
@@ -189,7 +187,7 @@ Repeat `--annotation-config-id` and `--annotator-email` to attach multiple confi
 
 ### Add Records
 
-Add records to an existing queue after creation. Records can come from spans (by project and time range) or dataset examples.
+Add records to an existing queue (`create` also accepts `--record-sources` for initial records).
 
 ```bash
 ax annotation-queues add-records NAME_OR_ID --space SPACE --record-sources sources.json
@@ -256,7 +254,7 @@ ax annotation-queues assign-record NAME_OR_ID RECORD_ID --email user@example.com
 ### Delete Records
 
 ```bash
-ax annotation-queues delete-records NAME_OR_ID --space SPACE
+ax annotation-queues delete-records NAME_OR_ID --space SPACE --record-id REC_1 --record-id REC_2   # max 100; --force skips confirmation
 ```
 
 ---
@@ -331,11 +329,16 @@ The `ax` CLI provides batch annotation commands for writing annotations at scale
 
 | Resource | Command | Skill |
 |----------|---------|-------|
-| Spans | `ax spans annotate PROJECT --file annotations.json` | **arize-trace** |
-| Dataset examples | `ax datasets annotate-examples NAME_OR_ID --file annotations.json` | **arize-dataset** |
-| Experiment runs | `ax experiments annotate-runs NAME_OR_ID --file annotations.json --dataset DATASET` | **arize-experiment** |
+| Spans | `ax spans annotate PROJECT --space SPACE --file annotations.json` | **arize-trace** |
+| Dataset examples | `ax datasets annotate-examples NAME_OR_ID --space SPACE --file annotations.json` | **arize-dataset** |
+| Experiment runs | `ax experiments annotate-runs NAME_OR_ID --space SPACE --dataset DATASET --file annotations.json` | **arize-experiment** |
 
-All three commands support `--space SPACE`. See the linked skills for full flag tables and file format details.
+Gotchas:
+- `ax spans annotate`: one span ID not found in the time window rejects the entire request.
+- `ax datasets annotate-examples` and `ax experiments annotate-runs`: unmatched record IDs are silently ignored.
+- `ax experiments annotate-runs`: omit `--dataset` for a standalone experiment and pass `--space`.
+
+See the linked skills for file format details.
 
 ---
 

@@ -43,7 +43,7 @@ Proceed with the task. If something fails, troubleshoot from the error:
 |------|-------|------|
 | Historical runs / traces | **Yes** | `scripts/migrate_vendor_traces.py --vendor langsmith` → Arize OTLP |
 | Datasets | Yes | LangSmith export → `ax datasets create` |
-| Prompts | **Yes** | LangSmith Prompt Hub API → `ax prompts create` / `create_version` + labels |
+| Prompts | **Yes** | LangSmith Prompt Hub API → `ax prompts create` / `ax prompts create-version` / `ax prompts set-version-labels` |
 | Live traffic going forward | Separate | Point new traffic at AX after import (not part of this skill) |
 | Evaluators / experiments | Recreate / re-run for now | Do not import old scores as AX experiment truth |
 
@@ -88,7 +88,7 @@ Target AX space + **destination project name** (create with `ax projects create`
 
 Locate this installed skill's root and run its bundled commands by absolute path, so they work from any workspace. Check the chosen interpreter is Python 3.10 or later. Create an isolated environment if needed and install the [helper dependencies](scripts/requirements.txt) (`langsmith`).
 
-`--limit` is the number of **root runs** (newest first). The importer over-fetches and includes each selected root's children so `--limit` does not split a tree. If a parent still falls outside the fetched window, the script warns on stderr and promotes that span to a root — raise `--limit` (or omit it) instead of treating the orphan as a real root.
+`--limit` is the number of **root runs** (newest first). The importer over-fetches and includes each selected root's children so `--limit` does not split a tree. If a parent still falls outside the fetched window, the script warns on stderr and promotes that span to a root — raise `--limit` (default 200) instead of treating the orphan as a real root.
 
 ```bash
 export ARIZE_API_KEY=... ARIZE_SPACE_ID=... LANGSMITH_API_KEY=...
@@ -125,8 +125,8 @@ Ask whether to import **latest only** or **all commits**. Then:
 1. For each prompt: `list_prompt_commits` / pull commit (or `latest` / tag)
 1. Map LangChain-style messages → AX `LLMMessageRequest` roles (`SYSTEM` / `USER` / `ASSISTANT` / `TOOL`)
 1. Infer `input_variable_format`: `{var}` → `F_STRING`, `{{var}}` → `MUSTACHE`; ask if mixed
-1. `ax prompts create` (or Python `client.prompts.create`) for the oldest commit, then `create_version` for newer commits in chronological order
-1. Map LangSmith tags (e.g. `prod`) → AX labels via `set_labels` when present
+1. `ax prompts create` (or Python `client.prompts.create`) for the oldest commit, then `ax prompts create-version` for newer commits chronologically
+1. Map LangSmith tags (e.g. `prod`) → AX labels with `ax prompts set-version-labels VERSION_ID --label NAME` when present (version ID from the `create` or `create-version` output; repeat `--label`, since it replaces existing labels)
 1. Provider/model: copy from the manifest when available; otherwise ask or use a sensible default the user confirms
 
 Do not invent prompt text. If a commit is a non-chat / tool-heavy manifest the agent cannot flatten, import the readable message template and note what was skipped.

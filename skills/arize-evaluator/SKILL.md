@@ -25,7 +25,7 @@ If an `ax` command fails, troubleshoot based on the error:
 - Space unknown → see [Space](references/ax-profiles.md#space)
 - LLM provider call fails (missing provider credentials) → run `ax ai-integrations list --space SPACE` to check for platform-managed credentials. If none exist, use the **arize-ai-provider-integration** skill — never ask the user to paste a provider key into chat.
 - **Security:** Never read `.env` files or search the filesystem for credentials. Exception: the non-secret `ARIZE_SPACE_ID` line (see [Space](references/ax-profiles.md#space)). Use `ax profiles` for Arize credentials and `ax ai-integrations` for LLM provider keys. Never ask the user to paste secrets into chat. For missing credentials, see [references/ax-profiles.md](references/ax-profiles.md).
-- **CRITICAL — Never fabricate evaluation results:** If an evaluation task fails, is cancelled, or produces no scores, report the failure clearly and explain what went wrong. Do NOT perform a "manual evaluation," invent quality scores, estimate percentages, or present any agent-generated analysis as if it came from the Arize evaluation system. Instead suggest: (1) fix the identified issue and retry, (2) try running from the Arize UI, (3) verify integration credentials with `ax ai-integrations list`, (4) contact support at https://arize.com/support
+- **CRITICAL — Never fabricate evaluation results:** If an evaluation task fails, is cancelled, or produces no scores, report the failure clearly and explain what went wrong. Do NOT perform a "manual evaluation," invent quality scores, estimate percentages, or present any agent-generated analysis as if it came from the Arize evaluation system. Instead suggest: (1) fix the identified issue and retry, (2) try running from the Arize UI, (3) verify integration credentials with `ax ai-integrations list`, (4) contact support at https://arize.com/contact/
 
 ---
 
@@ -49,6 +49,8 @@ Evaluators are **versioned** — every prompt or model change creates a new immu
 
 **Code evaluators** are the deterministic alternative — no AI integration or model, just Python. They run as a class subclassing `CodeEvaluator`, not a bare function, and have their own strict import-path and `evaluate()`-signature contract. Getting either wrong makes a run cancel silently at `0/0/0`. See "Custom Python code evaluators" in [references/cli-reference.md](references/cli-reference.md) before writing one.
 
+**Remote evaluators** call a customer-hosted HTTP endpoint and are created with `ax evaluators create-evaluator remote`, which takes an evaluator integration ID; run `ax evaluators create-evaluator remote --help` for its flags.
+
 ### What is a Task?
 
 A **task** is how you run one or more evaluators against real data. Tasks are attached to a **project** (live traces/spans) or a **dataset** (experiment runs). A task contains:
@@ -65,7 +67,7 @@ A **task** is how you run one or more evaluators against real data. Tasks are at
 
 ## Data Granularity
 
-Set `--data-granularity` when creating the evaluator (`ax evaluators create-template-evaluator` / `create-code-evaluator`), not on the task — it controls what unit of data that evaluator scores whenever it runs against a **project task** (not dataset/experiment tasks — those evaluate experiment runs directly). It defaults to `span`.
+Set `--data-granularity` when creating the evaluator (`ax evaluators create-evaluator template` / `create-evaluator code`), not on the task — it controls what unit of data that evaluator scores whenever it runs against a **project task** (not dataset/experiment tasks — those evaluate experiment runs directly). It defaults to `span`.
 
 | Level | What it evaluates | Use for | Result column prefix |
 |-------|-------------------|---------|---------------------|
@@ -89,7 +91,7 @@ At span or trace granularity, `{conversation}` is treated as a regular template 
 
 ### Multi-evaluator tasks
 
-A task can contain evaluators at different granularities. At runtime the system uses the **highest** granularity (session > trace > span) for data fetching and automatically **splits into one child run per evaluator**. A per-evaluator `query_filter` in the evaluators JSON is currently ignored at run time ([Arize-ai/arize#89044](https://github.com/Arize-ai/arize/issues/89044)); filter with the task-level `--query-filter` instead.
+A task can contain evaluators at different granularities. At runtime the system uses the **highest** granularity (session > trace > span) for data fetching and automatically **splits into one child run per evaluator**. Filter with the task-level `--query-filter`, which applies to every evaluator in the task.
 
 ---
 
@@ -105,13 +107,13 @@ Use this when the user says something like *"create an evaluator for my Playgrou
 
 ### Step 1: Confirm the project name
 
-`ax spans export` accepts a project name with `--space SPACE` — no ID lookup needed. If you don't know the project name, list available projects:
+`ax spans export` accepts a project name with `--space SPACE` — no ID lookup needed. To confirm a known name or get its base64 `"id"` (use the `id` when a name hits a validation error), fetch it directly:
 
 ```bash
-ax projects list --space SPACE -o json
+ax projects get PROJECT --space SPACE -o json
 ```
 
-Find the entry whose `"name"` matches (case-insensitive) and use that name as `PROJECT` in subsequent commands. If you later hit a validation error with a name, fall back to using the project's `"id"` (a base64 string) instead.
+When the project name is unknown, `ax projects list --space SPACE -o json` lists projects for browsing; use the matching `"name"` as `PROJECT`.
 
 ### Step 2: Understand what to evaluate
 
@@ -146,7 +148,7 @@ If a suitable integration exists, note its ID. If not, create one using the **ar
 Use the template design best practices below. Keep the evaluator name and variables **generic** — the task (Step 6) handles project-specific wiring via `column_mappings`.
 
 ```bash
-ax evaluators create-template-evaluator \
+ax evaluators create-evaluator template \
   --name "Hallucination" \
   --space SPACE \
   --template-name "hallucination" \
@@ -364,7 +366,7 @@ If the user insists on more than two choices, that's fine — but recommend bina
 
 ### 3. Be explicit about what the model must return
 
-The template must tell the judge model to respond with **only** the label string — nothing else. The label strings in the prompt must **exactly match** the labels in `--classification-choices` (same spelling, same casing).
+The template must tell the judge model to respond with **only** the label string — nothing else. Set `--classification-choices` for label output; the label strings in the prompt must **exactly match** its keys (same spelling, same casing). Omit `--classification-choices` only for freeform (non-classification) output.
 
 Good:
 ```
@@ -396,10 +398,6 @@ Single quotes prevent the shell from interpolating `{variable}` placeholders. Do
 --template "Judge this: {input} → {output}"
 ```
 
-### 7. Always set `--classification-choices` to match your template labels
-
-The labels in `--classification-choices` must exactly match the labels referenced in `--template` (same spelling, same casing). Omitting `--classification-choices` causes task runs to fail with "missing rails and classification choices."
-
 ---
 
 ## Troubleshooting
@@ -408,31 +406,27 @@ The labels in `--classification-choices` must exactly match the labels reference
 |---------|----------|
 | `ax: command not found` | See [references/ax-setup.md](references/ax-setup.md) |
 | `401 Unauthorized` | API key may not have access to this space. Verify at https://app.arize.com/admin > API Keys |
-| `Evaluator not found` | `ax evaluators list --space SPACE` |
-| `Integration not found` | `ax ai-integrations list --space SPACE` |
-| `Task not found` | `ax tasks list --space SPACE` |
+| `Evaluator not found` | `ax evaluators get NAME_OR_ID --space SPACE` (`ax evaluators list --space SPACE` is for human browsing) |
+| `Integration not found` | `ax ai-integrations get NAME_OR_ID --space SPACE` (`list` is for human browsing) |
+| `Task not found` | `ax tasks get TASK_ID` (`ax tasks list --space SPACE` is for human browsing) |
 | `project and dataset-id are mutually exclusive` | Use only one when creating a task |
 | `experiment-ids required for dataset tasks` | Add `--experiment-ids` to `create` and `trigger-run` |
 | `sampling-rate only valid for project tasks` | Remove `--sampling-rate` from dataset tasks |
-| `project '...' not found` or validation error on `ax spans export` | Add `--space SPACE`; if it persists, look up the base64 project ID via `ax projects list --space SPACE -o json` and use the `id` field instead |
-| Template validation errors | Use single-quoted `--template '...'` in bash; single braces `{var}`, not `{{var}}` (the CLI's `--help` wrongly says `{{variable}}`) |
+| `project '...' not found` or validation error on `ax spans export` | Add `--space SPACE`; if it persists, look up the base64 project ID via `ax projects get PROJECT --space SPACE -o json` and use the `id` field instead |
+| Template validation errors | Use single-quoted `--template '...'` in bash; single braces `{var}`, not `{{var}}` |
 | Run stuck in `pending` | `ax tasks get-run RUN_ID`; then `ax tasks cancel-run RUN_ID` |
-| Run `cancelled` ~1s | Integration credentials invalid — check AI integration |
-| Run `cancelled` ~3min | Found spans but LLM call failed — wrong model name or bad key |
 | Run `completed`, 0 spans | Widen time window; eval index may not cover older data |
-| No scores in UI | Fix `column_mappings` to match real paths on your spans/runs |
 | Scores look wrong | Add `--include-explanations` and inspect judge reasoning on a few samples |
-| Evaluator cancels on wrong span kind | Match `query_filter` and `column_mappings` to LLM vs CHAIN spans |
 | Time format error on `trigger-run` | Use `2026-03-21T09:00:00` — no trailing `Z` |
-| Run failed: "missing rails and classification choices" | Add `--classification-choices '{"label_a": 1, "label_b": 0}'` to `ax evaluators create-template-evaluator` — labels must match the template |
+| Run failed: "missing rails and classification choices" | Add `--classification-choices '{"label_a": 1, "label_b": 0}'` on `ax evaluators create-evaluator template` (new) or `create-evaluator-version template` (existing) — labels must match the template |
 | Run `completed`, all spans skipped | Query filter matched spans but column mappings are wrong or template variables don't resolve — export a sample span and verify paths |
 | `query_filter` set but 0 spans scored, or `No data found` | Use `attributes.openinference.span.kind`, not `span_kind`. Custom attributes may not be indexed. Remove the filter to confirm spans exist in the window. |
-| Spans of the wrong kind scored | The per-evaluator `query_filter` is ignored ([Arize-ai/arize#89044](https://github.com/Arize-ai/arize/issues/89044)); move it to the task's `--query-filter` |
+| Spans of the wrong kind scored | Set the span-kind filter on the task's `--query-filter` rather than a per-evaluator `query_filter` |
 | Custom **code** evaluator run cancels ~3s with `0/0/0` (successes/errors/skipped) | Wrong import path or `evaluate()` signature — see the "CRITICAL" callout under **Custom Python code evaluators** in [references/cli-reference.md](references/cli-reference.md). Must import from `arize.experimental.datasets.experiments.evaluators.base` (not `arize.experiments`) and declare named `evaluate()` params, not just `**kwargs`. |
 
 ### Diagnosing cancelled runs
 
-When a task run reports status `cancelled`, work through the ordered checklist (credentials → model name → column-mapping/path checks → time window → span kind → variable resolution) in [references/troubleshooting.md](references/troubleshooting.md).
+For cancelled runs (~1s or ~3min), wrong span kind, and column-mapping mismatches, work through the ordered checklist (credentials → model name → column-mapping/path checks → time window → span kind → variable resolution) in [references/troubleshooting.md](references/troubleshooting.md).
 
 ---
 

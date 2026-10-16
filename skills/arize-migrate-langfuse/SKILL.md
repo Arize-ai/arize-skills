@@ -44,7 +44,7 @@ Proceed with the task. If something fails, troubleshoot from the error:
 |------|-------|------|
 | Historical observations / traces | **Yes** | `scripts/migrate_vendor_traces.py --vendor langfuse` |
 | Datasets | Yes | Public API → `ax datasets create` |
-| Prompts | **Yes** | `GET /api/public/v2/prompts` → `ax prompts create` / `create_version` + labels |
+| Prompts | **Yes** | `GET /api/public/v2/prompts` → `ax prompts create` / `ax prompts create-version` / `ax prompts set-version-labels` |
 | Live traffic going forward | Separate | Point new traffic at AX after import (not part of this skill) |
 | Evaluators / experiments | Recreate / re-run for now | Do not import old scores as AX experiment truth |
 
@@ -121,7 +121,7 @@ Ask **production/latest only** vs **all versions**. Then:
 1. `GET /api/public/v2/prompts/{name}?version=N` (or `label=`) for each version to import
 1. Map Langfuse `text` prompts → a single AX message; map `chat` prompts → role/content arrays (`SYSTEM` / `USER` / `ASSISTANT`)
 1. Infer `F_STRING` vs `MUSTACHE`; ask if mixed
-1. Create the prompt, then `create_version` in version order; apply Langfuse labels (`production`, `staging`, …) with `set_labels`
+1. `ax prompts create`, then `ax prompts create-version` in version order; apply Langfuse labels (`production`, `staging`, …) with `ax prompts set-version-labels VERSION_ID --label NAME` (version ID from the `create` or `create-version` output; repeat `--label`, since it replaces existing labels)
 1. Copy model/config from Langfuse prompt config when present; otherwise ask
 
 ### Step 5 — Evaluators / experiments

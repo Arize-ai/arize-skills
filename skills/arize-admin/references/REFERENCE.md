@@ -4,7 +4,7 @@
 
 ```bash
 # 1. Get the org ID
-ax organizations list -o json
+ax organizations get "Platform Team" -o json
 
 # 2. Create a space for the team
 ax spaces create --name "team-alpha" --organization-id ORG_ID
@@ -26,7 +26,7 @@ ax users create \
   --invite-mode EMAIL_LINK
 
 # 6. Get the user's global ID
-ax users list --email "jane@example.com" -o json
+ax users get jane@example.com -o json
 
 # 7. Add the user to the org
 ax organizations add-user "Platform Team" --user-id USER_ID --role MEMBER
@@ -58,13 +58,13 @@ Use the `id` field (base64 string like `Um9sZTo1...`) in your SAML `values.yaml`
 
 ```bash
 # 1. Find the project ID
-ax projects list -l 100 -o json --space "team-alpha"
+ax projects get PROJECT_NAME --space "team-alpha" -o json
 
 # 2. Restrict the project (excludes space-level roles)
 ax resource-restrictions restrict --resource-id PROJECT_GLOBAL_ID
 
 # 3. Find the user's global ID
-ax users list --email "jane@example.com" -o json
+ax users get jane@example.com -o json
 
 # 4. Find the role ID to assign
 ax roles list --is-custom -o json
@@ -107,7 +107,7 @@ ax api-keys list --status ACTIVE -o json
 
 ```bash
 # 1. Find the user's global ID
-ax users list --email "jane@example.com" -o json
+ax users get jane@example.com -o json
 
 # 2. Confirm with the user: "Delete jane@example.com? This will cascade-remove
 #    all org/space memberships, API keys, and role bindings."
@@ -131,8 +131,8 @@ ax api-keys create-service-key --name "tenant-beta-key" --assignments '[{"org_id
 ax api-keys list --key-type SERVICE -o json   # find KEY_ID by name
 ax api-keys revoke KEY_ID --force
 
-# Rotate a key (zero-downtime, same scope)
-ax api-keys refresh KEY_ID
+# Rotate a key (same scope); --grace-period-seconds keeps the old key valid while clients switch over
+ax api-keys refresh KEY_ID --grace-period-seconds 3600
 ```
 
 Service keys can only write traces to their scoped space — they cannot access other spaces or perform admin operations.
@@ -150,4 +150,4 @@ Service keys can only write traces to their scoped space — they cannot access 
 | Role create fails with duplicate name | Name already in use | Use `ax roles list --is-custom` to find the existing role |
 | Service key create fails | `--assignments` malformed or references a nonexistent org/space | Verify org ID with `ax organizations list -o json` and space with `ax spaces list`; `--assignments` is required for `create-service-key` |
 | Key value not saved | Raw key was not captured at creation | Refresh the key: `ax api-keys refresh KEY_ID` |
-| `Unknown command delete` on `ax api-keys` | `delete` was removed; use `revoke` instead | `ax api-keys revoke KEY_ID --force` |
+| `No such command 'delete'` on `ax api-keys` | Keys are invalidated with `revoke` | `ax api-keys revoke KEY_ID --force` |

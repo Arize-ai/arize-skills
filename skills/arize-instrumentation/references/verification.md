@@ -11,7 +11,7 @@ Do not probe `ax` by trial and error. Follow this fixed sequence, and lean on th
 3. Prefer a targeted lookup by trace ID, verifying against the same credential context the app exported to: same space, endpoint/region, and project.
 4. Trace-ID lookups are immediately consistent once the trace is ingested. If the trace is not found after a few seconds, treat it as an emission/flush problem first, not index lag.
 
-Treat known CLI quirks as expected, not bugs to debug: non-JSON banner/notice lines mixed into stdout, and the default `-l` 500-span cap.
+Treat known CLI quirks as expected, not bugs to debug: non-JSON banner/notice lines mixed into stdout, and the default `--limit` of 100 spans.
 
 ## Emission vs. rejection
 
