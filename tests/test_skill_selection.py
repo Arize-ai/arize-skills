@@ -241,6 +241,17 @@ SPECIFIC_PROMPTS = [
         ["arize-ai-provider-integration"],
         ["specific", "ai-provider-integration"],
     ),
+    # arize-align-history-backfill
+    (
+        "Score sessions from before my evaluator's continuous task started so I can sample more metric_wrong examples",
+        ["arize-align-history-backfill"],
+        ["specific", "align-history-backfill"],
+    ),
+    (
+        "Backfill my L2 evaluator on last quarter's traces using the same admission filter as the production task",
+        ["arize-align-history-backfill"],
+        ["specific", "align-history-backfill"],
+    ),
     # arize-compliance-audit
     (
         "Audit my AI app for EU AI Act compliance",
