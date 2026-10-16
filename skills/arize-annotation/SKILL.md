@@ -344,6 +344,7 @@ All three commands support `--space SPACE`. See the linked skills for full flag 
 - **arize-trace**: Export spans to find span IDs and time ranges; batch annotate spans via `ax spans annotate`
 - **arize-dataset**: Find dataset IDs and example IDs; batch annotate examples via `ax datasets annotate-examples`
 - **arize-evaluator**: Automated LLM-as-judge alongside human annotation
+- **arize-align-evaluator**: Use a completed queue as ground truth to align an LLM-as-judge evaluator
 - **arize-experiment**: Experiments tied to datasets and evaluation workflows; batch annotate runs via `ax experiments annotate-runs`
 - **arize-prompts**: Manage prompt templates; annotate prompt outputs for quality tracking
 - **arize-link**: Deep links to annotation configs and queues in the Arize UI
