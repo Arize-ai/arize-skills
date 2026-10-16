@@ -93,7 +93,7 @@ ax spans export PROJECT --space SPACE --filter "name = 'ChatCompletion'" -l 10 -
 
 ```bash
 # Export all spans in a trace
-ax spans export PROJECT --space SPACE --trace-id TRACE_ID
+ax spans export PROJECT --space SPACE --trace-id TRACE_ID --stdout > spans.json
 
 # Export a single span
 ax spans export PROJECT --space SPACE --span-id SPAN_ID
@@ -106,16 +106,16 @@ ax spans export PROJECT --space SPACE --span-id SPAN_ID
 jq '.[0] | {
   messages: .attributes.llm.input_messages,
   model: .attributes.llm.model_name
-}' trace_*/spans.json
+}' spans.json
 
 # Extract the system prompt specifically
-jq '[.[] | select(.attributes.llm.input_messages.roles[]? == "system")] | .[0].attributes.llm.input_messages' trace_*/spans.json
+jq '[.[] | select(.attributes.llm.input_messages.roles[]? == "system")] | .[0].attributes.llm.input_messages' spans.json
 
 # Extract prompt template and variables
-jq '.[0].attributes.llm.prompt_template' trace_*/spans.json
+jq '.[0].attributes.llm.prompt_template' spans.json
 
 # Extract from input.value (fallback for non-structured prompts)
-jq '.[0].attributes.input.value' trace_*/spans.json
+jq '.[0].attributes.input.value' spans.json
 ```
 
 ### Reconstruct the prompt as messages
@@ -235,7 +235,7 @@ jq '[.[] | select(.attributes.openinference.span.kind == "LLM") | {
   output: .attributes.output.value,
   status: .status_code,
   model: .attributes.llm.model_name
-}]' trace_*/spans.json
+}]' spans.json
 ```
 
 ### Applying the revised prompt
@@ -367,8 +367,8 @@ When optimizing prompts that use template variables:
    ```
 2. Export and inspect the retriever + LLM spans together:
    ```bash
-   ax spans export PROJECT --space SPACE --trace-id TRACE_ID
-   jq '[.[] | {kind: .attributes.openinference.span.kind, name, input: .attributes.input.value, output: .attributes.output.value}]' trace_*/spans.json
+   ax spans export PROJECT --space SPACE --trace-id TRACE_ID --stdout > spans.json
+   jq '[.[] | {kind: .attributes.openinference.span.kind, name, input: .attributes.input.value, output: .attributes.output.value}]' spans.json
    ```
 3. Check if the retrieved context actually contained the answer
 4. Add grounding instructions to the system prompt: "Only use information from the provided context. If the answer is not in the context, say so."
@@ -385,4 +385,4 @@ When optimizing prompts that use template variables:
 | Optimization makes things worse | Check for overfitting -- the meta-prompt may have memorized test data. Ensure few-shot examples are synthetic |
 | No eval/annotation columns | Run evaluations first (via Arize UI or SDK), then re-export |
 | Experiment output column not found | The column name is `{experiment_name}.output` -- check exact experiment name via `ax experiments get` |
-| `jq` errors on span JSON | Ensure you're targeting the correct file path (e.g., `trace_*/spans.json`) |
+| `jq` errors on span JSON | Ensure you're targeting the correct file path (e.g., `spans.json` from `--stdout > spans.json`) |
