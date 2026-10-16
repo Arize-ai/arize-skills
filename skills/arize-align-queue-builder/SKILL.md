@@ -149,9 +149,11 @@ Then ask the user to approve or adjust. **Do not create anything in the same tur
    # ...then the same for the gold queue with record_sources.create.json and each record_sources.add_N.json
    ```
 
+   For session evaluators, the source files hold `SESSION` records, so each record is the whole session the evaluator graded and labels land on the session. `ax` help lists only `SPAN` and `EXAMPLE`, but `ax` 0.38+ accepts `SESSION`. A span record opens on one turn, and annotators then judge that turn instead of the session.
+
    Instructions are limited to 5000 characters. Create queues one at a time; if a call fails part way, check what exists (`ax annotation-configs get`, `ax annotation-queues get`) before retrying, so nothing is created twice.
 4. **Hide evaluator output.** ax can't set a queue's Annotator Columns, so ask the user to set them in the Arize UI and check one record as an annotator: [Keeping labelers blind](references/rubric-and-instructions.md#keeping-labelers-blind).
-5. **Verify.** Run `ax annotation-queues list-records QUEUE --space SPACE --limit 100 -o json` for each queue. Confirm the record counts match the plan, every planned span ID is present, and no session appears twice. If any are missing, report which ones. Re-run `add-records` with the plan's source file that holds them, or explain why they were dropped.
+5. **Verify.** Run `ax annotation-queues list-records QUEUE --space SPACE --limit 100 -o json` for each queue. Confirm the record counts match the plan, every planned session ID (span ID for span evaluators) is present, and no session appears twice. If any are missing, report which ones. Re-run `add-records` with the plan's source file that holds them, or explain why they were dropped.
 
 ## Phase 6: Check partway, then top up
 
@@ -200,7 +202,7 @@ python3 SKILL_ROOT/scripts/plan_queue.py --space SPACE \
 | `No spans found` for a label | The evaluator has not stored that label in the window. Widen `--days`, check the column name (`<prefix>.<template_config.name>.label`), or backfill older sessions with **arize-align-history-backfill**. |
 | Export with the task's full filter returns nothing | Session task filters can combine conditions on different spans of a session. Use the root-span condition alone as `--root-filter`; the stored-label filter already restricts candidates to admitted units. |
 | Candidates cluster on a few days | A backfill scored those days. The script draws evenly across `--slices` time windows; raise `--slices` or narrow `--days`. |
-| Planned records missing after create | Check `record_sources.json` covers their time window and project. Re-add the missing span IDs with `add-records`. |
+| Planned records missing after create | Check `record_sources.json` covers their time window and project. Re-add the missing session or span IDs with `add-records`. |
 | Script stops with "No part of the window has values for the eval column" | A wrong `--eval-name` or `--na-probe-eval`, a window the evaluator never scored, or a new column still indexing (20+ minutes after a run). Periods with no values are skipped, not fatal. |
 | `time range ... must not exceed 7 days` or `List should have at most 2 items` | A hand-built record source. Use the script's split files: `record_sources.create.json` for `create`, then `add-records` with each `record_sources.add_N.json`. |
 | `Annotator email not found or does not have access` | The address isn't a user in this space. Look it up with `ax users list --email NAME`. |
@@ -208,7 +210,8 @@ python3 SKILL_ROOT/scripts/plan_queue.py --space SPACE \
 | Intake stops on "plan a new queue" | The evaluator has a new version. Plan new queues for it; don't mix versions in one queue. |
 | Annotators can see evaluator labels or scores | Edit the queue's Annotator Columns in the Arize UI to leave out the eval columns; ax can't set them. Labels made while evals were visible aren't blind. |
 | `--random` draws fewer than asked | The window has fewer scored units than requested. Widen `--days`, or accept a wider interval and say so. |
-| Labels land on spans instead of the session | The level is chosen when annotating. Restate it in the instructions; **arize-align-evaluator** reads span, trace and session labels either way. |
+| Labels land on spans instead of the session | The queue holds span records. Rebuild it from a current plan, which writes `SESSION` records for session evaluators. Labels made on a span record judged one turn, not the session. |
+| `record_type` `SESSION` is rejected | The `ax` install or its arize SDK predates session records (SDK 8.56 works). Upgrade, and check `which -a ax`. |
 
 ---
 

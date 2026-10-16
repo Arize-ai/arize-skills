@@ -59,8 +59,9 @@ def is_turn_count(filt):
 class FakeAx:
     """Answers the ax calls plan_queue makes from an in-memory list of spans."""
 
-    def __init__(self, spans, queues=None, missing_before=None):
+    def __init__(self, spans, queues=None, missing_before=None, granularity="SESSION"):
         self.spans = spans
+        self.granularity = granularity
         self.queues = queues or {}
         self.missing_before = missing_before
         self.filters = []
@@ -69,7 +70,7 @@ class FakeAx:
     def __call__(self, ax, args, allow_empty=False, retries=5):
         if args[:2] == ["evaluators", "get"]:
             return {"id": "ev-1", "name": "My Eval", "version": {"id": "v-1", "template_config": {
-                "name": "my_eval", "data_granularity": "SESSION",
+                "name": "my_eval", "data_granularity": self.granularity,
                 "classification_choices": {"good": 1, "bad": 0, "wrong": 0, "not_applicable": None}}}}
         if args[:2] == ["projects", "get"]:
             return {"id": "proj-1", "name": "prod"}
@@ -231,7 +232,7 @@ def test_scope_probes_pick_records_the_other_evaluator_graded(monkeypatch, tmp_p
 def test_record_sources_respect_arize_limits(monkeypatch, tmp_path):
     p = run(monkeypatch, tmp_path, FakeAx(plentiful()))
     sources = json.loads((tmp_path / "record_sources.json").read_text())
-    assert sum(len(s["span_ids"]) for s in sources) == len(p["records"])
+    assert sum(len(s["session_ids"]) for s in sources) == len(p["records"])
     for s in sources:
         lo = datetime.fromisoformat(s["start_time"].replace("Z", "+00:00"))
         hi = datetime.fromisoformat(s["end_time"].replace("Z", "+00:00"))
@@ -241,6 +242,39 @@ def test_record_sources_respect_arize_limits(monkeypatch, tmp_path):
     assert all(len(b) <= plan.SOURCES_PER_CALL for b in batches)
     assert sum(len(b) for b in batches) == len(sources)
     assert "record_sources.create.json" in files
+
+
+def test_session_evaluators_get_session_records(monkeypatch, tmp_path):
+    # A session record shows and labels the whole session the evaluator graded, not one span of it.
+    p = run(monkeypatch, tmp_path, FakeAx(plentiful()), "--random", "5")
+    for name in ("record_sources.json", "random_sources.json"):
+        for s in json.loads((tmp_path / name).read_text()):
+            assert s["record_type"] == "SESSION" and "span_ids" not in s
+    planned = {r["session_id"] for r in p["records"]}
+    queued = {i for name in ("record_sources.json", "random_sources.json")
+              for s in json.loads((tmp_path / name).read_text()) for i in s["session_ids"]}
+    assert queued == planned
+    assert "SESSION sources" in (tmp_path / "plan.md").read_text()
+
+
+def test_span_evaluators_keep_span_records(monkeypatch, tmp_path):
+    p = run(monkeypatch, tmp_path, FakeAx(plentiful(), granularity="SPAN"))
+    sources = json.loads((tmp_path / "record_sources.json").read_text())
+    assert all(s["record_type"] == "SPAN" and "session_ids" not in s for s in sources)
+    assert {i for s in sources for i in s["span_ids"]} == {r["span_id"] for r in p["records"]}
+
+
+def test_session_calls_stay_within_100_session_ids():
+    t = START + timedelta(hours=1)
+    recs = [{"session_id": f"s{i}", "span_id": f"sp{i}", "start_time": (t + timedelta(minutes=i)).isoformat()}
+            for i in range(230)]
+    recs += [{"session_id": f"late{i}", "span_id": f"lsp{i}", "start_time": (t + timedelta(days=9, minutes=i)).isoformat()}
+             for i in range(30)]
+    sources, batches = plan.split_sources(recs, "proj-1", "SESSION")
+    assert all(len(s["session_ids"]) <= plan.SESSIONS_PER_CALL for s in sources)
+    assert all(len(b) <= plan.SOURCES_PER_CALL and sum(len(s["session_ids"]) for s in b) <= plan.SESSIONS_PER_CALL
+               for b in batches)
+    assert sorted(i for b in batches for s in b for i in s["session_ids"]) == sorted(r["session_id"] for r in recs)
 
 
 def test_stale_split_files_from_an_earlier_run_are_removed(monkeypatch, tmp_path):
@@ -494,11 +528,11 @@ def test_random_stream_is_uniform_over_scored_units_with_a_known_rate(monkeypatc
     # Drawn with no filter on the evaluator's label values, only on it having scored the unit.
     assert any(f == f"({ROOT_FILTER}) AND session_eval.my_eval.label IS NOT NULL" for f in fake.filters)
     # Its own sources, for the calibration queue; never mixed into the targeted queue's sources.
-    rand_ids = {r["span_id"] for r in rand}
+    rand_ids = {r["session_id"] for r in rand}
     rs = json.loads((tmp_path / "random_sources.json").read_text())
     ts = json.loads((tmp_path / "record_sources.json").read_text())
-    assert {i for s in rs for i in s["span_ids"]} == rand_ids
-    assert not rand_ids & {i for s in ts for i in s["span_ids"]}
+    assert {i for s in rs for i in s["session_ids"]} == rand_ids
+    assert not rand_ids & {i for s in ts for i in s["session_ids"]}
     assert (tmp_path / "random_sources.create.json").exists()
     assert "Random stream (measurement): 10 records" in (tmp_path / "plan.md").read_text()
 

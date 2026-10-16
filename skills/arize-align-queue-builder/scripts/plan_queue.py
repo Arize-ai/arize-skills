@@ -20,9 +20,10 @@ scope_probe, signal:NAME) and the instructions version it was queued under. Writ
   plan.md              Summary to show the user before anything is created
   plan.json            Every picked record, its stored labels and stream, and each stratum's
                        production count and selection rate (for `report --plan`)
-  record_sources.*     The targeted records as SPAN sources of at most 7 days, in batches of 2:
-                       pass record_sources.create.json to `ax annotation-queues create` and each
-                       record_sources.add_N.json to `add-records`
+  record_sources.*     The targeted records as sources of at most 7 days, in batches Arize accepts:
+                       SESSION records for session evaluators (the whole session, labeled as one),
+                       SPAN records otherwise. Pass record_sources.create.json to
+                       `ax annotation-queues create` and each record_sources.add_N.json to `add-records`
   random_sources.*     The random stream, split the same way, for the calibration queue
   config_values.json   Proposed categorical label values for the annotation config
 
@@ -73,6 +74,12 @@ PAGE = 500  # spans per export call
 SESSIONS_PER_EXPORT = 50  # sessions per turn-count export
 SOURCE_MAX_DAYS = 7  # time range of one queue record source
 SOURCES_PER_CALL = 2  # record sources per create/add-records call
+SESSIONS_PER_CALL = 100  # session IDs per create/add-records call, across its sources
+SPANS_PER_SOURCE = 500  # span IDs per record source
+# Session evaluators get SESSION records, so annotators see and label the whole session the evaluator graded,
+# not the one span that stands in for it. Everything else stays a SPAN record.
+RECORD_SOURCE = {"SESSION": ("SESSION", "session_ids", "session_id")}
+SPAN_SOURCE = ("SPAN", "span_ids", "span_id")
 CONFIG_NAME_MAX = 40  # annotation config name length
 
 # Settings saved in plan.json so each intake run samples the way the first plan did.
@@ -252,19 +259,38 @@ def parse_signal(v):
     return [name, filt.strip()]
 
 
-def split_sources(recs, project_id):
-    """SPAN record sources of at most SOURCE_MAX_DAYS each, in batches of SOURCES_PER_CALL."""
+def source_kind(gran):
+    """(record_type, ID field in the source, record key) for an evaluator granularity."""
+    return RECORD_SOURCE.get(gran, SPAN_SOURCE)
+
+
+def split_sources(recs, project_id, gran="SPAN"):
+    """Record sources of at most SOURCE_MAX_DAYS each, in batches Arize accepts: at most SOURCES_PER_CALL
+    sources per call, and for SESSION records at most SESSIONS_PER_CALL session IDs per call. A SESSION source's
+    window must cover each session's first trace; each record's start_time is its session's earliest scored span."""
+    record_type, ids_field, key = source_kind(gran)
+    per_call = SESSIONS_PER_CALL if record_type == "SESSION" else None
+    per_source = per_call or SPANS_PER_SOURCE
     timed = sorted(((parse_time(c["start_time"]), c) for c in recs if parse_time(c["start_time"])), key=lambda tc: tc[0])
     groups = []
     for t, c in timed:
-        if groups and t - groups[-1][0][0] <= timedelta(days=SOURCE_MAX_DAYS) - timedelta(minutes=10):
+        if (groups and t - groups[-1][0][0] <= timedelta(days=SOURCE_MAX_DAYS) - timedelta(minutes=10)
+                and len(groups[-1]) < per_source):
             groups[-1].append((t, c))
         else:
             groups.append([(t, c)])
-    sources = [{"record_type": "SPAN", "project_id": project_id,
+    sources = [{"record_type": record_type, "project_id": project_id,
                 "start_time": z(g[0][0] - timedelta(minutes=5)), "end_time": z(g[-1][0] + timedelta(minutes=5)),
-                "span_ids": [c["span_id"] for _, c in g]} for g in groups]
-    return sources, [sources[i:i + SOURCES_PER_CALL] for i in range(0, len(sources), SOURCES_PER_CALL)]
+                ids_field: [c[key] for _, c in g]} for g in groups]
+    batches = []
+    for s in sources:
+        last = batches[-1] if batches else None
+        if (last and len(last) < SOURCES_PER_CALL
+                and (per_call is None or sum(len(x[ids_field]) for x in last) + len(s[ids_field]) <= per_call)):
+            last.append(s)
+        else:
+            batches.append([s])
+    return sources, batches
 
 
 def write_sources(out_dir, prefix, sources, batches, adding):
@@ -625,8 +651,8 @@ def main():
 
     targeted = [c for c in picks if c["stream"] == "targeted"]
     randoms = [c for c in picks if c["stream"] == "random"]
-    sources, batches = split_sources(targeted, project["id"])
-    r_sources, r_batches = split_sources(randoms, project["id"])
+    sources, batches = split_sources(targeted, project["id"], gran)
+    r_sources, r_batches = split_sources(randoms, project["id"], gran)
     config_values = list(dict.fromkeys(choices + [l for l in a.not_applicable if l not in choices] + UNSCORABLE))
     stem = tc.get("name") or tname
     config_name = f"{stem[:CONFIG_NAME_MAX - 5]}-gold"
@@ -731,9 +757,10 @@ def main():
         out.append(f"- Intake: only units that started in this window and are not in the queues; the newest "
                    f"{a.settle_hours:g} hours are left for the next run. Its strata are tagged `@{run_id}`.")
     else:
-        out.append(f"- Record sources: {len(sources)} targeted and {len(r_sources)} random, each at most "
-                   f"{SOURCE_MAX_DAYS} days. Create each queue with its `*.create.json`, then run `add-records` "
-                   "with each of its `*.add_*.json`.")
+        out.append(f"- Record sources: {len(sources)} targeted and {len(r_sources)} random {source_kind(gran)[0]} "
+                   f"sources, each at most {SOURCE_MAX_DAYS} days. Create each queue with its `*.create.json`, then "
+                   "run `add-records` with each of its `*.add_*.json`."
+                   + (" Each record is a whole session, labeled at session level." if gran == "SESSION" else ""))
     short = [s for s in summary if s["shortfall"]]
     if short:
         out.append("- Not enough candidates for: " + ", ".join(f"`{s['label']}` (short {s['shortfall']})" for s in short)
@@ -752,6 +779,7 @@ def record_intake(a, base, run_id, run_plan, targets):
 
     A failed batch stops the run; the records already added are still recorded (with their strata's
     picked counts and rates reduced to match), and the cursor still moves, so no period is counted twice."""
+    _, ids_field, key = source_kind(run_plan["granularity"])
     added, failed = set(), None
     for queue, batches, files in targets:
         for b, path in zip(batches, files):
@@ -762,8 +790,8 @@ def record_intake(a, base, run_id, run_plan, targets):
             if proc.returncode != 0:
                 failed = (path, (proc.stderr + proc.stdout).strip()[:500])
                 break
-            added |= {sid for src in b for sid in src["span_ids"]}
-    records = [r for r in run_plan["records"] if r["span_id"] in added]
+            added |= {i for src in b for i in src[ids_field]}
+    records = [r for r in run_plan["records"] if r[key] in added]
     finalize_strata(run_plan["strata"], records)
     base["records"] = (base.get("records") or []) + records
     base["strata"] = (base.get("strata") or []) + run_plan["strata"]

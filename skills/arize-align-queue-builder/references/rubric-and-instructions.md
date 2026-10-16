@@ -39,6 +39,8 @@ The instructions line is not enough, because the Arize record view can show eval
 2. Open one record as an annotator and confirm no evaluator label, score or explanation is visible.
 3. If the record view still shows them, say so in the report, so its results aren't presented as blind.
 
+In a test on 2026-10-16, a `SESSION` record's session view showed no evaluation results. Still check one record as in step 2.
+
 Never pre-fill or highlight a label. Showing the evaluator's reasoning after a human submits is untested as a way to improve labels; if it's used, keep the first label.
 
 ## Instructions template

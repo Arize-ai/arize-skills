@@ -103,7 +103,7 @@ Arize's own "run continuously" option on a queue samples new spans at random, bu
 ## Candidate pool
 
 - **Time spread.** One export returns only the newest spans, so the script splits the window into `--slices` (default 4) and draws `pool / slices` from each slice.
-- **One span per unit.** Candidates are deduplicated by session ID (session evaluators), trace ID (trace evaluators) or span ID. Use `--root-filter` so each candidate is the unit's entry span. For a session, that is usually the root span of a turn.
+- **One span per unit.** Candidates are deduplicated by session ID (session evaluators), trace ID (trace evaluators) or span ID. Use `--root-filter` so each candidate is the unit's entry span. For a session, that is usually the root span of a turn. For session evaluators the queue record is the whole session (a `SESSION` record); the span only places the session's first trace in a record source's time window.
 - **Turn cap.** For session evaluators, sessions with more than `--max-turns` turns (default 40; root-filter spans per session) are dropped before anything is sampled: from the random frame, from each label's candidates, and from the production counts. The cap changes what the plan measures, not how it's weighted. Every selection rate and estimate is for sessions up to the cap, and `plan.md` reports how many scored sessions it left out. If that share is large, or long sessions are where the evaluator matters most, raise the cap or plan a small separate queue for them. Intake runs keep the plan's cap.
 - **Exclusions.** `--exclude-queue` removes any session, trace or span already in those queues, so units are never labeled twice across rounds.
 
