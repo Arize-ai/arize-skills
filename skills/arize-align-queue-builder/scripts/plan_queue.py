@@ -6,9 +6,10 @@ Builds two streams of records from a project:
   random    A uniform sample of the units the evaluator scored, drawn with a known probability and
             never filtered on its labels. This is the measurement set: agreement, the human ceiling
             and the evaluator's VALIDATED verdict come from it. It goes in its own calibration queue.
-  targeted  Records picked to find the evaluator's failures: a balanced quota per stored label
-            (provider disagreements first), judge-independent signals (--signal), not-applicable
-            checks and scope probes. Use them for failure finding and dev/few-shot examples.
+  targeted  A balanced quota per stored label, so every label has human examples (provider
+            disagreements first), plus optional judge-independent signals (--signal), not-applicable
+            checks and scope probes that look for errors. Use them for each label's precision and
+            dev/few-shot examples.
 
 Session evaluators skip sessions longer than --max-turns turns (default 40), which take far longer to label;
 both streams, their strata and the production counts then cover only sessions up to the cap.
@@ -677,9 +678,9 @@ def main():
                    + (f" Short {rand['shortfall']}: the window has too few scored units." if rand["shortfall"] else "")
                    + "\n")
     else:
-        out.append("**No random stream** (`--random 0`). Nothing in this plan can be used to measure agreement; "
-                   "the records only find failures.\n")
-    out += ["**Targeted stream (failure finding):**\n",
+        out.append("**No random stream** (`--random 0`). Nothing in this plan can be used to measure agreement, "
+                   "because targeted records aren't a random sample.\n")
+    out += ["**Targeted stream (label coverage):**\n",
             "| Picked as | Candidates | Picked | Provider disagreements | Distinct entry points | Shortfall |",
             "|---|---:|---:|---:|---:|---:|"]
     for s in summary:
@@ -701,7 +702,7 @@ def main():
         "(free text) for an optional one-line critique on close calls and `cannot_judge`.\n",
         "Caveats:",
         "- Targeted records were chosen using the evaluator's own labels and other signals, so they over-represent "
-        "rare labels and hard cases. Use them to find failures and for dev and few-shot examples; take agreement from "
+        "rare labels and hard cases. Use them to check each label's precision and for dev and few-shot examples; take agreement from "
         "the random stream. Agreement within a stored label is that label's precision, not recall.",
         "- Labelers must not see evaluator output. ax can't hide it: after creating each queue, set its Annotator "
         "Columns in the Arize UI to leave out every eval column, then open a record as an annotator to check.",

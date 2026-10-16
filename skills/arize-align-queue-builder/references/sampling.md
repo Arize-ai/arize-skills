@@ -7,9 +7,9 @@ A plan has two streams, and they answer different questions:
 | Stream | How records are chosen | Use it for | Queue |
 |---|---|---|---|
 | **Random** (measurement) | Uniformly from every unit the evaluator scored in the window, with a known probability, never filtered on its labels | Agreement, recall per label, the human–human ceiling, the VALIDATED verdict, weekly drift | Its own calibration queue |
-| **Targeted** (failure finding) | A quota per stored label, provider disagreements first, judge-independent signals, not-applicable checks and scope probes | Finding failures, choosing what to fix, dev and few-shot examples | The gold queue |
+| **Targeted** (label coverage) | A quota per stored label, plus optional provider disagreements, judge-independent signals, not-applicable checks and scope probes | Each label's precision, dev and few-shot examples, and (through the optional extras) finding errors | The gold queue |
 
-Agreement estimates assume the labeled records were drawn at random. Records chosen by the evaluator's own labels, or by where two copies disagree, are not, and they over-represent the cases the selection looked for. Many judge errors are also stable: the judge is wrong the same way on every run, so disagreement or flip signals never surface them, and only a random sample finds them. So the targeted stream finds failures, and the random stream measures.
+Agreement estimates assume the labeled records were drawn at random. Records chosen by the evaluator's own labels, or by where two copies disagree, are not, and they over-represent the cases the selection looked for. Many judge errors are also stable: the judge is wrong the same way on every run, so disagreement or flip signals never surface them, and only a random sample finds them. So the targeted stream gives every label examples to check, its optional extras look for errors, and the random stream measures.
 
 Every record in `plan.json` has a `routing_reason`, and the evaluator report should only treat `random` records as a measurement:
 

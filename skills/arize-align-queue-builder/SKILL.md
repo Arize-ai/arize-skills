@@ -1,6 +1,6 @@
 ---
 name: arize-align-queue-builder
-description: Builds Arize annotation queues that yield enough human labels to align one LLM-as-judge evaluator, with a random calibration queue that measures it and a targeted queue that finds its failures. Derives the label config from the evaluator, sizes for exclusions, writes blind annotator instructions, and stops for approval before creating anything. Use when the user needs human labels for evaluator alignment, a queue had too few usable labels, or a queue should keep taking in new records.
+description: Builds Arize annotation queues that yield enough human labels to align one LLM-as-judge evaluator, with a random calibration queue that measures it and a targeted queue that covers every label it gives. Derives the label config from the evaluator, sizes for exclusions, writes blind annotator instructions, and stops for approval before creating anything. Use when the user needs human labels for evaluator alignment, a queue had too few usable labels, or a queue should keep taking in new records.
 metadata:
   author: arize
   version: "1.2"
@@ -20,7 +20,7 @@ This skill builds the annotation queues whose labels are used to align one evalu
 
 So the skill builds two streams ([Two streams](references/sampling.md#two-streams)):
 - **Random (calibration queue):** a uniform sample with a known rate, never filtered on the evaluator's labels. Agreement, the human ceiling and the VALIDATED verdict come from it.
-- **Targeted (gold queue):** a quota per stored label, disagreements, signals and scope probes, to find failures and supply dev and few-shot examples.
+- **Targeted (gold queue):** a quota per stored label, so every label, rare ones included, has human labels for checking its precision and for dev and few-shot examples. Optional extras look for errors directly: provider disagreements, judge-independent signals and scope probes.
 
 The output is queues that **arize-align-evaluator** can measure. This skill does not measure agreement or change evaluators.
 
@@ -121,7 +121,7 @@ Show the user:
 - when the records came from a backfill, the column **arize-align-evaluator** will compare against: the backfill copy's `*_backfill` column, not the live one, because the live task never scored these sessions
 - the sizing mode and the expected gold per label; in discovery mode, say that the queues can start an alignment but not validate one
 - the caveats:
-  - Agreement comes from the calibration queue. Targeted records find failures, and agreement within a stored label is only that label's precision.
+  - Agreement comes from the calibration queue. Targeted records cover every label, and agreement within a stored label is only that label's precision. Without disagreements or signals, they barely test errors hidden inside a common label.
   - Labelers must stay blind; the Annotator Columns step is manual.
 
 Then ask the user to approve or adjust. **Do not create anything in the same turn.**
