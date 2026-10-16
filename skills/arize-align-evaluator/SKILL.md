@@ -91,7 +91,7 @@ python3 SKILL_ROOT/scripts/align_report.py fetch \
 Use `--ax PATH` if the right `ax` is not first on `PATH`. If the template asks the judge to report `LAST_TURN_CHECK: Turn N`, add `--count-turns "ROOT_SPAN_FILTER" --project PROJECT`. The script counts each session's turns, and the report flags stored results that saw fewer turns than the session has, which suggests they were scored mid-session. To fetch by hand instead, page through `ax annotation-queues list-records QUEUE --space SPACE --limit 100 -o json` using `--cursor` until `pagination.has_more` is false.
 
 Before trusting the join, read [references/queue-records.md](references/queue-records.md). Queue records have three traps that the script handles, and that you must handle yourself if you join by hand:
-- Votes can be at span, trace or session level (`annotations`, `trace_annotations`, `session_annotations`). They are keyed by **annotation config name**, and a record can carry labels from other queues' configs.
+- Votes can be at span, trace or session level (`annotations`, `trace_annotations`, `session_annotations`). They are keyed by **annotation config name**, and a record can carry labels from other queues' configs. On a `SESSION` record only `session_annotations` count; span-level labels on it judged one turn and are reported, not counted.
 - Each vote appears twice, once with an `annotator` and once without.
 - `evaluations` holds whatever stored results exist for the record's trace and session, from every evaluator.
 

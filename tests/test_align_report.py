@@ -162,6 +162,18 @@ def test_same_annotator_conflicting_across_levels_is_unlabeled(tmp_path):
     assert any("different labels at different levels" in f for f in r["fit"])
 
 
+def test_session_records_count_only_session_level_labels(tmp_path):
+    # A turn-level label left from an older span record of the same session must not override or cancel the
+    # session label: the session record shows the whole conversation the evaluator graded.
+    rec = record("r1", {A: "not_applicable"}, stored="good")
+    rec["granularity"] = "SESSION"
+    rec["session_annotations"] = [{"name": CONFIG, "label": "good", "annotator": {"email": A}}]
+    r = build(tmp_path, [rec])
+    assert r["rows"][0]["votes"] == {A: "good"} and r["rows"][0]["bucket"] == "gold"
+    assert any("only `session_annotations` were counted" in f for f in r["fit"])
+    assert not any("different labels at different levels" in f for f in r["fit"])
+
+
 def test_adjudication_resolves_a_dispute_and_keeps_original_votes(tmp_path):
     adj = tmp_path / "adj.json"
     adj.write_text(json.dumps({"r1": "bad"}))

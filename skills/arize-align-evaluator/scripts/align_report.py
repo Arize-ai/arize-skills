@@ -407,15 +407,21 @@ def build(a):
 
     rows, other_configs, unattributed_only = [], Counter(), 0
     completion = defaultdict(Counter)
-    levels_used, self_conflicts = Counter(), 0
+    levels_used, self_conflicts, skipped_levels = Counter(), 0, Counter()
     for r in records:
         data = r.get("data") or {}
         votes, unattributed, conflicted = {}, [], False
-        # A queue can store labels at span, trace, or session level depending on its config.
+        # A queue can store labels at span, trace, or session level depending on its config. A SESSION record
+        # shows the whole session, so only its session-level labels count; a span-level label on it was made on
+        # one turn (often from an older span record of the same session) and is reported, not counted.
+        session_record = (r.get("granularity") or "").upper() == "SESSION"
         for level in ("annotations", "trace_annotations", "session_annotations"):
             for ann in r.get(level) or []:
                 if ann.get("name") != config_name:
                     other_configs[ann.get("name")] += 1
+                    continue
+                if session_record and level != "session_annotations":
+                    skipped_levels[level] += 1
                     continue
                 levels_used[level] += 1
                 who = (ann.get("annotator") or {}).get("email")
@@ -578,6 +584,10 @@ def build(a):
     if levels_used:
         fit.append(f"`{config_name}` labels were read from: "
                    + ", ".join(f"`{k}` ({v})" for k, v in levels_used.most_common()) + ".")
+    if skipped_levels:
+        fit.append(f"Session records also carry span- or trace-level `{config_name}` labels "
+                   + ", ".join(f"`{k}` ({v})" for k, v in skipped_levels.most_common())
+                   + ". They judged one turn, not the session, so only `session_annotations` were counted.")
     if self_conflicts:
         fit.append(f"{self_conflicts} record(s) have one annotator giving different labels at different levels; "
                    "they are treated as unlabeled until resolved.")
