@@ -539,6 +539,17 @@ def build(a):
     for row in rows:
         row["split"] = splits.get(row["record_id"])
     split_counts = {s: Counter(row["consensus"] for row in gold if row["split"] == s) for s in ("train", "dev", "test")}
+    test_scored = [row for row in gold_scored if row["split"] == "test"]
+    test_pairs = [(row["consensus"], row["stored"].get("label")) for row in test_scored]
+    test_recall = {lbl: (sum(1 for h, e in test_pairs if h == lbl and e == lbl), sum(1 for h, _ in test_pairs if h == lbl))
+                   for lbl in sorted({h for h, _ in test_pairs})}
+    # With one dominant human label, π (like κ) is low even at high raw agreement, so report prevalence-robust
+    # measures beside it and read the failing label's recall first.
+    top_human = Counter(h for h, _ in judge_pairs).most_common(1)
+    skew = None
+    if top_human and top_human[0][1] / len(judge_pairs) >= SKEW_SHARE:
+        skew = {"label": top_human[0][0], "share": top_human[0][1] / len(judge_pairs),
+                "ac1": gwet_ac1(judge_pairs), "pabak": pabak(judge_pairs)}
 
     plan = load(a.plan) if a.plan else None
     weighted = weight_by_plan(plan, gold_scored) if plan else None
@@ -641,7 +652,8 @@ def build(a):
         "gold_classes": gold_classes, "annotators": annotators, "mismatches": mismatches, "stale": stale,
         "turns_fetched": bool(turns), "marker": LAST_TURN_MARKER in template,
         "balanced": balanced, "split_counts": split_counts, "weighted": weighted, "small_classes": small_classes,
-        "judge": judge, "judge_pi": pi_with_ci(judge_pairs), "app_pairs": app_pairs,
+        "judge": judge, "judge_pi": pi_with_ci(judge_pairs), "app_pairs": app_pairs, "skew": skew,
+        "test_pairs": test_pairs, "test_pi": pi_with_ci(test_pairs), "test_recall": test_recall,
         "ceiling_human": ceiling_human, "ceiling_judge": ceiling_judge, "production": production,
     }
 
@@ -897,6 +909,12 @@ def render(r):
             w(f"- `{lbl}`: {pct_ci(m['tp'], m['predicted'])}")
         w("")
         w("Percent agreement alone can hide large scoring errors, so quote π and the failing label's recall with it.\n")
+        sk = r["skew"]
+        if sk:
+            w(f"One human label (`{sk['label']}`) holds {sk['share']:.0%} of these records, so π understates agreement "
+              f"(the same prevalence effect as κ). Next to it: Gwet's AC1 {sk['ac1']:.2f}, PABAK {sk['pabak']:.2f}"
+              + (f", balanced accuracy {100 * r['balanced']:.0f}%" if r["balanced"] is not None else "")
+              + ". Read the failing label's recall first.\n")
     ap = r["app_pairs"]
     if ap:
         w("### Applicability and grade\n")
@@ -973,6 +991,17 @@ def render(r):
         w("|---|---:|---:|---:|")
         for lbl in sorted(r["gold_classes"]):
             w(f"| `{lbl}` | {sc['train'][lbl]} | {sc['dev'][lbl]} | {sc['test'][lbl]} |")
+        tp = r["test_pairs"]
+        w("")
+        w("**Test split only** (the numbers to report for a frozen judge version; score it once per version):\n")
+        if not tp:
+            w("- No test record has a current stored result yet.")
+        else:
+            w(f"- Exact agreement: {pct_ci(n_agree(tp), len(tp))}; Scott's {fmt_pi(r['test_pi'])}")
+            for lbl, (hit, n) in r["test_recall"].items():
+                w(f"- Recall for `{lbl}`: {pct_ci(hit, n)}")
+            if not r["judge"]["test_from"]:
+                w("- Same-batch test: directional only. A batch labeled after freezing (`--test-from`) is the real test.")
         thin = sorted(lbl for lbl in r["gold_classes"] if sc["test"][lbl] < MIN_PER_CLASS_SPLIT)
         if thin:
             w(f"\nTest records per label below {MIN_PER_CLASS_SPLIT} for {thin}: a test result on them is "
@@ -1004,7 +1033,9 @@ def cmd_report(a):
                 "gold_classes": dict(r["gold_classes"]), "annotators": r["annotators"],
                 "disagreements": len(r["mismatches"]), "stale": len(r["stale"]),
                 "balanced_accuracy": r["balanced"], "weighted": r["weighted"],
-                "pi": r["judge_pi"]["pi"], "pi_ci": r["judge_pi"]["ci"],
+                "pi": r["judge_pi"]["pi"], "pi_ci": r["judge_pi"]["ci"], "skew": r["skew"],
+                "test": {"n": len(r["test_pairs"]), "agree": n_agree(r["test_pairs"]), "pi": r["test_pi"]["pi"],
+                         "pi_ci": r["test_pi"]["ci"], "recall": r["test_recall"]},
                 "applicability_pi": scott_pi(r["app_pairs"]),
                 "ceiling": {"comparisons": len(r["ceiling_human"]), "human_pi": scott_pi(r["ceiling_human"]),
                             "judge_pi": scott_pi(r["ceiling_judge"])},

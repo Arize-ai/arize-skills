@@ -120,15 +120,15 @@ The report sorts every record into one of these buckets: **gold** (applicable, d
 It then applies the quality gates and gives one verdict:
 
 - **VALIDATED:** every gate passes, and 2+ classes have 30+ gold records in both dev and test. Agreement on those classes is evidence, once re-run on the current version.
-- **DIRECTIONAL:** every gate passes, below those sizes. Report with intervals and fix clear errors in one batch; don't tune prompt by prompt or claim a target.
+- **DIRECTIONAL:** every gate passes, below those sizes. This is a *provisional* judge. Report with intervals and fix clear errors in one batch; don't tune prompt by prompt or claim a target.
 - **EXPLORATORY:** some gate fails. Patterns only.
 - **NOT USABLE:** too few gold records or classes. Fix the queue first.
 
-The exact rules are in [Verdicts](references/gates-and-agreement.md#verdicts).
+The exact rules, and which thresholds are Arize heuristics rather than published values, are in [Verdicts](references/gates-and-agreement.md#verdicts).
 
 The two passing tiers exist because 10 gold records can start an alignment but can't confirm one: at 10 records, 9/10 agreement has a 95% interval of about 60–98%. Tuning prompts on a small set overfits it, so DIRECTIONAL allows one batch of fixes, not a tuning loop. The report prints an interval next to every rate.
 
-It leads with recall per human label (TPR and TNR for a binary evaluator), because exact agreement hides a judge that misses the rare label. Next to exact agreement it gives Scott's π, which corrects for chance. Judges with over 90% agreement have still mis-scored by 10 points or more, so never quote percent agreement alone.
+It leads with recall per human label (TPR and TNR for a binary evaluator), because exact agreement hides a judge that misses the rare label. Next to exact agreement it gives Scott's π, which corrects for chance. Judges with over 90% agreement have still mis-scored by 10 points or more, so never quote percent agreement alone. When one human label holds 80% or more of the records, π understates agreement the way κ does, and the report adds AC1, PABAK and balanced accuracy next to it. For a frozen judge version, quote the report's **Test split only** numbers.
 
 It also reports:
 - applicability (in scope or not) apart from grade
@@ -145,16 +145,17 @@ The script checks the structure: label sets, granularity, other configs and cove
 
 1. **Is the unit the same?** Queue records are usually `SPAN` records, while many evaluators score the whole `SESSION`. Confirm that each record's `attributes.session.id` identifies the session the labeler judged, and that the evaluator's input variable (for example `{conversation}`) covers that whole session. A label on one span in a multi-turn session can disagree with a correct session-level verdict.
 2. **Does the rubric mean the same thing?** Read the evaluator template next to the queue instructions and label definitions. Watch for one label meaning different things on each side. A common case is `no_output_produced` vs `wrong`, where one side treats "the agent didn't produce an artifact" as a failure and the other treats it as a separate class.
-3. **Read the not-applicable records.** If humans marked records `not_applicable` and the evaluator gave a substantive label, the disagreement is about applicability, not grading quality. The report's applicability line measures it. Check the evaluator's `not_applicable` instruction and the task's admission filter before touching the grading criteria. Keep scope rules and grading rules in separate parts of the template.
+3. **Diff the label definitions.** Put the queue's instructions next to the template's definition of each label. If they define a label differently, the human and the judge are applying different rules. That's a criterion question, not a judge error: have the user decide it, bump the rubric version, and re-review the affected labels before reading agreement or proposing a template edit.
+4. **Read the not-applicable records.** If humans marked records `not_applicable` and the evaluator gave a substantive label, the disagreement is about applicability, not grading quality. The report's applicability line measures it. Check the evaluator's `not_applicable` instruction and the task's admission filter before touching the grading criteria. Keep scope rules and grading rules in separate parts of the template.
    - **Audit the admission filter too.** Export a handful of sessions the task's filter excluded in the same window, and check whether any should have been graded. Gold drawn after the filter can't show sessions the filter wrongly drops.
-4. **Read every discrepancy.** For each row in the report's discrepancy table, open the session (use **arize-trace** to export it, and **arize-link** for a UI link). Decide whether the human or the evaluator is right, or whether the record is ambiguous. Quote the specific evidence. For many discrepancies, see [references/disagreement-review.md](references/disagreement-review.md).
-5. **When the session supports the evaluator, adjudicate the human label; don't edit the template.** Follow [references/disagreement-review.md](references/disagreement-review.md#adjudicating).
-6. **Is the judge grading its own model's output?** If the evaluator's model is the same as the application's, say so in the report: judges tend to favor their own outputs.
+5. **Read every discrepancy.** For each row in the report's discrepancy table, open the session (use **arize-trace** to export it, and **arize-link** for a UI link). Decide whether the human or the evaluator is right, or whether the record is ambiguous. Quote the specific evidence. For many discrepancies, see [references/disagreement-review.md](references/disagreement-review.md).
+6. **When the session supports the evaluator, adjudicate the human label; don't edit the template.** Follow [references/disagreement-review.md](references/disagreement-review.md#adjudicating).
+7. **Is the judge grading its own model's output?** If the evaluator's model is the same as the application's, say so in the report: judges tend to favor their own outputs.
 
 Then **present the report to the user and stop.** Use the structure in [references/report-template.md](references/report-template.md). It must include:
 - the verdict and every failed gate, in plain language
 - what the human labels say (distribution and exclusions), separate from what the evaluator says
-- the fit findings from steps 1–3
+- the fit findings from steps 1–4
 - each discrepancy with its record ID, session ID, both labels and your reading of the evidence
 - annotator disagreements and the proposed adjudication; if there was only one annotator, say so
 - **either** a proposed template change, quoting the exact current wording, the exact replacement and the records that justify it, **or** a recommendation not to change the evaluator yet, with what to fix in the queue first
@@ -164,7 +165,7 @@ End by asking the user to approve, edit or reject the proposal. **Do not continu
 
 **Do not propose a template change when:**
 - the verdict is NOT USABLE
-- the discrepancy is explained by applicability, the admission filter, a unit mismatch, a stale version, or a result scored mid-session
+- the discrepancy is explained by applicability, the admission filter, a unit mismatch, a stale version, a result scored mid-session, or a queue definition that differs from the template's
 - the session shows the evaluator was right (step 5)
 - the only evidence is a class the queue has no examples of
 - the change would turn `cannot_judge` into an evaluator class
@@ -185,6 +186,7 @@ Approval must name the change: "approve the proposed edit to the not_applicable 
    - Each edit states a general rule.
    - Edits are batched, and dev is scored once per batch.
    - Before re-running, check the new template with `align_report.py lint OLD.txt NEW.txt --records WORK_DIR/baseline.json`. It flags added lines that name a record, session or trace, or copy wording from dev records. Rewrite those as general rules.
+   - If an optimizer drafts revisions, have it maximize π or macro-F1, never accuracy.
    - Use the reproduce check before trusting a dev gain: summarize the change in 2–3 sentences, have a fresh agent that never saw the dev records rewrite the baseline template from that summary alone, and score its version on dev. A gain that doesn't reproduce came from fitting the records.
 5. **Report before and after on the same gold set** with `align_report.py compare WORK_DIR/baseline.json WORK_DIR/after.json --split dev --ledger WORK_DIR/looks.json`. It gives:
    - both rates and Scott's π with intervals
@@ -193,8 +195,8 @@ Approval must name the change: "approve the proposed edit to the not_applicable 
    - the number of times dev has been scored (it warns past `--look-budget`, default 5)
 
    A gain inside the run-to-run noise is no gain: re-run the unchanged candidate once to see the noise floor.
-6. **Freeze, then test once.** After the last revision, freeze the template. Test is scored once per judge version; the ledger warns on a second look.
-   - **Use a later batch for test.** Better than the same-batch test split is a batch labeled after freezing: queue intake into the calibration queue, then `report --test-from FREEZE_TIME`.
+6. **Freeze, then test once.** After the last revision, freeze the template. Test is scored once per judge version, when it's frozen, not on a calendar; the ledger warns on a second look.
+   - **Test on a later batch by default.** Label a batch after freezing (queue intake into the calibration queue), then run `report --test-from FREEZE_TIME`. Use the same-batch split only when no later batch can be labeled, and say the result is directional.
    - **Score a second judge model.** Run the frozen candidate's template on one other judge model as a second candidate, on the same records, and pass its report as `--second-judge`. Judges can agree well overall and still carry a model-specific bias. A tuning judge that collapses on held-out data while others hold is a property of the judge, not the criterion.
 7. **Apply the ship gate:** `align_report.py compare WORK_DIR/baseline.json WORK_DIR/final.json --gate --fail-label FAILING_LABEL --second-judge WORK_DIR/second.json --ledger WORK_DIR/looks.json`. It passes only when:
    - test π didn't fall

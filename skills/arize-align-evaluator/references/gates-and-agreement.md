@@ -27,16 +27,29 @@ If the evaluator has its own `not_applicable` class, also check **applicability 
 
 The thresholds are defaults. If the user wants different ones, state the new threshold in the report and explain what it allows them to claim. Do not loosen a gate silently.
 
+Where each threshold comes from:
+
+| Gate | Basis |
+|---|---|
+| Gold records ≥ 10 | Arize heuristic. It's a floor for starting only: at 10 records, 90% agreement has a 95% interval of about 60–98%. Claims need the VALIDATED size. |
+| ≥ 2 classes with ≥ 3 each | Arize heuristic |
+| Excluded rate ≤ 30% | Arize heuristic. The direction is supported: excluding hard cases inflates agreement (MT-Bench, with ties vs without ties). |
+| Join and stored-output coverage ≥ 90% | Arize heuristic. Stale results are left out because a judge version must have graded the whole session. |
+| κ ≥ 0.6, or AC1 ≥ 0.6 when one label holds ≥ 80% | Landis & Koch's "substantial" band starts at 0.61, and McHugh 2012 calls any κ below 0.60 inadequate. AC1 follows Gwet 2008, for the prevalence effect Feinstein & Cicchetti describe. |
+| VALIDATED size: 30 per class in each of dev and test | Husain & Shankar: "30 to 50 Pass examples and 30 to 50 Fail examples in both the dev and test sets." |
+
 ## Verdicts
 
 | Verdict | Rule | What you may claim |
 |---|---|---|
 | **VALIDATED** | Every gate passes, and ≥ 2 classes have ≥ 30 gold records in both dev and test (about 71 each in all) | Agreement on those classes is evidence of alignment, once re-run on the current version. Classes below 30 in dev or test are listed as not validated. |
-| **DIRECTIONAL** | Every gate passes, below the VALIDATED sizes | Quote every rate with its interval and don't claim a target is met. Fix clear rubric or scope errors in one batch, then label more before further tuning: tuning a prompt record by record on a small set overfits it. |
+| **DIRECTIONAL** (a *provisional* judge) | Every gate passes, below the VALIDATED sizes | Quote every rate with its interval and don't claim a target is met. Fix clear rubric or scope errors in one batch, then label more before further tuning: tuning a prompt record by record on a small set overfits it. |
 | **EXPLORATORY** | At least 5 gold records in 2 or more classes, but some gate fails | Patterns worth investigating. No rate is evidence of alignment. |
 | **NOT USABLE** | Anything else: too few gold records, or only one class | Fix the queue first. Don't propose evaluator changes from it. |
 
-A single-annotator queue can reach any verdict, but the report must say that every gold label rests on one person.
+A single-annotator queue can reach any verdict, but the report must say that every gold label rests on one person, and that no human ceiling was measured.
+
+The four verdict names are Arize's. No source defines them. DIRECTIONAL matches what an alignment SOP would call a **provisional** judge: report its numbers with intervals, but don't tune it prompt by prompt. A judge leaves provisional status only when the measurement set meets the VALIDATED size, stale results have been re-scored with the current version, and the gold records carry that version's results.
 
 ## Agreement metrics
 
@@ -51,11 +64,13 @@ The report quotes every rate as a count, a percentage and a 95% Wilson interval,
 | Scott's π (judge vs human) | Chance-corrected agreement with one pooled label distribution for both raters: `(p_o − p_e) / (1 − p_e)`, where `p_e` sums each label's squared share of all ratings. Unlike Cohen's κ it doesn't credit the two raters for having different label mixes, which is part of what's being measured. Printed with a seeded bootstrap 95% interval. Krippendorff's α is also acceptable; sources disagree on which to prefer. |
 | Applicability agreement | Human in scope vs judge in scope (judge label not `not_applicable`), over gold and not-applicable records. Reported apart from grade agreement: a scope disagreement needs a scope rule, not a grading rule. |
 | Human ceiling | Each rater is held out in turn and scored against the majority of the others; the judge is scored against the same reference on the same records. Scoring a judge against a pooled consensus overstates it. Don't tune past the ceiling. |
-| Production rates (PPI++) | With a plan whose random stream has labels: each label's production rate from the judge's labels on all planned units, corrected with the random-stream human labels (PPI++ with λ tuned per label). Shown next to the judge-only rate (biased whenever the judge errs) and the human-only rate. Use the narrower interval. Only random-stream labels are used, because the correction assumes a random sample of the same traffic and the same judge. |
+| Production rates (PPI++) | With a plan whose random stream has labels: each label's production rate from the judge's labels on all planned units, corrected with the random-stream human labels (PPI++ with λ tuned per label). Shown next to the judge-only rate (biased whenever the judge errs) and the human-only rate. Use the narrower interval. Only random-stream labels are used, because the correction assumes a random sample of the same traffic and the same judge. If the labeled set's label mix differs from production, for example a stratified sample without its weights, PPI is biased (Lee et al. §8). Fix the weights, or use the Rogan–Gladen sensitivity/specificity correction, which stays unbiased while the judge's error rate per true label holds. |
 | Confusion matrix | Counts of (human, evaluator) pairs. Shows which classes get confused. |
 | Production-weighted estimate | With `--plan plan.json` from **arize-align-queue-builder**, agreement and per-label recall weighted by each queue stratum's production count. This undoes the oversampling of rare labels and provider disagreements. |
 | Cohen's κ and Scott's π (human vs human) | Agreement corrected for chance: `(p_o − p_e) / (1 − p_e)`. Here `p_o` is observed agreement, and `p_e` is the sum over labels of the product of each annotator's share of that label. Landis & Koch bands: below 0 poor, 0.00–0.20 slight, 0.21–0.40 fair, 0.41–0.60 moderate, 0.61–0.80 substantial, 0.81–1.00 almost perfect. |
 | AC1 and PABAK (human vs human) | Agreement statistics that stay stable when one label dominates. The report prints both next to κ, with the most common label's share. |
+| AC1 and PABAK (judge vs human) | When one human label holds ≥ 80% of the scored gold records, π (like κ) is low even at high raw agreement. The report then prints AC1, PABAK and balanced accuracy next to π. Read the failing label's recall first, and don't treat a low π on a skewed judge as a verdict on its own. |
+| Test split only | Agreement, π and recall per label on the test split alone. These are the numbers to report for a frozen judge version. |
 
 Do not quote a single number as "the" alignment score.
 
@@ -90,10 +105,13 @@ Hold the evaluator to the human ceiling measured on this queue (one rater held o
 ## Held-out split and overfitting
 
 - The report splits gold records by session within each human label, stably by hash: about 15% **train**, 42.5% **dev** and 42.5% **test**. A session's records never land in two splits. `--json-out` records each record's split.
-- **The strongest test is a later batch.** Label it after freezing the prompt (queue intake into the calibration queue) and pass `--test-from FREEZE_TIME`: every gold session from then on is test, and earlier sessions split into train and dev. A same-batch test split caught less of the overfitting in published cases.
+- **Test is a later batch by default.** Label it after freezing the prompt (queue intake into the calibration queue) and pass `--test-from FREEZE_TIME`: every gold session from then on is test, and earlier sessions split into train and dev. In published cases a tuning judge held on its own batch and collapsed on a later one (κ_w 0.555 → 0.350). Use the same-batch split only when no later batch can be labeled; the report then marks the test result directional.
+- **Score test once per frozen version, not on a calendar.** Label a test batch when a candidate is frozen. Revise only as many judges at a time as the labeling budget can test.
+- **Fill train and dev from the gold (targeted) queue, and measure on the calibration (random) queue.** A rare failure can't fill 30 fails per split from a random sample (at 3%, 30 fails take about 1,000 random labels). Label-dependent selection supports estimates when each stratum's selection probability is known and used (Egami et al.; Zrnic & Candès; Stratified PPI), so the gold queue's weighted figures are a valid secondary estimate.
 - **Train** records may appear in the template as few-shot examples. **Dev** records are the ones you read and iterate on. **Test** records stay out of the template and the meta-prompt, and are scored once, after the last revision.
 - Size the test set by class, not by percentage: below 30 test records per class, a test result is directional.
 - A revised template that names specific dev or test records, or quotes their content, is overfitting. Revisions must state general rules; `align_report.py lint` flags added lines that don't.
+- **When an optimizer tunes the prompt,** have it maximize π or macro-F1, never accuracy. An accuracy-trained optimizer collapsed toward a 78% majority class. Keep the test split out of its reach.
 - **Look at dev sparingly.** Reusing a holdout adaptively makes it optimistic: on random data, repeated reuse reported 63% accuracy where the truth was 50%. Batch edits and score dev once per batch; `compare --ledger` counts the looks and warns past `--look-budget` (default 5, a heuristic).
 - **Watch the dev → test gap.** A drop over 0.10 in π means the revision fit dev (heuristic; published gaps were 0.2–0.4 κ). `compare --gate` fails on it.
 - **Score with a second judge model.** A judge tuned on its own data can collapse on held-out data while others hold; comparing two judge models separates the judge from the measurement.

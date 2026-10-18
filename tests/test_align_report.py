@@ -728,3 +728,31 @@ def test_ppi_and_frames_combine_intake_periods(tmp_path):
     assert pr["periods"] == 2 and pr["units"] == 1100
     assert pr["rates"]["good"]["ppi"] == pytest.approx((900 + 50) / 1100)
     assert r["weighted"] == {"random_only": True, "streams": {"random": 20}, "frame": 1100}
+
+
+def test_skewed_gold_reports_prevalence_robust_measures(tmp_path):
+    # 18 of 20 humans say good: π understates agreement here, so AC1 and PABAK are reported beside it.
+    recs = [record(f"g{i}", {A: "good"}, stored="good" if i < 16 else "bad") for i in range(18)]
+    recs += [record(f"b{i}", {A: "bad"}, stored="bad") for i in range(2)]
+    r = build(tmp_path, recs)
+    assert r["skew"]["label"] == "good" and r["skew"]["share"] == 0.9
+    assert r["skew"]["ac1"] == align.gwet_ac1([(row["consensus"], row["stored"]["label"]) for row in r["gold_scored"]])
+    assert "π understates agreement" in align.render(r)
+
+
+def test_balanced_gold_reports_no_skew(tmp_path):
+    recs = [record(f"g{i}", {A: "good"}, stored="good") for i in range(5)]
+    recs += [record(f"b{i}", {A: "bad"}, stored="bad") for i in range(5)]
+    r = build(tmp_path, recs)
+    assert r["skew"] is None and "π understates agreement" not in align.render(r)
+
+
+def test_test_split_metrics_use_only_test_records(tmp_path):
+    recs = [record(f"g{i}", {A: "good"}, stored="good" if i % 2 else "bad") for i in range(20)]
+    recs += [record(f"b{i}", {A: "bad"}, stored="bad") for i in range(20)]
+    r = build(tmp_path, recs)
+    test_rows = [row for row in r["gold_scored"] if row["split"] == "test"]
+    assert len(r["test_pairs"]) == len(test_rows) > 0
+    assert r["test_recall"]["bad"][1] == sum(1 for row in test_rows if row["consensus"] == "bad")
+    out = align.render(r)
+    assert "Test split only" in out and "Same-batch test: directional only" in out
