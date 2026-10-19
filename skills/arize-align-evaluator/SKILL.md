@@ -98,7 +98,7 @@ Read the template's definition of each label, and its scope rule, next to the qu
   - bump the rubric version
   - re-review the affected labels
   - pass `--criterion-decided`
-- **Draft both sides of the new rule:** the template wording and the matching queue instructions, so humans and the judge apply the same rule. Updating the queue instructions is a queue change, so hand it to **arize-annotation** (or the user does it in the UI); this skill doesn't apply it.
+- **Draft both sides of the new rule:** the template wording and the matching queue instructions, so humans and the judge apply the same rule. Applying the new queue instructions is a queue change, so hand the text to **arize-align-queue-builder**: its instructions bump (`plan_queue.py --bump`) updates both queues, saves the new version so intake stamps it, and lists the records to re-review. This skill doesn't apply it.
 - **Keep applicability rules (when a session is in scope) apart from grading rules.** A scope disagreement needs a scope rule.
 - **A criterion change and a judge change are different tracks.** See [references/revision.md](references/revision.md#two-kinds-of-change-sop-step-1).
 
@@ -165,7 +165,7 @@ Meanings and sources are in [references/measurement.md](references/measurement.m
 **Present the report and STOP.** Use [references/report-template.md](references/report-template.md). Propose exactly one of these:
 
 - **A criterion decision** for the user
-- **A queue or label fix:** re-score stale sessions, re-review labels, top up a label, or adjudicate. Queue changes, including new instructions, go to **arize-annotation**.
+- **A queue or label fix:** re-score stale sessions, re-review labels, top up a label, or adjudicate. Queue changes, including new instructions and top-ups, go to **arize-align-queue-builder**.
 - **One batch of template edits,** quoting the exact current wording, the exact replacement and the records behind each. Only when no criterion question is open.
 
 Ask the user to approve, edit or reject. **Do not continue in the same turn.**
@@ -256,7 +256,7 @@ Use the narrower interval. PPI assumes the labeled records match production's la
 
 - **arize-align-queue-builder**: build the calibration and gold queues this skill measures
 - **arize-align-history-backfill**: score sessions the evaluator never scored, for a new evaluator or a short history
-- **arize-annotation**: annotation configs and queues, assigning annotators, adding records
+- **arize-annotation**: plain queue mechanics, such as assigning a second annotator
 - **arize-evaluator**: evaluator, task and run mechanics
 - **arize-trace**: export a session to read the evidence behind a disagreement
 - **arize-link**: deep links to sessions, queues and evaluators
