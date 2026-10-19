@@ -29,7 +29,7 @@ This changes what the evaluator sees, so it needs its own approval, separate fro
 ## Changelog
 
 Keep a changelog per evaluator, one line per version, with its switch time (the version's `created_at`) and the judge version the report prints (rubric version, prompt hash, model, admission filter). Mark each entry as one of two kinds:
-- **Criterion change:** what "pass" means changed. Bump the rubric version, and measure the new version on a new queue pair; older gold labels stay as they are. A re-grade of those sessions under the new rule is a good optional next step, for dev only. Scores before and after aren't comparable.
+- **Criterion change:** what "pass" means changed. Bump the rubric version, and measure the new version in a later, separate run with new labels; older gold labels stay as they are. A re-grade of those sessions under the new rule is a good optional next step, for dev only. Scores before and after aren't comparable.
 - **Judge change:** the prompt, model or filter changed, but the criterion didn't. This is tuning, and the held-out and ship-gate rules apply.
 
 Either kind changes the judge, so re-measure, and re-collect random-stream labels before reporting corrected production rates.

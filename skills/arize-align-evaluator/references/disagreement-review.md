@@ -8,7 +8,7 @@ The report's discrepancy table lists records where the human label and the store
 | The queue and the template define the label differently | A criterion question | Have the user decide the rule (SKILL.md Phase 1) |
 | The session supports the evaluator | A labeling problem | Adjudicate the human label (below) |
 | The stored result graded part of the session, or an older version | A stale result | Re-run the current version before judging |
-| The rubric genuinely doesn't settle it | An ambiguous rule | Ask the user to decide the rule, then label a new queue under it |
+| The rubric genuinely doesn't settle it | An ambiguous rule | Ask the user to decide the rule; measuring it is a later, separate run |
 
 ## Reading the sessions
 

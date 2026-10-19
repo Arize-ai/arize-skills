@@ -4,7 +4,7 @@ Every step here comes after the user has approved a named change. Source names r
 
 ## Two kinds of change (SOP step 1)
 
-- **Criterion change.** What "good" means changes. Bump the rubric version and start a new judge version. Measure it on a new queue pair labeled under the new instructions; the old labels follow the old rubric (Kochelka; Divekar). Suggest re-grading the old sessions under the new rule as a good next step (Shankar §8.1), but don't require it; re-graded labels are dev only. Scores before and after aren't comparable.
+- **Criterion change.** What "good" means changes. Bump the rubric version and start a new judge version. Measuring it needs labels collected under the new rule, in a later, separate run the user starts; the old labels follow the old rubric (Kochelka; Divekar). Suggest re-grading the old sessions under the new rule as a good next step (Shankar §8.1), but don't require it; re-graded labels are dev only. Scores before and after aren't comparable.
 - **Judge change.** The prompt, model or admission filter changes, and the criterion doesn't. This is tuning, and the loop below applies.
 
 Never tune your way around an open criterion question. A misread criterion can't be fixed with more grades (Shankar §7.3.3).

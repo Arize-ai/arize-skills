@@ -12,7 +12,7 @@ There are no verdict tiers. A judge is **measured** only when every condition be
 | No stale results | No gold record's stored result saw fewer turns than the session has (`LAST_TURN_CHECK`). If turns weren't counted, this is "not checked". | SOP rule 3 |
 | Current version | Every gold record has a stored result, and none started before the current version was created. After an in-place edit, re-score the sessions and pass `--rescored-at RUN_START`. | SOP rule 2 |
 | One record per unit | Every record has a session ID, and none is duplicated | SOP addendum F |
-| No open criterion question | The label-definition diff is empty, or both definitions were read and state the same rule (`--definitions-agree`). A decided question closes the report; the new rubric version is measured on a new queue. | SOP step 1 and addendum G |
+| No open criterion question | The label-definition diff is empty, or both definitions were read and state the same rule (`--definitions-agree`). A decided question closes the report; the new rubric version is measured in a later, separate run. | SOP step 1 and addendum G |
 
 **What each status allows:**
 
@@ -69,7 +69,7 @@ It also lists terms both documents use, so you can check they state the same rul
 
 **A flag is a candidate, not a finding.** Read both definitions:
 
-- **If the human and the judge apply different rules,** it's a **criterion question**. The user decides it. Then bump the rubric version and measure the new version on a new queue pair. Suggest a re-grade of the old sessions as an optional next step (dev only).
+- **If the human and the judge apply different rules,** it's a **criterion question**. The user decides it. Then bump the rubric version. This alignment ends; the new version is measured in a later, separate labeling and alignment run the user starts. Suggest a re-grade of the old sessions as an optional next step (dev only).
 - **No template edit until it's decided.** A misread criterion can't be fixed with more grades (Shankar §7.3.3).
 
 ## Agreement between annotators

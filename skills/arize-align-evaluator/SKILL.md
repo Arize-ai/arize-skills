@@ -96,9 +96,9 @@ Read the template's definition of each label, and its scope rule, next to the qu
 
 - **If the two sides define a label differently, it's a criterion question.** The human and the judge are applying different rules, and agreement can't be read until it's settled. Frame it for the user: quote both definitions, give the options, and recommend one. A decision closes this report; it stays provisional. Then:
   - bump the rubric version, and write the template change as a new evaluator version (Phase 5, steps 1–2)
-  - measure the new version on a **new queue pair** labeled under the new instructions. The old queues' labels stay the record under the old rubric, and the sessions read become dev.
+  - tell the user this alignment ends here. The old queues' labels stay the record under the old rubric, and the sessions read become dev. Measuring the new version needs labels collected under the new rule: a later, separate labeling and alignment run that the user starts when they choose (**arize-align-queue-builder**, then this skill). Don't start it.
   - tell the user that re-grading the old sessions under the new rule would be a good next step (Shankar §8.1), and leave the choice to them. Re-graded labels serve dev and few-shot examples, never the reported agreement.
-- **Draft both sides of the new rule:** the template wording and the matching queue instructions, so humans and the judge apply the same rule. Building the new queues is a queue change, so hand the instructions to **arize-align-queue-builder**, with the switch time as the window start and the old queues to exclude. This skill doesn't build them.
+- **Draft both sides of the new rule:** the template wording and the matching queue instructions, so humans and the judge apply the same rule. The queue instructions are a draft for that later run, with its window starting at the switch time and the old queues excluded.
 - **Keep applicability rules (when a session is in scope) apart from grading rules.** A scope disagreement needs a scope rule.
 - **A criterion change and a judge change are different tracks.** See [references/revision.md](references/revision.md#two-kinds-of-change-sop-step-1).
 
@@ -165,7 +165,7 @@ Meanings and sources are in [references/measurement.md](references/measurement.m
 **Present the report and STOP.** Use [references/report-template.md](references/report-template.md). Propose exactly one of these:
 
 - **A criterion decision** for the user
-- **A queue or label fix:** re-score stale sessions, top up a label, or adjudicate. Queue changes, including a new queue pair and top-ups, go to **arize-align-queue-builder**.
+- **A queue or label fix:** re-score stale sessions, top up a label, or adjudicate. Queue changes such as top-ups go to **arize-align-queue-builder**.
 - **One batch of template edits,** quoting the exact current wording, the exact replacement and the records behind each. Only when no criterion question is open.
 
 Ask the user to approve, edit or reject. **Do not continue in the same turn.**
