@@ -32,7 +32,7 @@ Use this structure when presenting to the user at the stop point. Keep it short;
 
 Give exactly one of these:
 
-- **A criterion decision for the user.** State the question and the options, with your recommendation. Draft both the template wording and the matching queue instructions. No template edit until it's decided; the decided rule is measured on a new queue.
+- **A criterion decision for the user.** State the question and the options, with your recommendation. Draft both the template wording and the matching queue instructions. No template edit until it's decided; the decided rule is measured on a new queue. Note that re-grading the old sessions under it would be a good next step.
 - **A queue or label fix.** For example: re-score stale sessions, top up a label, or adjudicate. A new queue pair, for a decided criterion or new instructions, goes to **arize-align-queue-builder**.
 - **One batch of template edits.** Quote the exact current wording, the exact replacement, and the records that justify each edit. Only when no criterion question is open.
 

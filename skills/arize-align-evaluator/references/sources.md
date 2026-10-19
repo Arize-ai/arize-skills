@@ -13,7 +13,7 @@ Every rule in this skill cites one of these sources, or says it's an **Arize heu
 | Landis & Koch; McHugh 2012 | [McHugh, Biochemia Medica](https://www.biochemia-medica.com/en/journal/22/3/10.11613/BM.2012.031) | κ bands; "any kappa below 0.60 indicates inadequate agreement". The basis of the annotator-agreement warning. |
 | Feinstein & Cicchetti 1990; Byrt et al. 1993; Gwet 2008 | High agreement with low κ; PABAK; AC1 | The prevalence effect. The skew measures, when one label holds ≥ 80%. |
 | Zheng et al. | *MT-Bench and Chatbot Arena* [arXiv 2306.05685](https://arxiv.org/abs/2306.05685) | Agreement rises when ties are excluded (85% vs about 66%). This is the direction behind the exclusion warning. |
-| Shankar et al. | *Who Validates the Validators?* [arXiv 2404.12272](https://arxiv.org/abs/2404.12272) | p.2 L13–15: "it is impossible to completely determine evaluation criteria prior to human judging of LLM outputs" (criteria drift). §7.3.3: a misread criterion can't be fixed with more grades. |
+| Shankar et al. | *Who Validates the Validators?* [arXiv 2404.12272](https://arxiv.org/abs/2404.12272) | p.2 L13–15: "it is impossible to completely determine evaluation criteria prior to human judging of LLM outputs" (criteria drift). §7.3.3: a misread criterion can't be fixed with more grades. p.11 §8.1: "we may need to ask users to re-grade or re-think their criteria"; reassessing outputs after updating criteria "could enhance the accuracy and consistency of grades". A suggestion, not a tested protocol: the basis for suggesting, not requiring, a re-grade. |
 
 ## Revising without overfitting
 

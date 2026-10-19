@@ -69,7 +69,7 @@ It also lists terms both documents use, so you can check they state the same rul
 
 **A flag is a candidate, not a finding.** Read both definitions:
 
-- **If the human and the judge apply different rules,** it's a **criterion question**. The user decides it. Then bump the rubric version and measure the new version on a new queue pair. Don't re-review the old labels.
+- **If the human and the judge apply different rules,** it's a **criterion question**. The user decides it. Then bump the rubric version and measure the new version on a new queue pair. Suggest a re-grade of the old sessions as an optional next step (dev only).
 - **No template edit until it's decided.** A misread criterion can't be fixed with more grades (Shankar §7.3.3).
 
 ## Agreement between annotators

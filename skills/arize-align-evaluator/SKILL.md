@@ -96,7 +96,8 @@ Read the template's definition of each label, and its scope rule, next to the qu
 
 - **If the two sides define a label differently, it's a criterion question.** The human and the judge are applying different rules, and agreement can't be read until it's settled. Frame it for the user: quote both definitions, give the options, and recommend one. A decision closes this report; it stays provisional. Then:
   - bump the rubric version, and write the template change as a new evaluator version (Phase 5, steps 1–2)
-  - measure the new version on a **new queue pair** labeled under the new instructions, never by re-reviewing or relabeling the old queues. Their labels stay the record under the old rubric, and the sessions read become dev.
+  - measure the new version on a **new queue pair** labeled under the new instructions. The old queues' labels stay the record under the old rubric, and the sessions read become dev.
+  - tell the user that re-grading the old sessions under the new rule would be a good next step (Shankar §8.1), and leave the choice to them. Re-graded labels serve dev and few-shot examples, never the reported agreement.
 - **Draft both sides of the new rule:** the template wording and the matching queue instructions, so humans and the judge apply the same rule. Building the new queues is a queue change, so hand the instructions to **arize-align-queue-builder**, with the switch time as the window start and the old queues to exclude. This skill doesn't build them.
 - **Keep applicability rules (when a session is in scope) apart from grading rules.** A scope disagreement needs a scope rule.
 - **A criterion change and a judge change are different tracks.** See [references/revision.md](references/revision.md#two-kinds-of-change-sop-step-1).
