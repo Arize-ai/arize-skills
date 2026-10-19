@@ -1,0 +1,19 @@
+{
+  "mcpServers": {
+    "ax": {
+      "serverUrl": "https://api.arize.com/mcp",
+      "headers": {
+        "Authorization": "Bearer ${ARIZE_API_KEY}"
+      }
+    }
+  },
+  "variables": [
+    {
+      "name": "ARIZE_API_KEY",
+      "title": "Arize API Key",
+      "description": "Arize AX API key with read access to the spaces and projects you want the agent to see.",
+      "link": "https://app.arize.com/admin",
+      "secret": true
+    }
+  ]
+}

@@ -1,0 +1,35 @@
+{
+  "name": "arize-skills",
+  "displayName": "Arize AX",
+  "version": "1.2.0",
+  "description": "Query Arize AX projects, traces, datasets, and experiments from Antigravity, with skills for tracing, evals, and prompt optimization.",
+  "logo": "assets/logo.svg",
+  "suggestedPrompts": [
+    "List my Arize projects and show recent traces with errors",
+    "Add Arize tracing to this application",
+    "Show the prompt version labeled production in my Arize Prompt Hub"
+  ],
+  "category": "Developer Tools",
+  "keywords": [
+    "arize",
+    "observability",
+    "tracing",
+    "opentelemetry",
+    "llm",
+    "evals",
+    "datasets",
+    "experiments",
+    "prompts",
+    "mcp"
+  ],
+  "author": {
+    "name": "Arize AI",
+    "email": "support@arize.com",
+    "url": "https://arize.com"
+  },
+  "homepage": "https://arize.com/docs/api-clients/mcp/overview",
+  "repository": "https://github.com/Arize-ai/arize-skills",
+  "license": "MIT",
+  "skills": ["./skills"],
+  "mcpServers": "./mcp_config.json"
+}

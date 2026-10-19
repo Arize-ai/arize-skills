@@ -24,6 +24,11 @@
           "type": "json",
           "path": ".cursor-plugin/plugin.json",
           "jsonpath": "$.version"
+        },
+        {
+          "type": "json",
+          "path": ".antigravity-plugin/plugin.json",
+          "jsonpath": "$.version"
         }
       ]
     }
