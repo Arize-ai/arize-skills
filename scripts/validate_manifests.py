@@ -31,6 +31,7 @@ VERSION_LOCATIONS = [
     ("plugin.json", ("version",), "$.version"),
     (".claude-plugin/plugin.json", ("version",), "$.version"),
     (".cursor-plugin/plugin.json", ("version",), "$.version"),
+    (".antigravity-plugin/plugin.json", ("version",), "$.version"),
     (".claude-plugin/marketplace.json", ("plugins", 0, "version"), "$.plugins[0].version"),
     (".release-please-manifest.json", (".",), '$["."]'),
 ]
