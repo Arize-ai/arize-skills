@@ -34,7 +34,7 @@ For plain queue mechanics (create, update, assign, delete), use **arize-annotati
 - **Never label records yourself.** Never present model output or stored evaluator labels as human labels.
 - **Measure only on the random stream.** Targeted records were chosen by the evaluator's labels or other signals. Never quote their agreement as the evaluator's accuracy.
 - **Keep labeling blind.** Stored evaluator labels are used to *choose* records. Set each queue's Annotator Columns so evaluator output is hidden, and check it ([Keeping labelers blind](references/rubric-and-instructions.md#keeping-labelers-blind)). Never share the plan with annotators.
-- **One record per unit.** For a session evaluator, each session appears once across both queues, and sessions already in the user's other queues for this evaluator are excluded.
+- **One record per unit.** For a session evaluator, each session appears once across both queues, and sessions already in the user's other queues for this evaluator are excluded. The one exception is a re-grade queue the user asked for after a definition change.
 
 ---
 
@@ -165,8 +165,9 @@ After annotators have labeled about a third of the records, run the **arize-alig
 
 A definition changes when annotators disagree on it, or when **arize-align-evaluator** settles a criterion question and hands over new wording. **Build a new queue pair; never edit the instructions of a queue that has labels.**
 
-- **The old queues stay as they are.** Their labels are the record under the old instructions version. Don't re-review or relabel them, and don't change their instructions; a queue whose instructions no longer match its labels misreports what annotators saw.
-- **The new pair** is a normal run of Phases 1–5. Write the instructions with the new version line, pass it as `--instructions-version`, set `--start-time` to the evaluator's switch time when the template changed too, and pass `--exclude-queue` with the old queues so no session is labeled twice.
+- **The old queues stay as they are.** Their labels are the record under the old instructions version, and their instructions aren't changed; a queue whose instructions no longer match its labels misreports what annotators saw.
+- **Tell the user a re-grade would be a good next step,** and leave it to them: EvalGen suggests reassessing outputs after updating criteria (Shankar et al. §8.1). Never re-grade yourself. If they want one, build a re-grade queue of the old sessions under the new instructions, from the plan's `random_sources.*` and `record_sources.*` files, rather than editing the old queue. Re-graded labels serve dev and few-shot examples; the new queue pair stays the measurement.
+- **The new pair** is a normal run of Phases 1–5. Write the instructions with the new version line, pass it as `--instructions-version`, set `--start-time` to the evaluator's switch time when the template changed too, and pass `--exclude-queue` with the old queues so the new pair holds none of their sessions.
 - **Only a queue with no labels yet** may have its wording fixed in place, with `ax annotation-queues update QUEUE --space SPACE --instructions TEXT`.
 
 Top up only on counts: a label short of gold records, or exclusions above plan. Never top up because agreement so far looks low or high; that biases the result.
