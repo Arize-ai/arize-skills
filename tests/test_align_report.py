@@ -60,7 +60,7 @@ def build(tmp_path, records, q=None, ev=None, turns=None, **overrides):
     if turns is not None:
         (tmp_path / "turns.json").write_text(json.dumps(turns))
     args = dict(dir=str(tmp_path), adjudications=None, eval_column=None, config=None, plan=None, test_from=None,
-                rubric_version=None, admission_filter=None, fail_label=None, criterion_decided=False, read_sessions=None, rescored_at=None,
+                rubric_version=None, admission_filter=None, fail_label=None, definitions_agree=False, read_sessions=None, rescored_at=None,
                 not_applicable=list(align.DEFAULT_NOT_APPLICABLE), unscorable=list(align.DEFAULT_UNSCORABLE))
     args.update(overrides)
     return align.build(argparse.Namespace(**args))
@@ -300,7 +300,7 @@ def test_definition_diff_flags_a_criterion_question(tmp_path):
     assert "validate_filter" in r["definitions"]["shared_terms"]
     assert "Queue and template define the labels the same way" in blocked(r)
     assert "A criterion question is open" in align.render(r)
-    decided = build(tmp_path, usable_records(), q=q, ev=ev, criterion_decided=True)
+    decided = build(tmp_path, usable_records(), q=q, ev=ev, definitions_agree=True)
     assert "Queue and template define the labels the same way" not in blocked(decided)
 
 
@@ -375,7 +375,7 @@ def test_report_writes_json_summary(tmp_path, capsys):
     align.cmd_report(argparse.Namespace(dir=str(tmp_path), adjudications=None, eval_column=None, config=None,
                                         not_applicable=["not_applicable"], unscorable=["cannot_judge", "unclear"],
                                         json_out=str(out), plan=None, test_from=None, rubric_version=None,
-                                        admission_filter=None, fail_label=None, criterion_decided=False,
+                                        admission_filter=None, fail_label=None, definitions_agree=False,
                                         read_sessions=None, rescored_at=None))
     assert "## Status: provisional" in capsys.readouterr().out
     slim = json.loads(out.read_text())

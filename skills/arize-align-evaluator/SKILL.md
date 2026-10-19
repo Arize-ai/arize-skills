@@ -94,11 +94,10 @@ Run it by absolute path from the installed skill root, and write to a scratch di
 
 Read the template's definition of each label, and its scope rule, next to the queue's instructions. The report does a first pass (the label-definition diff), but read them yourself too.
 
-- **If the two sides define a label differently, it's a criterion question.** The human and the judge are applying different rules, and agreement can't be read until it's settled. Frame it for the user: quote both definitions, give the options, and recommend one. When they decide:
-  - bump the rubric version
-  - re-review the affected labels
-  - pass `--criterion-decided`
-- **Draft both sides of the new rule:** the template wording and the matching queue instructions, so humans and the judge apply the same rule. Applying the new queue instructions is a queue change, so hand the text to **arize-align-queue-builder**: its instructions bump (`plan_queue.py --bump`) updates both queues, saves the new version so intake stamps it, and lists the records to re-review. This skill doesn't apply it.
+- **If the two sides define a label differently, it's a criterion question.** The human and the judge are applying different rules, and agreement can't be read until it's settled. Frame it for the user: quote both definitions, give the options, and recommend one. A decision closes this report; it stays provisional. Then:
+  - bump the rubric version, and write the template change as a new evaluator version (Phase 5, steps 1–2)
+  - measure the new version on a **new queue pair** labeled under the new instructions, never by re-reviewing or relabeling the old queues. Their labels stay the record under the old rubric, and the sessions read become dev.
+- **Draft both sides of the new rule:** the template wording and the matching queue instructions, so humans and the judge apply the same rule. Building the new queues is a queue change, so hand the instructions to **arize-align-queue-builder**, with the switch time as the window start and the old queues to exclude. This skill doesn't build them.
 - **Keep applicability rules (when a session is in scope) apart from grading rules.** A scope disagreement needs a scope rule.
 - **A criterion change and a judge change are different tracks.** See [references/revision.md](references/revision.md#two-kinds-of-change-sop-step-1).
 
@@ -165,7 +164,7 @@ Meanings and sources are in [references/measurement.md](references/measurement.m
 **Present the report and STOP.** Use [references/report-template.md](references/report-template.md). Propose exactly one of these:
 
 - **A criterion decision** for the user
-- **A queue or label fix:** re-score stale sessions, re-review labels, top up a label, or adjudicate. Queue changes, including new instructions and top-ups, go to **arize-align-queue-builder**.
+- **A queue or label fix:** re-score stale sessions, top up a label, or adjudicate. Queue changes, including a new queue pair and top-ups, go to **arize-align-queue-builder**.
 - **One batch of template edits,** quoting the exact current wording, the exact replacement and the records behind each. Only when no criterion question is open.
 
 Ask the user to approve, edit or reject. **Do not continue in the same turn.**
@@ -185,7 +184,7 @@ Approval must name the change. Then, editing the evaluator in place:
 
 1. **Baseline first.** Save the current version's JSON (for rollback) and its report as `baseline.json`.
 2. **Write the new version** from the current version's full config, changing only what was approved. Read it back, compare every field, and report any difference. Record the version's `created_at` as the **switch time** in the changelog.
-3. **Re-score the gold sessions** with a one-off, non-continuous task, filtered to those session IDs. Then re-run the report with `--rescored-at RUN_START`. Re-run it unchanged once more to see the noise floor.
+3. **Re-score the gold sessions** with a one-off, non-continuous task, filtered to those session IDs. Then re-run the report with `--rescored-at RUN_START`. Re-run it unchanged once more to see the noise floor. After a criterion change, this only shows the rule took effect; the old labels follow the old rubric, so agreement comes from the new queue.
 4. **Treat what you read as dev.** Every session read while writing the rule goes in `--read-sessions`, so it never counts as test. Check each edit with `lint`, run the reproduce check, and look at dev once per batch.
 5. **Freeze, then test on a later batch:** label it after the switch, score it once with `--test-from`, and score one other judge model on it, using a temporary copy with the other model that you delete after scoring.
 6. Run the ship gate:
@@ -243,9 +242,9 @@ Use the narrower interval. PPI assumes the labeled records match production's la
 | `limit: Input should be less than or equal to 100` | Use `--limit 100` and page with `--cursor`. |
 | The output column is missing on every record | The column is named after `template_config.name`. Check `ax evaluators get` and pass `--eval-column`. Or the judge hasn't run on these sessions. |
 | "No stale results: not checked" | Re-run `fetch` with `--count-turns ROOT_FILTER --project PROJECT`. |
-| A criterion question is flagged but the definitions agree | The diff is a text heuristic. Read both. If they really agree, pass `--criterion-decided` and say so in the report. |
+| A criterion question is flagged but the definitions agree | The diff is a text heuristic. Read both. If they really agree, pass `--definitions-agree` and say so in the report. |
 | Labels from other queues appear on records | Expected: a session can be in several queues. Pass `--config`. |
-| Span-level labels are ignored on session records | Expected. They were made from one turn. Re-label in the session view. |
+| Span-level labels are ignored on session records | Expected. They were made from one turn. Label sessions in a session queue (**arize-align-queue-builder**). |
 | Agreement looks high but π is near 0 | One label dominates. Read AC1, balanced accuracy and failing-label recall. |
 | Agreement is 0% | Label spellings differ, or the wrong column was joined. Check the fit section. |
 | `Turn data mode requires a Turn Definition` when creating a version | See [references/changing-evaluators.md](references/changing-evaluators.md#turn-data-templates). |

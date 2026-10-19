@@ -73,7 +73,7 @@ SRC = {
     "stale": "Eval alignment SOP rule 3: grade the whole session and reject stale results",
     "version": "Eval alignment SOP rule 2: a judge version is (rubric, prompt, model, admission filter)",
     "unit": "Eval alignment SOP addendum F: one record per session",
-    "criterion": "Eval alignment SOP step 1 and addendum G: decide the criterion (or pass --criterion-decided)",
+    "criterion": "Eval alignment SOP step 1 and addendum G: decide the criterion, then measure the new rubric version on a new queue (or pass --definitions-agree)",
 }
 
 
@@ -670,7 +670,7 @@ def build(a):
         blockers.append({"condition": "Each record is one session",
                          "value": f"{n - len(joined)} record(s) with no session ID; {len(dup_sessions)} duplicated session(s)",
                          "source": SRC["unit"]})
-    if defs["flagged"] and not a.criterion_decided:
+    if defs["flagged"] and not a.definitions_agree:
         blockers.append({"condition": "Queue and template define the labels the same way",
                          "value": "candidate criterion question: " + ", ".join(f"`{x}`" for x in defs["flagged"]),
                          "source": SRC["criterion"]})
@@ -933,7 +933,7 @@ def render(r):
         w("Every status condition holds.")
     w("")
     w(f"**Allowed next actions:** {NEXT_ACTIONS[r['status']]}"
-      + (" A criterion question is open: no template edits until it's decided." if any(
+      + (" A criterion question is open: no template edits until it's decided, and the decided rule is measured on a new queue." if any(
           "criterion" in b["source"] for b in r["blockers"]) else "") + "\n")
 
     if r["warnings"]:
@@ -1378,8 +1378,8 @@ def main():
                    help="Session IDs (whitespace-separated) read while writing a rule; they never count as test")
     r.add_argument("--rescored-at", metavar="ISO_TIME",
                    help="Start of a scoring run, after the current version was created, that re-scored these sessions")
-    r.add_argument("--criterion-decided", action="store_true",
-                   help="The user has decided the criterion question the definition diff flagged")
+    r.add_argument("--definitions-agree", action="store_true",
+                   help="The definitions the diff flagged were read and state the same rule (a false positive)")
     r.set_defaults(func=cmd_report)
 
     c = sub.add_parser("compare", help="Compare two report --json-out files from the same gold set")
