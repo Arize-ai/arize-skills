@@ -1,6 +1,6 @@
 # Ground truth outside annotation queues
 
-Both sources here keep **one label per record**, with no per-annotator votes, so annotator agreement cannot be measured from them. That is allowed, but the report must say every label rests on one annotator. The rest of the workflow is the same: phases 3–6 in the main skill, including the stop for approval before any evaluator change. `align_report.py` reads queue exports only, so for these sources, build the join yourself and produce the same report sections and gates by hand.
+Both sources here keep **one label per record**, with no per-annotator votes, so annotator agreement cannot be measured from them. That is allowed, but the report must say every label rests on one annotator. The rest of the workflow is the same: phases 1–8 in the main skill, including the stop for approval before any evaluator change. `align_report.py` reads queue exports only, so for these sources, build the join yourself and produce the same status, blockers, warnings and numbers by hand.
 
 ## Span annotations
 
@@ -15,7 +15,7 @@ Use a filter if the project is large; see **arize-trace** for the export filters
 1. Keep spans where `annotation.<name>.label` is present.
 2. For a session evaluator, group by `attributes.session.id`. If the spans in one session carry conflicting human labels, the session is **disputed**. Do not pick one.
 3. Read the evaluator column for each unit. A session evaluator's results are keyed to the session, so check where they appear in the export before assuming a column name.
-4. Bucket each unit (gold, not applicable, unscorable, off rubric, disputed, unlabeled) using the rules in [gates-and-agreement.md](gates-and-agreement.md#record-buckets), then apply the gates.
+4. Bucket each unit (gold, not applicable, unscorable, off rubric, disputed, unlabeled) (gold means applicable, decisive and resolved), then work out the status and warnings in [measurement.md](measurement.md).
 
 `annotation.<name>.updated_by` identifies only the **last** annotator, not every annotator.
 
@@ -36,7 +36,7 @@ Join rules:
 - Evaluator task results are in `run.additional_properties["eval.<template_config.name>.label"]`, with `.explanation` alongside. `run.annotations` holds values written by `annotate-runs`, which may be the human labels if they were attached that way.
 - Experiment tasks evaluate runs directly; data granularity does not apply.
 
-To get a fresh baseline in Phase 6, create the candidate evaluator, then a dataset task targeting the experiment, and trigger it with `--experiment-ids`. See Workflow B in **arize-evaluator**. Column mappings use top-level run fields such as `output`, not span attribute paths.
+To get a fresh baseline in Phase 5, create the candidate evaluator, then a dataset task targeting the experiment, and trigger it with `--experiment-ids`. See Workflow B in **arize-evaluator**. Column mappings use top-level run fields such as `output`, not span attribute paths.
 
 ## No ground truth yet
 

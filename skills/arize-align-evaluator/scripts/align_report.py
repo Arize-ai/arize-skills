@@ -1,15 +1,16 @@
 #!/usr/bin/env python3
-"""Pre-alignment report for an Arize evaluator against human ground truth.
+"""Alignment report for an Arize evaluator against human ground truth.
 
 Four subcommands, standard library only (Python 3.9+):
 
   fetch   Read-only. Calls `ax` to save a queue, all of its records (every
           page), and an evaluator to a directory. With --count-turns, also
           counts each session's turns so `report` can flag stale stored outputs.
-  report  Joins the saved files and prints a Markdown pre-alignment report:
-          queue/evaluator fit, label coverage, annotator agreement, quality
-          gates, and human-vs-evaluator agreement on the gold subset.
-          Writes nothing to Arize.
+  report  Joins the saved files and prints a Markdown alignment report: the
+          judge version, its status (provisional or measured) with blockers,
+          heuristic warnings with their basis, test-split numbers first, fit
+          (including the queue-vs-template label definitions), and production
+          estimates. No verdict tiers. Writes nothing to Arize.
 
   compare Read-only. Compares two `report --json-out` files from the same gold
           set (before and after a change): agreement and Scott's π with
@@ -45,15 +46,13 @@ GRANULARITY_PREFIX = {"SPAN": "eval", "TRACE": "trace_eval", "SESSION": "session
 DEFAULT_NOT_APPLICABLE = ["not_applicable"]
 DEFAULT_UNSCORABLE = ["cannot_judge", "unclear"]
 
-# Gate defaults. Clearing every gate makes the queue DIRECTIONAL: enough to measure with intervals and to
-# fix clear rubric or scope errors, not to tune on or claim alignment. VALIDATED also needs 30 gold records
-# for each of at least two labels in both dev and test (about 71 per label after the split), because at
-# 10 gold records a 90% agreement has a 95% interval of about 60-98%.
-# A single annotator is allowed; agreement is gated only when records overlap.
-MIN_GOLD_USABLE = 10
-MIN_GOLD_EXPLORATORY = 5
+# Status: a judge is `measured` only when its measurement set is big enough, carries no stale or older-version
+# results, maps one record to one unit, and has no open criterion question (eval alignment SOP step 2 and
+# addendum D). Anything else is `provisional`. There are no verdict tiers.
+MIN_PER_CLASS_SPLIT = 30  # Husain & Shankar: 30 to 50 per label in both dev and test
+# Warnings: Arize heuristics, shown with their basis; they never change the status.
+MIN_GOLD = 10
 MIN_PER_CLASS = 3
-MIN_PER_CLASS_SPLIT = 30
 MAX_EXCLUDED_RATE = 0.30
 MIN_JOIN_RATE = 0.90
 MIN_KAPPA = 0.60
@@ -66,6 +65,16 @@ SPLIT = {"train": 0.15, "dev": 0.425}  # the rest is test, scored once at the en
 # and dev scorings beyond the budget make dev agreement optimistic. Neither has a published small-n value.
 MAX_DEV_TEST_GAP = 0.10
 LOOK_BUDGET = 5
+
+# Where each status condition comes from, printed next to a blocker.
+SRC = {
+    "size": "Husain & Shankar, How many examples, \"LLM judges need labeled examples\" ¶2: 30 to 50 per label "
+            "in both dev and test",
+    "stale": "Eval alignment SOP rule 3: grade the whole session and reject stale results",
+    "version": "Eval alignment SOP rule 2: a judge version is (rubric, prompt, model, admission filter)",
+    "unit": "Eval alignment SOP addendum F: one record per session",
+    "criterion": "Eval alignment SOP step 1 and addendum G: decide the criterion (or pass --criterion-decided)",
+}
 
 
 # ---------------------------------------------------------------------------
@@ -510,7 +519,7 @@ def build(a):
 
     # Human vs evaluator.
     gold = [row for row in rows if row["bucket"] == "gold"]
-    # A result scored before its session ended graded fewer turns than exist; it is not this judge's verdict.
+    # A result scored before its session ended graded fewer turns than exist; it is not this judge version's result.
     gold_scored = [row for row in gold if row["stored"] and not row["stale"]]
     confusion = Counter((row["consensus"], row["stored"].get("label")) for row in gold_scored)
     per_label = {}
@@ -587,7 +596,7 @@ def build(a):
     if undefined:
         fit.append(f"Queue instructions never mention {len(undefined)} of {len(decisive)} evaluator labels ({undefined}), "
                    "and annotation configs carry no label definitions. If labelers saw label names only, expect "
-                   "disagreements about what a label means (Phase 4 step 2 compares the definitions).")
+                   "disagreements about what a label means (phase 1 compares the definitions).")
     if other_configs:
         fit.append("Records also carry labels from other annotation configs "
                    + ", ".join(f"`{k}` ({v})" for k, v in other_configs.most_common())
@@ -605,42 +614,84 @@ def build(a):
     if unattributed_only:
         fit.append(f"{unattributed_only} record(s) have only unattributed `{config_name}` labels (applied outside the queue).")
 
-    # Gates.
+    # Status. A judge is `measured` only when every condition below holds; otherwise it is `provisional`
+    # (eval alignment SOP step 2 and addendum D). Each failing condition is a blocker.
     gold_classes = Counter(row["consensus"] for row in gold)
+    scored_split = {s: Counter(row["consensus"] for row in gold_scored if row["split"] == s) for s in ("dev", "test")}
+    sized = [c for c in gold_classes
+             if scored_split["dev"][c] >= MIN_PER_CLASS_SPLIT and scored_split["test"][c] >= MIN_PER_CLASS_SPLIT]
+    stale = [row for row in rows if row["stale"]]
+    stale_gold = [row for row in gold if row["stale"]]
+    older_gold = [row for row in gold if created and row["start_time"] and row["start_time"] < created]
+    unscored_gold = [row for row in gold if not row["stored"]]
+    span_records = sum(1 for row in rows if (row["granularity"] or "").upper() != "SESSION")
+    marker = LAST_TURN_MARKER in template
+    defs = definition_diff(instructions, template, decisive)
+    blockers = []
+    if len(sized) < 2:
+        blockers.append({
+            "condition": f"Size: {MIN_PER_CLASS_SPLIT}+ scored gold records per label in each of dev and test, for 2+ labels",
+            "value": "; ".join(f"`{c}` dev {scored_split['dev'][c]} / test {scored_split['test'][c]}"
+                               for c in sorted(gold_classes)) or "no gold records",
+            "source": SRC["size"]})
+    if stale_gold:
+        blockers.append({"condition": "No stale results on gold records",
+                         "value": f"{len(stale_gold)} scored before their session ended",
+                         "source": SRC["stale"]})
+    elif granularity == "SESSION" and marker and not turns:
+        blockers.append({"condition": "No stale results on gold records",
+                         "value": "not checked: run `fetch --count-turns`", "source": SRC["stale"]})
+    if unscored_gold or older_gold:
+        blockers.append({"condition": "Every gold record carries a result from the current judge version",
+                         "value": f"{len(unscored_gold)} with no stored result; {len(older_gold)} started before the "
+                                  "current version was created (may be an older version's result)",
+                         "source": SRC["version"]})
+    if granularity == "SESSION" and (len(joined) < n or dup_sessions):
+        blockers.append({"condition": "Each record is one session",
+                         "value": f"{n - len(joined)} record(s) with no session ID; {len(dup_sessions)} duplicated session(s)",
+                         "source": SRC["unit"]})
+    if defs["flagged"] and not a.criterion_decided:
+        blockers.append({"condition": "Queue and template define the labels the same way",
+                         "value": "candidate criterion question: " + ", ".join(f"`{x}`" for x in defs["flagged"]),
+                         "source": SRC["criterion"]})
+    status = "measured" if not blockers else "provisional"
+
+    # Warnings: Arize heuristics. They are shown with their basis and never change the status.
     excluded = sum(1 for row in rows if row["bucket"] in ("not_applicable", "unscorable", "off_rubric"))
     labeled = sum(1 for row in rows if row["bucket"] != "unlabeled")
-    gates = [
-        ("Gold records (applicable, decisive, resolved)", len(gold) >= MIN_GOLD_USABLE,
-         f"{len(gold)} (need ≥{MIN_GOLD_USABLE})"),
-        (f"≥2 gold classes with ≥{MIN_PER_CLASS} each", sum(1 for c in gold_classes.values() if c >= MIN_PER_CLASS) >= 2,
-         ", ".join(f"{k}={v}" for k, v in gold_classes.most_common()) or "none"),
-        ("Excluded rate (not applicable + unscorable + off-rubric)",
-         labeled > 0 and excluded / labeled <= MAX_EXCLUDED_RATE, f"{pct(excluded, labeled)} (max {MAX_EXCLUDED_RATE:.0%})"),
-        ("Join to evaluator unit", n > 0 and len(joined) / n >= MIN_JOIN_RATE and not dup_sessions,
-         f"{pct(len(joined), n)} with a session ID; {len(dup_sessions)} duplicated session(s)"),
-        ("Stored evaluator output on gold records", bool(gold) and len(gold_scored) / len(gold) >= MIN_JOIN_RATE,
-         pct(len(gold_scored), len(gold))),
-        (f"Annotator agreement κ ≥ {MIN_KAPPA}, or AC1 ≥ {MIN_KAPPA} when one label holds ≥{SKEW_SHARE:.0%} "
-         "(when records have 2+ votes)",
-         all(p["ok"] for p in iaa),
-         "; ".join(f"{short_email(p['a'])}/{short_email(p['b'])} κ={p['kappa']:.2f}"
-                   + (f", AC1={p['ac1']:.2f} (top label {p['majority_share']:.0%})" if p["skewed"] else "")
-                   + f" on {p['n']}" for p in iaa)
-         or "single annotator; not measured"),
-        ("No unresolved disputes", not disputed, f"{len(disputed)} disputed"),
-    ]
-    mismatches = [row for row in rows if row["stored"] and row["consensus"] and row["stored"].get("label") != row["consensus"]]
-    stale = [row for row in rows if row["stale"]]
-    big_classes = [c for c in gold_classes
-                   if split_counts["dev"][c] >= MIN_PER_CLASS_SPLIT and split_counts["test"][c] >= MIN_PER_CLASS_SPLIT]
-    small_classes = sorted(c for c in gold_classes if c not in big_classes)
-    if all(ok for _, ok, _ in gates):
-        verdict = "VALIDATED" if len(big_classes) >= 2 else "DIRECTIONAL"
-    elif len(gold) >= MIN_GOLD_EXPLORATORY and len(gold_classes) >= 2:
-        verdict = "EXPLORATORY"
-    else:
-        verdict = "NOT USABLE"
+    warnings = []
+    def warn(ok, check, value, basis):
+        if not ok:
+            warnings.append({"check": check, "value": value, "basis": basis})
+    warn(len(gold) >= MIN_GOLD, f"At least {MIN_GOLD} gold records", str(len(gold)),
+         "Arize heuristic. At 10 records, 90% agreement has a 95% interval of about 60–98%.")
+    thin = [c for c in decisive if gold_classes.get(c, 0) < MIN_PER_CLASS]
+    warn(not thin, f"At least {MIN_PER_CLASS} gold records per label",
+         ", ".join(f"`{c}` {gold_classes.get(c, 0)}" for c in thin), "Arize heuristic")
+    warn(labeled == 0 or excluded / labeled <= MAX_EXCLUDED_RATE, f"Excluded share ≤ {MAX_EXCLUDED_RATE:.0%}",
+         pct(excluded, labeled), "Arize heuristic. Excluding hard cases inflates agreement (Zheng et al., ties vs no ties).")
+    warn(not gold or len(gold_scored) / len(gold) >= MIN_JOIN_RATE, f"Score coverage ≥ {MIN_JOIN_RATE:.0%} of gold",
+         pct(len(gold_scored), len(gold)), "Arize heuristic")
+    warn(n == 0 or len(joined) / n >= MIN_JOIN_RATE, f"Join coverage ≥ {MIN_JOIN_RATE:.0%}", pct(len(joined), n),
+         "Arize heuristic")
+    for p in iaa:
+        warn(p["ok"], f"Annotator agreement κ ≥ {MIN_KAPPA} (AC1 when one label holds ≥ {SKEW_SHARE:.0%})",
+             f"{short_email(p['a'])}/{short_email(p['b'])} κ {p['kappa']:.2f}, AC1 {p['ac1']:.2f} on {p['n']}",
+             "Landis & Koch; McHugh 2012; Gwet 2008")
+    warn(bool(multi), "Two or more annotators on some records", "single annotator; no human ceiling measured",
+         "Eval alignment SOP addendum E; Mukherjee et al.")
+    warn(not disputed, "No open disputes", f"{len(disputed)} disputed", "A disputed record has no gold label")
+    warn(granularity != "SESSION" or not span_records, "Session judge labeled on session records",
+         f"{span_records} span record(s): each opens on one turn",
+         "Eval alignment SOP addendum F")
 
+    # Failing labels, named with --fail-label: their recall leads, and leniency is the share of human-failed
+    # records the judge did not fail.
+    fail = [f for f in (a.fail_label or []) if f in choices]
+    failed = [row for row in gold_scored if row["consensus"] in fail]
+    leniency = (sum(1 for row in failed if row["stored"].get("label") not in fail), len(failed)) if fail else None
+
+    mismatches = [row for row in rows if row["stored"] and row["consensus"] and row["stored"].get("label") != row["consensus"]]
     return {
         "queue": queue, "evaluator": evaluator, "version": version, "tc": tc, "choices": choices,
         "granularity": granularity, "eval_column": eval_column, "config_name": config_name, "rubric": rubric,
@@ -648,19 +699,77 @@ def build(a):
         "iaa": iaa, "multi": multi, "disputed": disputed, "dup_sessions": dup_sessions,
         "with_stored": with_stored, "older": older, "gold": gold, "gold_scored": gold_scored,
         "confusion": confusion, "per_label": per_label, "agree": agree, "na_rows": na_rows,
-        "applicability": applicability, "fit": fit, "gates": gates, "verdict": verdict,
+        "applicability": applicability, "fit": fit, "status": status, "blockers": blockers, "warnings": warnings,
+        "definitions": defs, "fail_labels": fail, "leniency": leniency,
         "gold_classes": gold_classes, "annotators": annotators, "mismatches": mismatches, "stale": stale,
-        "turns_fetched": bool(turns), "marker": LAST_TURN_MARKER in template,
-        "balanced": balanced, "split_counts": split_counts, "weighted": weighted, "small_classes": small_classes,
+        "turns_fetched": bool(turns), "marker": marker,
+        "balanced": balanced, "split_counts": split_counts, "weighted": weighted,
         "judge": judge, "judge_pi": pi_with_ci(judge_pairs), "app_pairs": app_pairs, "skew": skew,
         "test_pairs": test_pairs, "test_pi": pi_with_ci(test_pairs), "test_recall": test_recall,
         "ceiling_human": ceiling_human, "ceiling_judge": ceiling_judge, "production": production,
+        "planned": bool(plan),
     }
+
+class PlanIndex:
+    """Planned records by span ID, falling back to session ID: a SESSION queue record's span is its session's
+    first trace, which is usually but not always the span the plan recorded. Every reader of plan.json uses it."""
+
+    def __init__(self, plan):
+        recs = plan.get("records") or []
+        self.by_span = {r.get("span_id"): r for r in recs}
+        self.by_session = {str(r.get("session_id")): r for r in recs if r.get("session_id") is not None}
+
+    def get(self, row):
+        return self.by_span.get(row.get("span_id")) or self.by_session.get(str(row.get("session_id")))
 
 
 def plan_index(plan):
-    """span_id -> planned record; every reader of plan.json goes through this."""
-    return {r.get("span_id"): r for r in plan.get("records") or []}
+    return PlanIndex(plan)
+
+
+DEF_LINE = re.compile(r"^\s*[-*]\s*`?([A-Za-z0-9_]+)`?\s*:\s*(.*)$")
+SECTION = re.compile(r"^\s*[A-Z][A-Za-z ]{0,30}:")  # "Evidence:", "Labels:" start a new section
+IDENT = re.compile(r"`?\b([a-z]+(?:_[a-z0-9]+)+)\b`?")
+
+
+def label_definitions(text, labels):
+    """Each label's definition from `- label: text` lines, with indented or unbulleted continuation lines."""
+    out, current = {}, None
+    for line in (text or "").splitlines():
+        m = DEF_LINE.match(line)
+        if m:
+            current = m.group(1) if m.group(1) in labels else None
+            if current:
+                out[current] = m.group(2).strip()
+        elif not line.strip() or SECTION.match(line):
+            current = None
+        elif current and not line.lstrip().startswith(("-", "*", "#")):
+            out[current] += " " + line.strip()
+    return out
+
+
+def definition_diff(instructions, template, labels):
+    """Put the queue's and the template's definition of each label side by side, and flag candidates where they
+    differ: text that is mostly different, or a tool or field name that one side's definition uses and the other
+    side's doesn't. The script only points at candidates; the agent decides by reading both (phase 1)."""
+    from difflib import SequenceMatcher
+    q, t = label_definitions(instructions, labels), label_definitions(template, labels)
+    rows, flagged = [], []
+    for lbl in labels:
+        a, b = q.get(lbl), t.get(lbl)
+        if not (a and b):
+            rows.append({"label": lbl, "queue": a, "template": b, "similarity": None, "only_one_side": []})
+            continue
+        ids = lambda s: {x for x in IDENT.findall(s) if x not in labels}
+        one_side = sorted(ids(a) ^ ids(b))
+        sim = SequenceMatcher(None, a.lower(), b.lower()).ratio()
+        rows.append({"label": lbl, "queue": a, "template": b, "similarity": sim, "only_one_side": one_side})
+        if sim < 0.6 or one_side:
+            flagged.append(lbl)
+    # A tool or field name both documents mention outside the label lines is a rule both sides state;
+    # list it so the agent can check the two rules agree.
+    shared = sorted({x for x in IDENT.findall(instructions or "")} & {x for x in IDENT.findall(template or "")} - set(labels))
+    return {"rows": rows, "flagged": flagged, "shared_terms": shared}
 
 
 def weight_by_plan(plan, gold_scored):
@@ -673,7 +782,7 @@ def weight_by_plan(plan, gold_scored):
     Records from the plan's random stream are a uniform sample, so a queue of only those is already a
     measurement and needs no weights; they are never pooled into the targeted strata."""
     planned = plan_index(plan)
-    streams = Counter((planned.get(row["span_id"]) or {}).get("stream", "unplanned") for row in gold_scored)
+    streams = Counter((planned.get(row) or {}).get("stream", "unplanned") for row in gold_scored)
     if gold_scored and streams["random"] == len(gold_scored):
         frames = [s.get("frame") for s in plan.get("strata") or [] if s.get("stream") == "random"]
         return {"random_only": True, "streams": dict(streams),
@@ -683,7 +792,7 @@ def weight_by_plan(plan, gold_scored):
         return {"error": "plan.json has no strata with production counts (re-plan with a current plan_queue.py)"}
     groups = defaultdict(list)
     for row in gold_scored:
-        h = (planned.get(row["span_id"]) or {}).get("stratum")
+        h = (planned.get(row) or {}).get("stratum")
         if h in strata:
             groups[h].append(row)
     covered = {h: s["population"] for h, s in strata.items() if groups.get(h)}
@@ -719,7 +828,7 @@ def ppi_rates(plan, rows, labels):
             for s in plan.get("strata") or [] if s.get("stream") == "random"}
     labeled = defaultdict(list)
     for row in rows:
-        p = planned.get(row["span_id"])
+        p = planned.get(row)
         if (p and p.get("stream") == "random" and row["bucket"] in ("gold", "not_applicable")
                 and row["stored"] and not row["stale"]):
             labeled[p.get("period", "")].append((row["consensus"], row["stored"].get("label")))
@@ -763,12 +872,11 @@ def ppi_rates(plan, rows, labels):
     return {"rates": rates, "n": sum(len(v) for v in labeled.values()), "units": total, "periods": len(labeled)}
 
 
-VERDICT_MEANING = {
-    "VALIDATED": "Every gate passes and two or more classes have enough gold records to support an agreement claim.",
-    "DIRECTIONAL": "Every gate passes, but the gold set is too small to tune on or to confirm a target: report rates "
-                   "with intervals, fix clear rubric or scope errors in one batch, and label more before further tuning.",
-    "EXPLORATORY": "Some gates fail; disagreements show patterns worth investigating, nothing more.",
-    "NOT USABLE": "Too few gold records or classes; fix the queue before reading agreement.",
+NEXT_ACTIONS = {
+    "provisional": "Report every number with its interval and don't claim a target. Fix clear criterion, scope or "
+                   "queue problems first, then make at most one batch of template fixes; don't tune prompt by prompt.",
+    "measured": "The revise loop and the ship gate apply: candidate copy, baseline, batched general edits, freeze, "
+                "a later test batch scored once, a second judge model, then `compare --gate`.",
 }
 
 
@@ -776,38 +884,137 @@ def render(r):
     q, ev, v, tc = r["queue"], r["evaluator"], r["version"], r["tc"]
     rows, out = r["rows"], []
     w = out.append
-    w(f"# Pre-alignment report: `{ev.get('name')}` vs queue \"{q.get('name')}\"\n")
-    w(f"**Verdict: {r['verdict']}.** {VERDICT_MEANING[r['verdict']]} "
-      "No evaluator, task, or queue was changed to produce this report.\n")
-    if r["verdict"] == "DIRECTIONAL" and r["small_classes"]:
-        w(f"Classes with fewer than {MIN_PER_CLASS_SPLIT} gold records in dev or in test, where agreement is not "
-          f"validated: {r['small_classes']}.\n")
+    w(f"# Alignment report: `{ev.get('name')}` vs queue \"{q.get('name')}\"\n")
+    w("No evaluator, task, or queue was changed to produce this report.\n")
 
-    w("## What is being compared\n")
-    w(f"- Queue `{q.get('id')}`: {len(rows)} records, annotation config `{r['config_name']}`")
-    w(f"- Queue instructions: {clip(q.get('instructions'), 400) or '(none)'}")
-    w(f"- Evaluator `{ev.get('id')}`, current version `{v.get('id')}` created {v.get('created_at')} "
-      f"(\"{clip(v.get('commit_message'), 120)}\")")
-    w(f"- Evaluator granularity `{r['granularity']}`, model `{(tc.get('llm_config') or {}).get('model_name')}`, "
-      f"output column `{r['eval_column']}`")
-    w(f"- Evaluator choices: {r['choices']}")
-    w(f"- Human rubric: {r['rubric']}")
     j = r["judge"]
-    w(f"- Judge version: evaluator `{j['evaluator_version']}`, prompt `{j['prompt_sha']}`, model `{j['model']}`, "
-      f"rubric `{j['rubric_version'] or 'not given'}`, admission filter "
-      + (f"`{clip(j['admission_filter'], 120)}`" if j["admission_filter"] else "`not given`")
+    w("## Judge version\n")
+    w(f"- Evaluator `{ev.get('id')}`, version `{j['evaluator_version']}` created {v.get('created_at')} "
+      f"(\"{clip(v.get('commit_message'), 120)}\")")
+    w(f"- Prompt `{j['prompt_sha']}`, model `{j['model']}`, rubric `{j['rubric_version'] or 'not given'}`, admission "
+      "filter " + (f"`{clip(j['admission_filter'], 120)}`" if j["admission_filter"] else "`not given`")
       + (f"; test batch from `{j['test_from']}`" if j["test_from"] else ""))
+    w(f"- Granularity `{r['granularity']}`, output column `{r['eval_column']}`, choices {r['choices']}")
+    w(f"- Queue `{q.get('id')}`: {len(rows)} records, annotation config `{r['config_name']}`, rubric {r['rubric']}")
     if not (j["rubric_version"] and j["admission_filter"]):
-        w("  - Pass `--rubric-version` and `--admission-filter`: a change to either is a different judge, and the "
-          "numbers below don't carry over.")
+        w("  - Pass `--rubric-version` and `--admission-filter`: a change to either is a different judge, and these "
+          "numbers don't carry over.")
     w("")
 
-    w("## Fit between queue and evaluator\n")
-    for f in r["fit"] or ["No structural mismatches found."]:
+    w(f"## Status: {r['status']}\n")
+    if r["blockers"]:
+        w("| Blocking condition | Value | Source |")
+        w("|---|---|---|")
+        for b in r["blockers"]:
+            w(f"| {b['condition']} | {b['value']} | {b['source']} |")
+    else:
+        w("Every status condition holds.")
+    w("")
+    w(f"**Allowed next actions:** {NEXT_ACTIONS[r['status']]}"
+      + (" A criterion question is open: no template edits until it's decided." if any(
+          "criterion" in b["source"] for b in r["blockers"]) else "") + "\n")
+
+    if r["warnings"]:
+        w("## Warnings\n")
+        w("These don't change the status. Each states its basis.\n")
+        w("| Check | Value | Basis |")
+        w("|---|---|---|")
+        for x in r["warnings"]:
+            w(f"| {x['check']} | {x['value']} | {x['basis']} |")
+        w("")
+
+    gs, tp = r["gold_scored"], r["test_pairs"]
+    fail = r["fail_labels"]
+    order = lambda labels: sorted(labels, key=lambda lbl: (lbl not in fail, lbl))
+    w("## Test split (the numbers to report)\n")
+    if r["judge"]["test_from"]:
+        w(f"Test is every gold session that started at or after `{r['judge']['test_from']}`: a batch labeled after "
+          "the prompt was frozen. Score it once per judge version.\n")
+    else:
+        w("Test is drawn from the same batch as dev, so these numbers are **directional**. The real test is a batch "
+          "labeled after freezing the prompt (`--test-from`).\n")
+    if not tp:
+        w("No test record has a current stored result yet.\n")
+    else:
+        w(f"- Exact agreement: {pct_ci(n_agree(tp), len(tp))}; Scott's {fmt_pi(r['test_pi'])}")
+        for lbl in order(r["test_recall"]):
+            hit, n = r["test_recall"][lbl]
+            w(f"- Recall for `{lbl}`{' (failing)' if lbl in fail else ''}: {pct_ci(hit, n)}")
+        w("")
+
+    w("## All scored gold records\n")
+    if not gs:
+        w("No gold record has a usable stored result, so agreement can't be computed yet.\n")
+    else:
+        w("Recall per human label (TPR and TNR for a binary judge), failing labels first:\n")
+        for lbl in order(r["per_label"]):
+            m = r["per_label"][lbl]
+            w(f"- `{lbl}`{' (failing)' if lbl in fail else ''}: {pct_ci(m['tp'], m['support'])}")
+        if r["balanced"] is not None:
+            w(f"- Balanced accuracy (mean of the above): {100 * r['balanced']:.0f}%")
+        if r["leniency"]:
+            k, n = r["leniency"]
+            w(f"- Leniency (human said {fail}, judge didn't): {pct_ci(k, n)}" if n else
+              f"- Leniency: no gold record has a failing human label ({fail}).")
+        elif not fail:
+            w("- Leniency: pass `--fail-label` to name the failing labels.")
+        w("")
+        w(f"Exact agreement: {pct_ci(r['agree'], len(gs))}; Scott's {fmt_pi(r['judge_pi'])}. Never quote percent "
+          "agreement alone: judges with over 90% agreement have still mis-scored by 10 points or more (Thakur et al.).\n")
+        sk = r["skew"]
+        if sk:
+            w(f"One human label (`{sk['label']}`) holds {sk['share']:.0%} of these records, so π understates agreement "
+              f"(the same prevalence effect as κ). Next to it: Gwet's AC1 {sk['ac1']:.2f}, PABAK {sk['pabak']:.2f}"
+              + (f", balanced accuracy {100 * r['balanced']:.0f}%" if r["balanced"] is not None else "")
+              + ". Read the failing labels' recall first.\n")
+        w("Precision per judge label (the share humans confirmed):\n")
+        for lbl in order(r["per_label"]):
+            m = r["per_label"][lbl]
+            w(f"- `{lbl}`: {pct_ci(m['tp'], m['predicted'])}")
+        w("")
+        w("| Human \\ Judge | " + " | ".join(f"`{c}`" for c in r["choices"]) + " |")
+        w("|---|" + "---:|" * len(r["choices"]))
+        for h in sorted({row["consensus"] for row in gs}):
+            w(f"| `{h}` | " + " | ".join(str(r["confusion"].get((h, c), 0)) for c in r["choices"]) + " |")
+        w("")
+    ap = r["app_pairs"]
+    if ap:
+        w("### Applicability and grade\n")
+        w(f"- Applicability (in scope or not): {pct_ci(n_agree(ap), len(ap))}; Scott's {pi_ci(ap)}")
+        w(f"- Grade (gold records only): {pct_ci(r['agree'], len(gs))}")
+        w("A scope disagreement needs a scope rule, not a grading rule (SOP step 1).\n")
+    ch, cj = r["ceiling_human"], r["ceiling_judge"]
+    w("### Human ceiling\n")
+    if ch:
+        w(f"One rater held out at a time, against the same reference as the judge, on {len(ch)} comparisons "
+          "(Mukherjee et al.):\n")
+        w(f"- Held-out humans: {pct_ci(n_agree(ch), len(ch))}; Scott's {pi_ci(ch)}")
+        w(f"- Judge: {pct_ci(n_agree(cj), len(cj))}; Scott's {pi_ci(cj)}")
+        w("Don't tune past the human ceiling.\n")
+    else:
+        w("Single annotator; no human ceiling measured. Every gold label rests on one person.\n")
+
+    w("## Fit between queue and judge\n")
+    d = r["definitions"]
+    if d["rows"]:
+        w("Each label's definition in the queue instructions and in the judge's template (phase 1). A difference "
+          "means the human and the judge apply different rules: a criterion question, not a judge error.\n")
+        w("| Label | Queue instructions | Judge template | Flag |")
+        w("|---|---|---|---|")
+        for x in d["rows"]:
+            flag = ("⚠ " + ("differs" if x["similarity"] is not None and x["similarity"] < 0.6 else "")
+                    + (f" names only on one side: {x['only_one_side']}" if x["only_one_side"] else "")) \
+                if x["label"] in d["flagged"] else ("not defined on one side" if x["similarity"] is None else "")
+            w(f"| `{x['label']}` | {clip(x['queue'], 220) or '—'} | {clip(x['template'], 220) or '—'} | {flag.strip()} |")
+        w("")
+        if d["shared_terms"]:
+            w(f"Terms both documents use: {', '.join(f'`{s}`' for s in d['shared_terms'][:12])}. Check that each "
+              "side states the same rule about them.\n")
+    for f in r["fit"]:
         w(f"- {f}")
     w("")
 
-    w("## Labeling coverage\n")
+    w("## Records and labels\n")
     w("| Annotator | Completed | Pending | Votes cast |")
     w("|---|---:|---:|---:|")
     vote_by = Counter(who for row in rows for who in row["votes"])
@@ -815,10 +1022,9 @@ def render(r):
         c = r["completion"].get(who, Counter())
         w(f"| {short_email(who)} | {c.get('COMPLETED', 0)} | {sum(c.values()) - c.get('COMPLETED', 0)} | {vote_by.get(who, 0)} |")
     w("")
-    w("Human label distribution (one row per record, after consensus):\n")
     buckets = Counter(row["bucket"] for row in rows)
     labels = Counter(row["consensus"] for row in rows if row["consensus"])
-    w("| Label | Records | Bucket |")
+    w("| Human label | Records | Bucket |")
     w("|---|---:|---|")
     for lbl, c in labels.most_common():
         b = next(row["bucket"] for row in rows if row["consensus"] == lbl)
@@ -827,143 +1033,64 @@ def render(r):
         if buckets.get(b):
             w(f"| — | {buckets[b]} | {b} |")
     w("")
-
-    w("## Annotator agreement\n")
-    if not r["multi"]:
-        w("No record has two or more votes, so human-human agreement cannot be measured. "
-          "Every gold label rests on a single annotator; say so when quoting results.\n")
-    else:
+    if r["multi"]:
         for p in r["iaa"]:
-            w(f"- {short_email(p['a'])} vs {short_email(p['b'])}: {pct_ci(p['agree'], p['n'])} agree, "
-              f"Cohen's κ = {p['kappa']:.2f}, Scott's π = {p['pi']:.2f}, AC1 = {p['ac1']:.2f}, PABAK = {p['pabak']:.2f}; "
-              f"most common label {p['majority_share']:.0%} of votes")
-            if p["skewed"]:
-                w(f"  - One label holds ≥{SKEW_SHARE:.0%} of the votes, so κ understates agreement (the kappa "
-                  "paradox). The gate accepts AC1 for this pair.")
-            if p["n"] < MIN_SHARED_FOR_KAPPA:
-                w(f"  - Only {p['n']} shared records; κ from fewer than {MIN_SHARED_FOR_KAPPA} is noisy. "
-                  "Treat this as a rough check.")
-        if r["disputed"]:
-            w("\nDisputed records (excluded from gold until adjudicated):\n")
-            w("| Record | Session | Votes |")
-            w("|---|---|---|")
-            for row in r["disputed"]:
-                w(f"| `{row['record_id']}` | {row['session_id']} | "
-                  + ", ".join(f"{short_email(k)}=`{x}`" for k, x in row["votes"].items()) + " |")
+            w(f"- {short_email(p['a'])} vs {short_email(p['b'])}: {pct_ci(p['agree'], p['n'])} agree, κ = {p['kappa']:.2f}, "
+              f"π = {p['pi']:.2f}, AC1 = {p['ac1']:.2f}, PABAK = {p['pabak']:.2f}; top label {p['majority_share']:.0%}"
+              + (" (the kappa paradox: with one dominant label κ understates agreement, so AC1 is the check)"
+                 if p["skewed"] else "")
+              + (f"; only {p['n']} shared records, a rough check" if p["n"] < MIN_SHARED_FOR_KAPPA else ""))
         w("")
-
-    w("## Quality gates\n")
-    w("| Gate | Pass | Value |")
-    w("|---|:---:|---|")
-    for name, ok, val in r["gates"]:
-        w(f"| {name} | {'✅' if ok else '❌'} | {val} |")
-    w("")
-
-    w("## Stored evaluator output\n")
+    if r["disputed"]:
+        w("Disputed records (no gold label until adjudicated):\n")
+        for row in r["disputed"]:
+            w(f"- `{row['record_id']}` session {row['session_id']}: "
+              + ", ".join(f"{short_email(k)}=`{x}`" for k, x in row["votes"].items()))
+        w("")
     w(f"- `{r['eval_column']}` present on {pct(len(r['with_stored']), len(rows))} records.")
-    if r["older"]:
-        w(f"- {len(r['older'])} record(s) started before the current version was created. Stored outputs carry no version ID, "
-          "so these may have been scored by an older version. A fresh run of the current version is needed before any "
-          "agreement number is quoted as the baseline.")
     if r["stale"]:
-        w(f"- {len(r['stale'])} stored result(s) say the judge saw fewer turns than the session has "
-          f"(`{LAST_TURN_MARKER}`), so they were scored before the session ended. They are left out of agreement; "
-          "re-run the current version on those sessions.")
+        w(f"- {len(r['stale'])} stored result(s) saw fewer turns than the session has (`{LAST_TURN_MARKER}`): scored "
+          "mid-session, so left out. Re-run the current version on those sessions.")
     elif r["marker"] and not r["turns_fetched"]:
-        w(f"- The template reports `{LAST_TURN_MARKER}`; run `fetch --count-turns` to check for results scored mid-session.")
-    if r["dup_sessions"]:
-        w(f"- Sessions appearing on more than one record: {r['dup_sessions']}.")
+        w(f"- The template reports `{LAST_TURN_MARKER}`; run `fetch --count-turns` to check for mid-session results.")
+    if r["older"]:
+        w(f"- {len(r['older'])} record(s) started before the current version was created; their results may be an "
+          "older version's.")
+    if r["na_rows"]:
+        w("- On records humans marked not applicable, the judge said: "
+          + ", ".join(f"`{lbl}` {c}" for lbl, c in r["applicability"].most_common()))
     w("")
 
-    if r["na_rows"]:
-        w("### Records humans marked not applicable\n")
-        w("Evaluator output on these records (`not_applicable` is correct if the evaluator offers it):\n")
-        for lbl, c in r["applicability"].most_common():
-            w(f"- `{lbl}`: {c}")
-        w("")
-
-    w("## Human vs evaluator on gold records\n")
-    gs = r["gold_scored"]
-    if not gs:
-        w("No gold record has a stored evaluator output, so agreement cannot be computed from stored results.\n")
-    else:
-        w("Per human label, the share the evaluator caught (recall; TPR and TNR for a binary evaluator):\n")
-        for lbl, m in r["per_label"].items():
-            w(f"- `{lbl}`: {pct_ci(m['tp'], m['support'])}")
-        if r["balanced"] is not None:
-            w(f"- Balanced accuracy (mean of the above): {100 * r['balanced']:.0f}%")
-        w("")
-        w(f"Exact agreement: {pct_ci(r['agree'], len(gs))}; Scott's {fmt_pi(r['judge_pi'])}. "
-          + ("Evidence of alignment on this gold set." if r["verdict"] == "VALIDATED"
-             else "Directional only: the interval is too wide to confirm a target." if r["verdict"] == "DIRECTIONAL"
-             else "Descriptive only.")
-          + " The queue may oversample rare labels, so this is not a production-wide rate"
-          + (" (see the weighted estimate below).\n" if r["weighted"] else ".\n"))
-        w("| Human \\ Evaluator | " + " | ".join(f"`{c}`" for c in r["choices"]) + " |")
-        w("|---|" + "---:|" * len(r["choices"]))
-        for h in sorted({row["consensus"] for row in gs}):
-            w(f"| `{h}` | " + " | ".join(str(r["confusion"].get((h, c), 0)) for c in r["choices"]) + " |")
-        w("")
-        w("Per evaluator label, the share humans confirmed (precision):\n")
-        for lbl, m in r["per_label"].items():
-            w(f"- `{lbl}`: {pct_ci(m['tp'], m['predicted'])}")
-        w("")
-        w("Percent agreement alone can hide large scoring errors, so quote π and the failing label's recall with it.\n")
-        sk = r["skew"]
-        if sk:
-            w(f"One human label (`{sk['label']}`) holds {sk['share']:.0%} of these records, so π understates agreement "
-              f"(the same prevalence effect as κ). Next to it: Gwet's AC1 {sk['ac1']:.2f}, PABAK {sk['pabak']:.2f}"
-              + (f", balanced accuracy {100 * r['balanced']:.0f}%" if r["balanced"] is not None else "")
-              + ". Read the failing label's recall first.\n")
-    ap = r["app_pairs"]
-    if ap:
-        w("### Applicability and grade\n")
-        w(f"- Applicability (in scope or not, per human vs judge): {pct_ci(n_agree(ap), len(ap))}; Scott's {pi_ci(ap)}")
-        w(f"- Grade (gold records only): {pct_ci(r['agree'], len(gs))}")
-        w("A disagreement about scope needs a scope rule, not a grading rule. Keep the two kinds of rule apart in "
-          "the template.\n")
-    ch, cj = r["ceiling_human"], r["ceiling_judge"]
-    if ch:
-        w("### Human ceiling (one rater held out)\n")
-        w(f"Each rater is held out in turn and scored against the majority of the others; the judge is scored "
-          f"against the same reference on the same {len(ch)} comparisons.\n")
-        w(f"- Held-out humans: {pct_ci(n_agree(ch), len(ch))}; Scott's {pi_ci(ch)}")
-        w(f"- Judge: {pct_ci(n_agree(cj), len(cj))}; Scott's {pi_ci(cj)}")
-        w("Don't tune the judge past the human ceiling: past it, gains fit these raters, not the criterion.\n")
-    wt = r["weighted"]
+    wt, pr = r["weighted"], r["production"]
+    w("## Production estimates\n")
+    if not r["planned"]:
+        w("No `--plan`: these records' selection probabilities are unknown, so nothing here is a production rate. "
+          "Corrected rates need random-stream labels from **arize-align-queue-builder** (SOP rule 5).\n")
     if wt:
-        w("### Production-weighted estimates\n")
         if wt.get("error"):
-            w(f"Not computed: {wt['error']}.\n")
+            w(f"Weighted estimates not computed: {wt['error']}.\n")
         elif wt.get("random_only"):
-            w("Every gold record is from the plan's random stream, a uniform sample"
-              + (f" of {wt['frame']} scored units" if wt.get("frame") else "") + ", so the agreement and recall "
-              "above are measurement estimates and need no weighting.\n")
+            w("Every scored gold record is from the plan's random stream" + (f" (a uniform sample of {wt['frame']} scored "
+              "units)" if wt.get("frame") else "") + ", so the numbers above are measurement estimates.\n")
         else:
-            w("These records were targeted: chosen using the evaluator's labels or other signals, to find failures. "
-              "Take agreement from the calibration queue's random stream; the weighted figures below are a "
-              "secondary estimate.\n" + (f"{wt['streams']['random']} gold records here are from the random stream.\n"
-                                          if wt["streams"].get("random") else ""))
-            w("Each queue stratum's gold records are weighted by that stratum's production count from the queue "
-              "plan, which undoes the oversampling of rare labels and provider disagreements. Exclusions are "
-              "assumed random within a stratum.\n")
+            w("These records were targeted, so these weighted figures are a **secondary** estimate; take "
+              "measurement from the calibration queue. Each stratum is weighted by its production count. This "
+              "assumes uniform sampling within a stratum; the queue builder rotates across entry points inside a "
+              "label without recording it, so treat these as approximate.\n"
+              + (f"{wt['streams']['random']} gold records here are from the random stream.\n"
+                 if wt["streams"].get("random") else ""))
             w(f"- Agreement: {100 * wt['agreement']:.0f}%")
             for lbl, rec in wt["recall"].items():
                 w(f"- Recall for `{lbl}`: {fmt_rate(rec)}")
-            w(f"- Strata with gold records cover {100 * (wt['covered_share'] or 0):.0f}% of the planned production "
-              "units" + (f"; no gold in: {wt['uncovered']}" if wt["uncovered"] else "")
-              + (". Some production counts are lower bounds." if wt["lower_bound"] else "."))
-            w("")
-    pr = r["production"]
+            w(f"- Strata with gold cover {100 * (wt['covered_share'] or 0):.0f}% of the planned production units"
+              + (f"; no gold in: {wt['uncovered']}" if wt["uncovered"] else "") + ".\n")
     if pr:
-        w("### Production rates (PPI++)\n")
         if pr.get("error"):
-            w(f"Not computed: {pr['error']}.\n")
+            w(f"Corrected production rates not computed: {pr['error']}.\n")
         else:
-            w(f"Each label's production rate, from the judge's labels on {pr['units']} production units and "
-              f"{pr['n']} human-labeled random-stream records ({pr['periods']} period(s)). The judge-only rate is "
-              "biased whenever the judge errs; the corrected rate fixes that with the human labels. Use the "
-              "narrower of the corrected and human-only intervals.\n")
+            w(f"Corrected production rates from the judge's labels on {pr['units']} units and {pr['n']} human-labeled "
+              f"random-stream records (SOP step 8). Use whichever of the corrected and human-only intervals is "
+              "narrower (Lee et al. §6).\n")
             w("| Label | Judge only | Corrected (PPI++) | Human only | Use |")
             w("|---|---:|---:|---:|---|")
             for k, m in pr["rates"].items():
@@ -972,48 +1099,29 @@ def render(r):
                   f"({100 * m['human_ci'][0]:.1f}–{100 * m['human_ci'][1]:.1f}%) | "
                   + ("corrected" if m["use"] == "ppi" else "human only") + " |")
             if pr["n"] < 30:
-                w(f"\nOnly {pr['n']} random-stream labels: these normal-approximation intervals are rough.")
-            w("\nRe-collect random-stream labels after any change to the judge version; the correction assumes "
-              "the same judge on both sets.\n")
+                w(f"\nOnly {pr['n']} random-stream labels: these intervals are rough.")
+            w("\nPPI assumes the labeled records have the same label mix as production. That holds for the random "
+              "stream; a stratified sample without its weights biases it (Lee et al. §8). Re-collect labels after any "
+              "judge version change.\n")
+
     sc = r["split_counts"]
     if r["gold"]:
-        w("### Held-out split\n")
-        w("Gold records are split by session within each human label, stably by hash: **train** may supply "
-          "few-shot examples, **dev** is for reading disagreements and iterating, **test** is scored once per "
-          "judge version, after the last revision. `--json-out` records each record's split.\n")
-        if r["judge"]["test_from"]:
-            w(f"Test is every gold session that started at or after `{r['judge']['test_from']}`: a later batch, "
-              "labeled after the prompt was frozen.\n")
-        else:
-            w("Test is drawn from the same batch as dev. For a stronger check, label a later batch after freezing "
-              "the prompt and pass `--test-from`.\n")
+        w("## Split\n")
+        w("By session, within each human label, stable across runs. Train may supply few-shot examples, dev is for "
+          "reading disagreements and iterating, test is scored once per frozen version.\n")
         w("| Human label | Train | Dev | Test |")
         w("|---|---:|---:|---:|")
         for lbl in sorted(r["gold_classes"]):
             w(f"| `{lbl}` | {sc['train'][lbl]} | {sc['dev'][lbl]} | {sc['test'][lbl]} |")
-        tp = r["test_pairs"]
         w("")
-        w("**Test split only** (the numbers to report for a frozen judge version; score it once per version):\n")
-        if not tp:
-            w("- No test record has a current stored result yet.")
-        else:
-            w(f"- Exact agreement: {pct_ci(n_agree(tp), len(tp))}; Scott's {fmt_pi(r['test_pi'])}")
-            for lbl, (hit, n) in r["test_recall"].items():
-                w(f"- Recall for `{lbl}`: {pct_ci(hit, n)}")
-            if not r["judge"]["test_from"]:
-                w("- Same-batch test: directional only. A batch labeled after freezing (`--test-from`) is the real test.")
-        thin = sorted(lbl for lbl in r["gold_classes"] if sc["test"][lbl] < MIN_PER_CLASS_SPLIT)
-        if thin:
-            w(f"\nTest records per label below {MIN_PER_CLASS_SPLIT} for {thin}: a test result on them is "
-              "directional only.")
-        w("")
+
     mism = r["mismatches"]
     if mism:
-        w("### Record-level discrepancies\n")
-        w("| Record | Session | Trace | Human | Evaluator | Evaluator explanation |")
+        w("## Disagreements\n")
+        w("| Record | Session | Split | Human | Judge | Judge explanation |")
         w("|---|---|---|---|---|---|")
         for row in mism:
-            w(f"| `{row['record_id']}` | {row['session_id']} | `{(row['trace_id'] or '')[:12]}` | `{row['consensus']}` "
+            w(f"| `{row['record_id']}` | {row['session_id']} | {row['split'] or '—'} | `{row['consensus']}` "
               f"({row['bucket']}) | `{row['stored'].get('label')}`{' (stale)' if row['stale'] else ''} | "
               f"{clip(row['stored'].get('explanation'))} |")
         w("")
@@ -1025,14 +1133,14 @@ def cmd_report(a):
     print(render(r))
     if a.json_out:
         slim = {
-            "verdict": r["verdict"], "eval_column": r["eval_column"], "config": r["config_name"],
-            "gates": [{"gate": g, "pass": ok, "value": val} for g, ok, val in r["gates"]],
-            "fit": r["fit"],
+            "status": r["status"], "blockers": r["blockers"], "warnings": r["warnings"],
+            "eval_column": r["eval_column"], "config": r["config_name"], "fit": r["fit"],
+            "definitions": r["definitions"], "fail_labels": r["fail_labels"],
             "summary": {
                 "gold": len(r["gold"]), "gold_scored": len(r["gold_scored"]), "agree": r["agree"],
                 "gold_classes": dict(r["gold_classes"]), "annotators": r["annotators"],
                 "disagreements": len(r["mismatches"]), "stale": len(r["stale"]),
-                "balanced_accuracy": r["balanced"], "weighted": r["weighted"],
+                "balanced_accuracy": r["balanced"], "leniency": r["leniency"], "weighted": r["weighted"],
                 "pi": r["judge_pi"]["pi"], "pi_ci": r["judge_pi"]["ci"], "skew": r["skew"],
                 "test": {"n": len(r["test_pairs"]), "agree": n_agree(r["test_pairs"]), "pi": r["test_pi"]["pi"],
                          "pi_ci": r["test_pi"]["ci"], "recall": r["test_recall"]},
@@ -1053,7 +1161,6 @@ def cmd_report(a):
         }
         with open(a.json_out, "w") as f:
             json.dump(slim, f, indent=1)
-
 
 def gold_by_split(report):
     return {x["record_id"]: x for x in report["records"] if x["bucket"] == "gold"}
@@ -1130,15 +1237,22 @@ def cmd_compare(a):
             rb, ra = bt["recall"].get(lbl), test["recall"].get(lbl)
             checks.append((f"Recall for `{lbl}` on test didn't drop", rb is not None and ra is not None and ra >= rb,
                            f"{fmt_rate(rb)} → {fmt_rate(ra)}"))
-        if second:
-            checks.append(("Second judge model scored on test", bool(s_test and s_test["n"]),
-                           f"{s_test['n'] if s_test else 0} records"))
+        # A judge can agree well overall and still carry a model-specific bias; a second judge model on the same
+        # test records separates the judge from the criterion (Kochelka et al.). Required, per SOP step 5.
+        checks.append(("Second judge model scored on test", bool(s_test and s_test["n"]),
+                       f"{s_test['n']} records" if s_test else "missing: pass `--second-judge`"))
+        # The best of several candidates scored on the same data looks better than it is (SIREN): the winner
+        # must be re-scored on sessions no candidate was chosen on.
+        if a.candidates > 1:
+            fresh = load(a.fresh) if a.fresh else None
+            fs = stats([x for x in fresh["records"] if x["bucket"] == "gold"]) if fresh else None
+            checks.append((f"Winner of {a.candidates} candidates re-scored on fresh sessions", bool(fs and fs["n"]),
+                           f"{fs['n']} records, π {fs['pi']:.2f}" if fs and fs["n"] and fs["pi"] is not None
+                           else (f"{fs['n']} records" if fs else "missing: pass `--fresh`")))
         ok = all(passed for _, passed, _ in checks)
         print(f"\n## Ship gate: {'PASS' if ok else 'FAIL'}\n")
         for name, passed, val in checks:
             print(f"- {'✅' if passed else '❌'} {name}: {val}")
-        if not second:
-            print("- Score the frozen candidate with one other judge model (`--second-judge`) before promoting.")
 
     ledger_path = a.ledger
     if ledger_path:
@@ -1230,6 +1344,9 @@ def main():
                         "labeled after the prompt was frozen")
     r.add_argument("--rubric-version", help="Rubric or instructions version the labels were made under")
     r.add_argument("--admission-filter", help="The task's admission filter, recorded as part of the judge version")
+    r.add_argument("--fail-label", action="append", help="A failing label (repeat): its recall leads and leniency uses it")
+    r.add_argument("--criterion-decided", action="store_true",
+                   help="The user has decided the criterion question the definition diff flagged")
     r.set_defaults(func=cmd_report)
 
     c = sub.add_parser("compare", help="Compare two report --json-out files from the same gold set")
@@ -1242,6 +1359,9 @@ def main():
     c.add_argument("--fail-label", action="append", help="Label whose test recall must not drop (default: every label)")
     c.add_argument("--ledger", metavar="JSON", help="Append this comparison to a looks ledger and count looks at dev")
     c.add_argument("--look-budget", type=int, default=LOOK_BUDGET)
+    c.add_argument("--candidates", type=int, default=1, help="How many candidate templates were tried before this one")
+    c.add_argument("--fresh", metavar="JSON", help="report --json-out of the winner on fresh sessions (needed when "
+                   "--candidates > 1)")
     c.set_defaults(func=cmd_compare)
 
     lt = sub.add_parser("lint", help="Flag template lines that patch specific cases instead of stating rules")

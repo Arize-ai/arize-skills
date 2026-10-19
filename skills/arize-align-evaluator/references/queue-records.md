@@ -61,4 +61,4 @@ If any of these fail, the label and the evaluator are not judging the same thing
 
 ## Blind labeling vs audit
 
-Queue instructions often tell labelers not to look at the production eval output. That rule is for labeling. During the alignment audit you do read the stored outputs. Just never write an evaluator's output back as a human label, and never change a human label after seeing the evaluator's verdict. Corrections go through adjudication (see [gates-and-agreement.md](gates-and-agreement.md#adjudication)), and every original vote is kept.
+Queue instructions often tell labelers not to look at the production eval output. That rule is for labeling. During the alignment audit you do read the stored outputs. Just never write an evaluator's output back as a human label, and never change a human label after seeing the evaluator's label. Corrections go through adjudication (see [measurement.md](measurement.md#adjudication)), and every original vote is kept.

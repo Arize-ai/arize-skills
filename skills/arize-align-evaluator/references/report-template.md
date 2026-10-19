@@ -1,53 +1,43 @@
-# Pre-alignment report: what to show the user
+# Presenting the report
 
-Start from the Markdown the script prints, then add the parts that require reading the records. Keep the sections below in this order. Lead with the verdict and the decision needed, not with method.
+Use this structure when presenting to the user at the stop point. Keep it short; the full report is the script's output.
 
-```markdown
-# Aligning <evaluator name> against "<queue name>"
+## 1. Judge and status
 
-**Verdict: DIRECTIONAL.** <One sentence: what can and cannot be concluded.>
-**Decision needed:** <approve / edit / reject the proposal below, or "fix the queue first">.
-Nothing has been changed in Arize.
+- **Judge version:** the evaluator version, prompt hash, model, rubric version and admission filter.
+- **Status: provisional or measured.** For each blocker, give one plain sentence: what it is, its value and its source. For example, "10 of 29 calibration sessions were scored before they ended (SOP rule 3); re-score them with the current version."
+- **What the status allows,** in one line.
 
-## What the human labels say
-- N records; annotators and completion (e.g. "A completed 10/10, B 0/10 pending").
-- Distribution after consensus: label → count. Excluded: not applicable n, unscorable n, off-rubric n.
-- What the human labels mean: one or two sentences in plain language, such as "humans judge the agent found the right span 7 of 10 times."
+## 2. Human labels
 
-## Does this queue fit the evaluator?
-- Unit: <span records vs session evaluator: verified / not verified, and how>.
-- Rubric: <label sets, label definitions that diverge, classes with no human examples>.
-- Applicability: <how many human-not-applicable records the evaluator scored substantively, and why>.
-- Version: <the judge version: evaluator version, prompt hash, model, rubric version, admission filter; how many records predate it>.
-- Applicability vs grade: <applicability agreement, and grade agreement on gold, as separate lines>.
+- The label distribution and exclusions, kept apart from what the judge says.
+- How many annotators. With one annotator, say "single annotator; no human ceiling measured."
 
-## Is the queue good enough to align against?
-<Gate table from the script, then one line per failed gate on what it means for this decision.>
-<Recall on the failing label, exact agreement and Scott's π, each with its interval; the human ceiling if records have 2+ raters. Never percent agreement alone.>
+## 3. Numbers
 
-## Annotator disagreements
-<Table of disputed records with both votes and the proposed adjudication, or: "Only one annotator labeled these records; human-human agreement is unknown.">
+- **Test split first:** agreement, π and recall per label, failing labels first, each with its interval. Say whether test is a later batch or the same batch (directional).
+- **All scored gold:** recall per label, balanced accuracy, leniency, precision, π next to percent agreement.
+- **If skewed:** AC1 and PABAK next to π.
+- **Calibration queue:** corrected production rates and which interval to use.
+- **Gold queue:** the weighted secondary estimate, labeled as secondary.
+- **Warnings** that fired, each with its basis, in one list.
 
-## Where the evaluator disagrees with the humans
-| Record | Session | Human | Evaluator | Who is right, and the evidence |
-|---|---|---|---|---|
-<One row per discrepancy. Quote the turn or tool call that decides it. Say "ambiguous" if it is.>
+## 4. Fit and disagreements
 
-## Proposal
-EITHER
-- **Change:** <quote the exact current template text> → <exact replacement text>.
-- **Evidence:** records <IDs>, and the pattern they share.
-- **Expected effect:** which discrepancies it should fix; which other classes it could hurt.
-OR
-- **Do not change the evaluator yet.** Instead: <fix the admission filter / get second labels on N records / add examples of class X / clarify label Y>.
+- **The label-definition diff:** each flagged label, with the queue's and the template's wording quoted. If it's a criterion question, say so and frame the decision for the user.
+- **Applicability vs grade,** and the unit (session records).
+- **Each disagreement:** record ID, session ID, both labels, and your reading of the evidence (human right, judge right, or ambiguous). Group them into patterns.
 
-## Uncertainty
-<What is unverified: unit mapping not spot-checked, single annotator, stored outputs possibly from an older version, small n.>
-```
+## 5. Proposal
 
-Rules:
-- Give counts and the 95% interval next to every percentage ("8/10 (80%, 95% CI 49–94%)", not "80%"). The script prints them.
-- Lead with recall per human label (TPR and TNR for a binary evaluator), then exact agreement.
-- One discrepancy is an anecdote, not a pattern. Propose a template change only for a pattern seen in at least 2 gold records, or for one unambiguous instruction bug you can quote.
-- Use **arize-link** to add UI links for the queue, the evaluator and each discrepancy's session if the user will review in the UI.
-- End with the question and stop. Do not create the candidate evaluator in the same turn.
+Give exactly one of these:
+
+- **A criterion decision for the user.** State the question and the options, with your recommendation. No template edit until it's decided.
+- **A queue or label fix.** For example: re-score stale sessions, re-review labels, top up a label, or adjudicate.
+- **One batch of template edits.** Quote the exact current wording, the exact replacement, and the records that justify each edit. Only when no criterion question is open.
+
+## 6. Uncertain
+
+What the intervals don't settle, and what's still unverified.
+
+End by asking the user to approve, edit or reject the proposal.

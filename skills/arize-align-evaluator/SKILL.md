@@ -1,9 +1,9 @@
 ---
 name: arize-align-evaluator
-description: Aligns an Arize LLM-as-judge evaluator with human ground truth from annotation queues, span annotations, or dataset label columns. Checks label fit and quality, measures annotator agreement, reports record-level disagreements, and stops for approval before any evaluator change. Use when the user mentions align evaluator, calibrate LLM judge, evaluator vs human labels, judge agreement, gold labels, labeling queue ground truth, or inter-annotator agreement.
+description: Aligns an Arize LLM-as-judge evaluator with human ground truth from annotation queues, span annotations, or dataset label columns. Reports the judge's status (provisional or measured) with blockers, test-split agreement and recall per label, compares queue and judge label definitions, and stops for approval before any evaluator change. Use for align evaluator, calibrate LLM judge, evaluator vs human labels, judge agreement, gold labels, or inter-annotator agreement.
 metadata:
   author: arize
-  version: "1.2"
+  version: "2.0"
 compatibility: Requires the ax CLI (≥ 0.38.0), Python 3.9+, and a configured Arize profile.
 ---
 
@@ -11,25 +11,43 @@ compatibility: Requires the ax CLI (≥ 0.38.0), Python 3.9+, and a configured A
 
 > **`SPACE`** — `--space` flags accept a space **name** (e.g., `my-workspace`) or a base64 space **ID** (e.g., `U3BhY2U6...`). Find yours with `ax spaces list`.
 
-**Alignment** means measuring how closely an LLM-as-judge evaluator reproduces human judgments, then fixing it where it doesn't. Before the agreement numbers mean anything, you have to answer three questions:
+**Alignment** means measuring how closely an LLM-as-judge reproduces human judgments, then fixing it where it doesn't, without fitting the fix to the records you looked at. This skill follows the eval alignment SOP's steps in order:
 
-1. **Do the human labels apply to this evaluator?** Do they cover the same unit, the same rubric and the same input the evaluator sees?
-2. **Are the labels good enough to align against?** That means enough applicable, decisive and varied records, ideally checked by a second annotator.
-3. **Where exactly do the human and the evaluator disagree, and why?**
+1. settle the criterion
+2. check the gold set and its status
+3. split it
+4. measure
+5. revise without overfitting
+6. keep the judge's structure
+7. correct production rates
+8. test once per frozen version
 
-This skill answers all three in a written **pre-alignment report**, then stops. Nothing about the evaluator changes until the user has read the report and approved a specific change.
+Every rule cites a source in [references/sources.md](references/sources.md), or says it's an Arize heuristic.
 
-For creating evaluators, tasks and runs in general, use **arize-evaluator**. This skill reuses those commands and adds the measurement, the gates and the approval step.
+**There are no verdict tiers.** The report gives the judge's **status**:
+
+- **measured** when every status condition holds
+- **provisional** otherwise, with each blocker and its source
+
+It also gives heuristic **warnings** with their basis, and the numbers with intervals, test split first.
+
+For creating evaluators, tasks and runs in general, use **arize-evaluator**. For building the queues this skill measures, use **arize-align-queue-builder**.
 
 ---
 
 ## Hard rules
 
-- **Do not change anything before approval.** Phases 1–4 are read-only. Do not create or update evaluators, evaluator versions or tasks, do not trigger runs, and do not touch queues or annotations until the user approves a specific change after reading the report (Phase 5).
-- **Never create a new version of a production evaluator automatically.** Iterate on a separate candidate evaluator (Phase 6). Promoting a candidate to the production evaluator requires its own explicit approval.
-- **Preserve the human labels as given.** Never relabel, merge or coerce a human label to fit the evaluator's choices. `cannot_judge` and `unclear` are unscorable, not a class to map onto one of the evaluator's labels. If annotators disagree, keep both original votes.
-- **Never fabricate results.** If a command fails or a field is missing, report that. Do not estimate agreement, invent labels, or grade records yourself in place of the evaluator.
-- **Stored outputs are not a baseline.** Stored eval results carry no version ID. Agreement computed from them is descriptive only until the current version is re-run on the gold set.
+| Rule | Source |
+|---|---|
+| **Tune and report on different sessions.** A judge version's reported agreement comes from sessions never used to write or choose its prompt. | Dwork; SIREN; SOP rule 1 |
+| **A judge version is (rubric, prompt, model, admission filter).** Change any one and re-measure. | Angelopoulos; Lee; SOP rule 2 |
+| **Grade whole sessions, and reject stale results.** A result scored before its session ended graded fewer turns than exist. | SOP rule 3 |
+| **Never quote percent agreement alone.** Report π next to it, plus recall on the failing labels. | Thakur; SOP rule 4 |
+| **Corrected production rates come only from random-stream labels.** | Angelopoulos; Chen; SOP rule 5 |
+| **Change nothing before approval.** Phases 0–4 are read-only: no evaluators, versions, tasks, runs, queues or annotations. | — |
+| **Candidate copies only.** Never create a production version automatically. Promotion needs its own approval. | — |
+| **Preserve human labels as given.** Never relabel, merge or coerce a label. `cannot_judge` is unscorable, never an evaluator class. Keep every annotator's original vote. | — |
+| **Never fabricate results.** If a command fails or a field is missing, say so. Never grade records yourself in place of the judge. | — |
 
 ---
 
@@ -39,176 +57,175 @@ Proceed directly with the task — run the `ax` command you need. Do NOT check v
 
 If an `ax` command fails, troubleshoot based on the error:
 - `command not found` or version error → see [references/ax-setup.md](references/ax-setup.md)
-- `Error due to additional fields (not defined in ...)`, an enum validation error, or non-JSON output from a read command → the CLI is too old to parse the API's current response. Run `ax --version`, upgrade (see [references/ax-setup.md](references/ax-setup.md)), and check `which -a ax` in case an older copy shadows the upgraded one on `PATH`. **Stop here; do not work around it.** Without parsed responses, the gates in Phase 3 cannot run.
+- `Error due to additional fields (not defined in ...)`, an enum validation error, or non-JSON output from a read command → the CLI is too old to parse the API's current response. Run `ax --version`, upgrade (see [references/ax-setup.md](references/ax-setup.md)), and check `which -a ax` in case an older copy shadows the upgraded one on `PATH`. **Stop here; do not work around it.**
 - `401 Unauthorized` / missing API key → run `ax profiles show` to inspect the current profile. If the profile is missing or the API key is wrong, follow [references/ax-profiles.md](references/ax-profiles.md) to create/update it. If the user doesn't have their key, direct them to https://app.arize.com/admin > API Keys
 - Space unknown → see [Space](references/ax-profiles.md#space)
 - **Security:** Never read `.env` files or search the filesystem for credentials. Exception: the non-secret `ARIZE_SPACE_ID` line (see [Space](references/ax-profiles.md#space)). Use `ax profiles` for Arize credentials and `ax ai-integrations` for LLM provider keys. Never ask the user to paste secrets into chat.
 
-### The bundled report script
+[scripts/align_report.py](scripts/align_report.py) uses only the Python standard library. Its subcommands are all read-only:
 
-[scripts/align_report.py](scripts/align_report.py) uses only the Python standard library. It has four read-only subcommands:
-
-- `fetch` saves the queue, all of its records (every page) and the evaluator as JSON.
-- `report` joins those files and prints the pre-alignment report as Markdown. With `--json-out`, it also writes per-record results.
-- `compare` compares two `report --json-out` files: before and after a revision, the dev → test gap, a second judge and the ship gate (Phase 6).
-- `lint` flags template lines a revision added that name records or copy dev wording (Phase 6).
-
-Find the installed skill's root and run the script by absolute path, so it works from any workspace. Use a scratch directory for its output, not the user's repo.
-
----
-
-## Choose the ground-truth source
-
-| Where the human labels live | Use |
+| Subcommand | Does |
 |---|---|
-| An Arize **annotation queue** (also called a labeling queue) | Phases 1–6 below (the default and best-supported path) |
-| `annotation.<name>.label` on project spans, applied by the SDK or UI | [references/other-ground-truth.md](references/other-ground-truth.md#span-annotations) |
-| A dataset column holding human labels, plus an experiment | [references/other-ground-truth.md](references/other-ground-truth.md#dataset-label-column) |
-| No labels yet, or an existing queue came out NOT USABLE | Use **arize-align-queue-builder** to design and create a queue sized and balanced for this evaluator, then come back |
+| `fetch` | Saves the queue, every page of its records, and the evaluator |
+| `report` | Prints the alignment report |
+| `compare` | Before/after numbers, plus the ship gate |
+| `lint` | Flags revisions that patch specific records |
 
-A queue is the preferred source because it is the only one that records who cast each vote, so it can measure annotator agreement when a record has two or more votes. A single annotator is allowed. Span annotations and dataset columns keep only one label per record; the report must say so.
-
-If the user is unsure, list the queues: `ax annotation-queues list --space SPACE --name "KEYWORD"`.
+Run it by absolute path from the installed skill root, and write to a scratch directory.
 
 ---
 
-## Phase 1: Identify the evaluator and the queue
+## Phase 0: Inputs
 
-1. **Find the evaluator.** Run `ax evaluators list --space SPACE --name "KEYWORD"`. There are often several variants, such as a production copy, a provider-comparison copy, or a benchmark copy. Ask which one is being aligned if it is not obvious.
-2. **Read its current version:** `ax evaluators get EVALUATOR --space SPACE -o json`. Record these fields:
-   - `version.template_config.name`. **The stored output column is named after this, not after the evaluator.** It is `<prefix>.<template_config.name>.label`, where the prefix is `eval` for `SPAN`, `trace_eval` for `TRACE` and `session_eval` for `SESSION`. Two copies of one evaluator usually write to different columns, such as `session_eval.my_eval` and `session_eval.my_eval_anthropic`.
-   - `version.template_config.data_granularity`, `classification_choices` and `template` (note its `{variables}`).
-   - `version.id`, `version.created_at` and `version.commit_message`.
-3. **Read the queue:** `ax annotation-queues get QUEUE --space SPACE -o json`. Record its `annotation_configs` (the rubric labels), its `annotators` and its `instructions`. If the queue has more than one config, ask which one is the ground truth for this evaluator.
+1. **The evaluator.** Run `ax evaluators list --space SPACE --name "KEYWORD"`, and ask which variant if several exist. Then `ax evaluators get EVALUATOR --space SPACE -o json`. Record:
+   - `template_config.name`. The output column is `<prefix>.<name>.label`, where the prefix is `eval`, `trace_eval` or `session_eval` by granularity.
+   - `data_granularity`, `classification_choices` and `template`
+   - `version.id`, `created_at` and `commit_message`
+2. **Its task and admission filter.** Run `ax tasks list` and `ax tasks get`. The filter is part of the judge version.
+3. **The ground truth.** The best source is the two queues from **arize-align-queue-builder**, plus their `plan.json`:
+   - the **calibration** queue measures
+   - the **gold** queue fills train and dev, and finds disagreements
 
-## Phase 2: Fetch the records
+   For span annotations or dataset label columns, see [references/other-ground-truth.md](references/other-ground-truth.md). If no usable queue exists, build one with **arize-align-queue-builder**.
+4. **Which labels are failing**, for example `wrong` or `no_answer_produced`. Ask the user if it isn't obvious; they're passed as `--fail-label`.
+
+## Phase 1: Settle the criterion (SOP step 1)
+
+Read the template's definition of each label, and its scope rule, next to the queue's instructions. The report does a first pass (the label-definition diff), but read them yourself too.
+
+- **If the two sides define a label differently, it's a criterion question.** The human and the judge are applying different rules, and agreement can't be read until it's settled. Frame it for the user: quote both definitions, give the options, and recommend one. When they decide:
+  - bump the rubric version
+  - re-review the affected labels
+  - pass `--criterion-decided`
+- **Keep applicability rules (when a session is in scope) apart from grading rules.** A scope disagreement needs a scope rule.
+- **A criterion change and a judge change are different tracks.** See [references/revision.md](references/revision.md#two-kinds-of-change-sop-step-1).
+
+Sources: Shankar et al. (criteria drift, p.2 L13–15); SOP addendum G.
+
+## Phase 2: The gold set and its status (SOP step 2)
 
 ```bash
-python3 SKILL_ROOT/scripts/align_report.py fetch \
-  --space SPACE --queue QUEUE --evaluator EVALUATOR --out-dir WORK_DIR
+python3 SKILL_ROOT/scripts/align_report.py fetch --space SPACE --queue QUEUE --evaluator EVALUATOR \
+  --out-dir WORK_DIR [--count-turns "ROOT_SPAN_FILTER" --project PROJECT]
+python3 SKILL_ROOT/scripts/align_report.py report --dir WORK_DIR --plan PLAN_JSON \
+  --rubric-version "RUBRIC_VERSION" --admission-filter "FILTER" --fail-label LABEL [--fail-label LABEL] \
+  --json-out WORK_DIR/report.json > WORK_DIR/report.md
 ```
 
-Use `--ax PATH` if the right `ax` is not first on `PATH`. If the template asks the judge to report `LAST_TURN_CHECK: Turn N`, add `--count-turns "ROOT_SPAN_FILTER" --project PROJECT`. The script counts each session's turns, and the report flags stored results that saw fewer turns than the session has, which suggests they were scored mid-session. To fetch by hand instead, page through `ax annotation-queues list-records QUEUE --space SPACE --limit 100 -o json` using `--cursor` until `pagination.has_more` is false.
+- **Use `--count-turns`** whenever the template reports `LAST_TURN_CHECK`. Without it, staleness is "not checked", and that's a blocker.
+- **Read [references/queue-records.md](references/queue-records.md) before joining by hand.** Session records count only session-level labels, each vote appears twice, and `evaluations` holds every evaluator's results.
 
-Before trusting the join, read [references/queue-records.md](references/queue-records.md). Queue records have three traps that the script handles, and that you must handle yourself if you join by hand:
-- Votes can be at span, trace or session level (`annotations`, `trace_annotations`, `session_annotations`). They are keyed by **annotation config name**, and a record can carry labels from other queues' configs. On a `SESSION` record only `session_annotations` count; span-level labels on it judged one turn and are reported, not counted.
-- Each vote appears twice, once with an `annotator` and once without.
-- `evaluations` holds whatever stored results exist for the record's trace and session, from every evaluator.
+The status is **measured** only when all of these hold. Otherwise it's **provisional**.
 
-## Phase 3: Build the pre-alignment report
+| Condition | Source |
+|---|---|
+| 30+ scored gold records per label in each of dev and test, for 2+ labels | Husain & Shankar |
+| No stale results | SOP rule 3 |
+| Every gold record carries a result from the current version | SOP rule 2 |
+| One record per session | SOP addendum F |
+| No open criterion question | SOP step 1; addendum G |
 
-```bash
-python3 SKILL_ROOT/scripts/align_report.py report \
-  --dir WORK_DIR --json-out WORK_DIR/report.json > WORK_DIR/report.md
-```
+**Warnings** never change the status. They cover fewer than 10 gold records, a label with fewer than 3, over 30% excluded, coverage below 90%, a single annotator, open disputes, and span records for a session judge. Each prints its basis, and most are Arize heuristics. Details are in [references/measurement.md](references/measurement.md).
 
-Useful flags:
-- `--config NAME` picks the annotation config when the queue has several.
-- `--eval-column session_eval.X` overrides the derived output column.
-- `--not-applicable` and `--unscorable` set the human labels to exclude. The defaults are `not_applicable`, and `cannot_judge` plus `unclear`.
-- `--adjudications FILE` takes a JSON file mapping `record_id` to a resolved label, once disputes are adjudicated.
-- `--rubric-version` and `--admission-filter` record the rest of the judge's identity. A judge is its rubric, prompt, model and admission filter. The report prints all four, and a change to any one means the numbers must be re-measured.
-- `--test-from ISO_TIME` makes every gold session that started at or after that time the test split. Use it for a batch labeled after the prompt was frozen (Phase 6).
-- `--plan WORK_DIR/plan.json` takes the plan from **arize-align-queue-builder**. The queue builder makes two queues:
-  - On its **calibration queue** (the random stream, a uniform sample), the report's agreement and recall are measurement estimates. Quote these, and take the verdict from this queue.
-  - On its **gold queue** (targeted records), the report adds production-weighted agreement and recall as a secondary estimate. Use that queue to find and fix disagreements.
+**While provisional:**
+- Report every number with its interval, and don't claim a target.
+- Fix criterion, scope and queue problems first, then make at most one batch of template fixes.
+- Don't tune prompt by prompt.
 
-  Without a plan, agreement on a queue that oversamples rare labels is not a production rate. With a plan whose random stream has labels, the report also gives each label's production rate corrected with PPI++, next to the judge-only and human-only rates.
+Most judges are provisional at discovery scale; that's expected.
 
-The report sorts every record into one of these buckets: **gold** (applicable, decisive and resolved), **not_applicable**, **unscorable**, **off_rubric** (a human label the evaluator cannot output), **disputed** or **unlabeled**. Only gold records count toward human-vs-evaluator agreement. Every other bucket is reported with its share of the records, never silently dropped.
+## Phase 3: Split (SOP step 3)
 
-It then applies the quality gates and gives one verdict:
+- **Split by session, within each human label, stable across runs:** 15% train, 42.5% dev, 42.5% test. This follows Husain's 10–20 / 40–45 / 40–45.
+- **Train and dev come from the gold queue,** because a rare failure can't fill 30 per split from a random sample. **Measurement comes from the calibration queue** (SOP addendum A).
+- **Test is a batch labeled after freezing, by default** (`--test-from`). A same-batch test split is marked directional (Kochelka; SPEAR).
 
-- **VALIDATED:** every gate passes, and 2+ classes have 30+ gold records in both dev and test. Agreement on those classes is evidence, once re-run on the current version.
-- **DIRECTIONAL:** every gate passes, below those sizes. This is a *provisional* judge. Report with intervals and fix clear errors in one batch; don't tune prompt by prompt or claim a target.
-- **EXPLORATORY:** some gate fails. Patterns only.
-- **NOT USABLE:** too few gold records or classes. Fix the queue first.
+## Phase 4: Measure (SOP step 4)
 
-The exact rules, and which thresholds are Arize heuristics rather than published values, are in [Verdicts](references/gates-and-agreement.md#verdicts).
+The report prints, test split first:
 
-The two passing tiers exist because 10 gold records can start an alignment but can't confirm one: at 10 records, 9/10 agreement has a 95% interval of about 60–98%. Tuning prompts on a small set overfits it, so DIRECTIONAL allows one batch of fixes, not a tuning loop. The report prints an interval next to every rate.
+- agreement, π and recall per label, failing labels first
+- balanced accuracy, precision, leniency on the failing labels, and the confusion matrix
+- AC1 and PABAK next to π when one label holds ≥ 80% (SOP addendum C)
+- applicability and grade on separate lines
+- the human ceiling with one rater held out, or "single annotator; no human ceiling measured" (Mukherjee; SOP addendum E)
+- production estimates (Phase 7)
 
-It leads with recall per human label (TPR and TNR for a binary evaluator), because exact agreement hides a judge that misses the rare label. Next to exact agreement it gives Scott's π, which corrects for chance. Judges with over 90% agreement have still mis-scored by 10 points or more, so never quote percent agreement alone. When one human label holds 80% or more of the records, π understates agreement the way κ does, and the report adds AC1, PABAK and balanced accuracy next to it. For a frozen judge version, quote the report's **Test split only** numbers.
+Meanings and sources are in [references/measurement.md](references/measurement.md).
 
-It also reports:
-- applicability (in scope or not) apart from grade
-- a human ceiling, with one rater held out at a time against the same reference as the judge
-- results scored before a session ended, which it leaves out of agreement
+**Then review:**
 
-If the gold-count or class gates fail, say so before reading any sessions: no amount of review or adjudication adds records or classes. Offer **arize-align-queue-builder**, and review the existing queue only for failure patterns.
+1. **Read every disagreement.** Open the session with **arize-trace**. Decide whether the human is right, the judge is right, or it's ambiguous, and quote the evidence. Group the disagreements into patterns. See [references/disagreement-review.md](references/disagreement-review.md).
+2. **Read the not-applicable records.** If humans said out of scope and the judge graded, the question is applicability. Check the scope rule and the task's admission filter. Spot-check a few sessions the filter excluded, too.
+3. **When the session supports the judge,** adjudicate the human label; don't edit the template.
+4. **Note when the judge grades its own model's output.** It's a cheap precaution, not a rule: no source here establishes self-preference.
 
-The gates cover gold count, classes, exclusions, join coverage, stored-output coverage, annotator agreement and open disputes. Their thresholds, why each exists, how κ and AC1 are computed and how to adjudicate are in [references/gates-and-agreement.md](references/gates-and-agreement.md).
+**Present the report and STOP.** Use [references/report-template.md](references/report-template.md). Propose exactly one of these:
 
-## Phase 4: Check fit, then present the report and STOP
+- **A criterion decision** for the user
+- **A queue or label fix:** re-score stale sessions, re-review labels, top up a label, or adjudicate
+- **One batch of template edits,** quoting the exact current wording, the exact replacement and the records behind each. Only when no criterion question is open.
 
-The script checks the structure: label sets, granularity, other configs and coverage. You must also check the meaning, by reading actual records:
+Ask the user to approve, edit or reject. **Do not continue in the same turn.**
 
-1. **Is the unit the same?** Queue records are usually `SPAN` records, while many evaluators score the whole `SESSION`. Confirm that each record's `attributes.session.id` identifies the session the labeler judged, and that the evaluator's input variable (for example `{conversation}`) covers that whole session. A label on one span in a multi-turn session can disagree with a correct session-level verdict.
-2. **Does the rubric mean the same thing?** Read the evaluator template next to the queue instructions and label definitions. Watch for one label meaning different things on each side. A common case is `no_output_produced` vs `wrong`, where one side treats "the agent didn't produce an artifact" as a failure and the other treats it as a separate class.
-3. **Diff the label definitions.** Put the queue's instructions next to the template's definition of each label. If they define a label differently, the human and the judge are applying different rules. That's a criterion question, not a judge error: have the user decide it, bump the rubric version, and re-review the affected labels before reading agreement or proposing a template edit.
-4. **Read the not-applicable records.** If humans marked records `not_applicable` and the evaluator gave a substantive label, the disagreement is about applicability, not grading quality. The report's applicability line measures it. Check the evaluator's `not_applicable` instruction and the task's admission filter before touching the grading criteria. Keep scope rules and grading rules in separate parts of the template.
-   - **Audit the admission filter too.** Export a handful of sessions the task's filter excluded in the same window, and check whether any should have been graded. Gold drawn after the filter can't show sessions the filter wrongly drops.
-5. **Read every discrepancy.** For each row in the report's discrepancy table, open the session (use **arize-trace** to export it, and **arize-link** for a UI link). Decide whether the human or the evaluator is right, or whether the record is ambiguous. Quote the specific evidence. For many discrepancies, see [references/disagreement-review.md](references/disagreement-review.md).
-6. **When the session supports the evaluator, adjudicate the human label; don't edit the template.** Follow [references/disagreement-review.md](references/disagreement-review.md#adjudicating).
-7. **Is the judge grading its own model's output?** If the evaluator's model is the same as the application's, say so in the report: judges tend to favor their own outputs.
+**Don't propose template edits when:**
 
-Then **present the report to the user and stop.** Use the structure in [references/report-template.md](references/report-template.md). It must include:
-- the verdict and every failed gate, in plain language
-- what the human labels say (distribution and exclusions), separate from what the evaluator says
-- the fit findings from steps 1–4
-- each discrepancy with its record ID, session ID, both labels and your reading of the evidence
-- annotator disagreements and the proposed adjudication; if there was only one annotator, say so
-- **either** a proposed template change, quoting the exact current wording, the exact replacement and the records that justify it, **or** a recommendation not to change the evaluator yet, with what to fix in the queue first
-- what remains uncertain
+- a criterion question is open
+- the disagreement comes from applicability, the admission filter, the unit, a stale result or an older version
+- the session supports the judge
+- the only evidence is a label the queue has no examples of
+- the change would turn `cannot_judge` into a judge label
+- a provisional judge has already had its one batch
 
-End by asking the user to approve, edit or reject the proposal. **Do not continue to Phase 6 in the same turn.**
+## Phase 5: Revise without overfitting (SOP step 5, after approval)
 
-**Do not propose a template change when:**
-- the verdict is NOT USABLE
-- the discrepancy is explained by applicability, the admission filter, a unit mismatch, a stale version, a result scored mid-session, or a queue definition that differs from the template's
-- the session shows the evaluator was right (step 5)
-- the only evidence is a class the queue has no examples of
-- the change would turn `cannot_judge` into an evaluator class
-- the verdict is DIRECTIONAL and a batch of fixes was already made; label more first
+Approval must name the change. Then:
 
-In those cases, recommend fixing the queue, the filter or the mapping instead.
+1. Make a candidate copy, and get a baseline plus its noise floor.
+2. Make batched general edits from dev. Check each with `lint`, run the reproduce check, and look at dev once per batch.
+3. Compare before and after on the same records.
+4. Freeze the candidate, label a later test batch, score it once, and score a second judge model.
+5. Run the ship gate:
 
-## Phase 5: Get approval
+   ```bash
+   python3 SKILL_ROOT/scripts/align_report.py compare baseline.json final.json --gate \
+     --fail-label LABEL --second-judge second.json --ledger looks.json [--candidates N --fresh fresh.json]
+   ```
 
-Approval must name the change: "approve the proposed edit to the not_applicable rule," not just "looks good, continue." If the user edits the proposal, restate the final change before acting on it. If the user approves fixing the queue rather than the evaluator, stop this skill there and hand off to **arize-annotation**.
+   It passes only when all of these hold:
 
-## Phase 6: After approval — baseline, iterate, re-measure
+   - test π doesn't fall
+   - the dev → test gap is ≤ 0.10 (an Arize heuristic)
+   - failing-label recall doesn't drop
+   - a second judge model was scored
+   - when several candidates were tried, the winner was re-scored on fresh sessions
 
-1. **Create a candidate copy, not a new production version.** Copy the evaluator and give it a distinct `template_config.name`, such as `<name>_candidate`, so its results go to their own column and never overwrite production output. See **arize-evaluator** for the create command. Check the subcommand names with `ax evaluators --help`, because CLI releases have renamed them. Use the **current** production template first, unchanged.
-2. **Re-run the baseline on the gold sessions only.** Create a non-continuous task for the candidate on the same project. Set `--query-filter` so it selects only the gold sessions, and set `--data-start-time` and `--data-end-time` to cover their timestamps. First trigger a run with a small `--max-spans` and confirm that only the intended sessions were scored. Then run the full set with `--wait`.
-3. **Measure the baseline.** Re-run `report` with `--eval-column` set to the candidate's column and `--json-out WORK_DIR/baseline.json`. This number is the real baseline. The report assigns each gold record, by session, to a **train**, **dev** or **test** split; iterate on dev only.
-4. **Apply the approved change** as a new version of the **candidate**, then re-run and re-measure. To draft revisions from dev-split disagreements, use [references/alignment-meta-prompt.md](references/alignment-meta-prompt.md). Its rules prevent overfitting:
-   - Each edit states a general rule.
-   - Edits are batched, and dev is scored once per batch.
-   - Before re-running, check the new template with `align_report.py lint OLD.txt NEW.txt --records WORK_DIR/baseline.json`. It flags added lines that name a record, session or trace, or copy wording from dev records. Rewrite those as general rules.
-   - If an optimizer drafts revisions, have it maximize π or macro-F1, never accuracy.
-   - Use the reproduce check before trusting a dev gain: summarize the change in 2–3 sentences, have a fresh agent that never saw the dev records rewrite the baseline template from that summary alone, and score its version on dev. A gain that doesn't reproduce came from fitting the records.
-5. **Report before and after on the same gold set** with `align_report.py compare WORK_DIR/baseline.json WORK_DIR/after.json --split dev --ledger WORK_DIR/looks.json`. It gives:
-   - both rates and Scott's π with intervals
-   - recall per label, and the records that flipped in each direction
-   - the shift in the evaluator's label mix
-   - the number of times dev has been scored (it warns past `--look-budget`, default 5)
+Every step, the meta-prompt for drafting revisions, and the stopping rules are in [references/revision.md](references/revision.md). Read [references/changing-evaluators.md](references/changing-evaluators.md) before writing any version.
 
-   A gain inside the run-to-run noise is no gain: re-run the unchanged candidate once to see the noise floor.
-6. **Freeze, then test once.** After the last revision, freeze the template. Test is scored once per judge version, when it's frozen, not on a calendar; the ledger warns on a second look.
-   - **Test on a later batch by default.** Label a batch after freezing (queue intake into the calibration queue), then run `report --test-from FREEZE_TIME`. Use the same-batch split only when no later batch can be labeled, and say the result is directional.
-   - **Score a second judge model.** Run the frozen candidate's template on one other judge model as a second candidate, on the same records, and pass its report as `--second-judge`. Judges can agree well overall and still carry a model-specific bias. A tuning judge that collapses on held-out data while others hold is a property of the judge, not the criterion.
-7. **Apply the ship gate:** `align_report.py compare WORK_DIR/baseline.json WORK_DIR/final.json --gate --fail-label FAILING_LABEL --second-judge WORK_DIR/second.json --ledger WORK_DIR/looks.json`. It passes only when:
-   - test π didn't fall
-   - the dev → test gap in π is 0.10 or less (a heuristic; larger gaps mean the revision fit dev)
-   - test recall on the failing label didn't drop
+**Promotion** to production is a separate approval, recorded as a criterion change or a judge change.
 
-   If several candidates were tried, re-score the winner on fresh sessions before claiming the gain. The best of several on the same data looks better than it is.
-8. **Promoting to production is a separate decision.** Present the candidate's results, the gate and the exact diff. Create a new version of the production evaluator only after the user explicitly approves promotion. Record it in the evaluator's changelog as a **judge change** (prompt, model or filter: tuning) or a **criterion change** (what pass means changed: new rubric version, older labels on that criterion re-reviewed, and scores before and after not comparable). See [references/changing-evaluators.md](references/changing-evaluators.md#changelog).
+## Phase 6: Keep the judge's structure (SOP step 6)
 
-Before writing any version, and before agreeing to skip the candidate, read [references/changing-evaluators.md](references/changing-evaluators.md): the API drops or can't set some settings, and provider copies must change together.
+- **Keep the judge's categories.** Test any change of scale (binary, coarse, continuous) on dev first. No source shows binary beats the alternatives for LLM judges.
+- **Keep one criterion per judge.** The support for this is qualitative.
+- **Chain of thought is optional.** Its measured gains were small.
 
-**When to stop iterating:** stop when the target threshold is met on a VALIDATED gold set, when agreement plateaus between iterations, when the judge reaches the human ceiling, when the remaining disagreements are ones reasonable annotators also dispute, when dev looks run past the budget, or after 3–4 iterations. Further gains are rarely available from template edits alone. For targets by evaluator type, see [references/gates-and-agreement.md](references/gates-and-agreement.md#target-thresholds).
+## Phase 7: Production rates (SOP step 8)
+
+With `--plan`, the calibration queue's report gives each label's production rate:
+
+- **judge-only,** which is biased
+- **corrected with PPI++** from random-stream labels
+- **human-only**
+
+Use the narrower interval. PPI assumes the labeled records match production's label mix. A stratified sample without its weights biases it, and then Rogan–Gladen or fixed weights apply (Lee §8). Re-collect labels after any judge version change. See [references/production-rates.md](references/production-rates.md).
+
+## Phase 8: Cadence (SOP step 9)
+
+1. **Weekly:** error analysis on new sessions, and dev revisions in batches.
+2. **When a candidate is frozen:** label a test batch, score it once, and run the ship gate.
+3. **Revise only one or two judges at a time,** so their test batches fit the labeling budget (an Arize heuristic).
+4. **Keep the calibration queue topped up** through intake; it's the drift check.
 
 ---
 
@@ -217,22 +234,22 @@ Before writing any version, and before agreeing to skip the candidate, read [ref
 | Problem | Solution |
 |---|---|
 | `limit: Input should be less than or equal to 100` | Use `--limit 100` and page with `--cursor`. |
-| Report says the stored output column is missing on every record | The column is named after `template_config.name`, not the evaluator name. Check `ax evaluators get` and pass `--eval-column` if it differs. Or the evaluator has not run on these sessions; see Phase 6. |
-| Labels from other queues appear on records | Expected: one span can be in several queues. Pass `--config` and the script ignores the other configs. |
-| Second annotator assigned but no overlap | Their `completion_status` is `PENDING`. A single annotator is allowed; say "single annotator" in the report, or ask them to finish if you want agreement measured. |
-| A human label isn't in the evaluator's choices | It is bucketed `off_rubric` or `unscorable`. Discuss the rubric mismatch in the report; never coerce the label. |
-| Agreement is 0% | Label spellings differ, such as `correct` vs `Correct`, or the wrong column was joined. Check the fit section. |
-| Agreement looks high but the queue has one class | Accuracy is meaningless with one class. The gates mark this NOT USABLE or EXPLORATORY. |
-| Annotators agree 90% but κ fails | One label dominates, which pushes κ down (the kappa paradox). The gate accepts AC1 when one label holds ≥ 80% of a pair's votes; the report shows both. |
-| `Turn data mode requires a Turn Definition` when creating a version | The template uses `{turn_data}`. See [references/changing-evaluators.md](references/changing-evaluators.md#turn-data-templates). |
+| The output column is missing on every record | The column is named after `template_config.name`. Check `ax evaluators get` and pass `--eval-column`. Or the judge hasn't run on these sessions. |
+| "No stale results: not checked" | Re-run `fetch` with `--count-turns ROOT_FILTER --project PROJECT`. |
+| A criterion question is flagged but the definitions agree | The diff is a text heuristic. Read both. If they really agree, pass `--criterion-decided` and say so in the report. |
+| Labels from other queues appear on records | Expected: a session can be in several queues. Pass `--config`. |
+| Span-level labels are ignored on session records | Expected. They were made from one turn. Re-label in the session view. |
+| Agreement looks high but π is near 0 | One label dominates. Read AC1, balanced accuracy and failing-label recall. |
+| Agreement is 0% | Label spellings differ, or the wrong column was joined. Check the fit section. |
+| `Turn data mode requires a Turn Definition` when creating a version | See [references/changing-evaluators.md](references/changing-evaluators.md#turn-data-templates). |
 
 ---
 
 ## Related Skills
 
-- **arize-align-queue-builder**: build a balanced, correctly sized queue for this evaluator when none exists or the current one fails the gates
-- **arize-annotation**: create annotation configs and queues, assign annotators, and add records
-- **arize-evaluator**: evaluator, task and run mechanics (create, version, trigger, column mapping)
-- **arize-trace**: export a session to read the evidence behind a discrepancy
-- **arize-link**: deep links to sessions, queues and evaluators for the report
-- **arize-prompt-optimization**: improve the application's prompt rather than the judge's
+- **arize-align-queue-builder**: build the calibration and gold queues this skill measures
+- **arize-align-history-backfill**: score sessions the evaluator never scored, for a new evaluator or a short history
+- **arize-annotation**: annotation configs and queues, assigning annotators, adding records
+- **arize-evaluator**: evaluator, task and run mechanics
+- **arize-trace**: export a session to read the evidence behind a disagreement
+- **arize-link**: deep links to sessions, queues and evaluators

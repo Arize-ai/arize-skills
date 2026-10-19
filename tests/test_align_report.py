@@ -60,18 +60,18 @@ def build(tmp_path, records, q=None, ev=None, turns=None, **overrides):
     if turns is not None:
         (tmp_path / "turns.json").write_text(json.dumps(turns))
     args = dict(dir=str(tmp_path), adjudications=None, eval_column=None, config=None, plan=None, test_from=None,
-                rubric_version=None, admission_filter=None,
+                rubric_version=None, admission_filter=None, fail_label=None, criterion_decided=False,
                 not_applicable=list(align.DEFAULT_NOT_APPLICABLE), unscorable=list(align.DEFAULT_UNSCORABLE))
     args.update(overrides)
     return align.build(argparse.Namespace(**args))
 
 
-KAPPA_GATE = (f"Annotator agreement κ ≥ {align.MIN_KAPPA}, or AC1 ≥ {align.MIN_KAPPA} when one label holds "
-              f"≥{align.SKEW_SHARE:.0%} (when records have 2+ votes)")
+def warned(report):
+    return {x["check"] for x in report["warnings"]}
 
 
-def gates(report):
-    return {name: ok for name, ok, _ in report["gates"]}
+def blocked(report):
+    return {b["condition"] for b in report["blockers"]}
 
 
 def usable_records():
@@ -193,81 +193,142 @@ def test_multiple_configs_need_config_flag(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# gates, verdict, agreement
+# status, blockers, warnings, agreement
 # ---------------------------------------------------------------------------
 
-def test_usable_queue_passes_every_gate(tmp_path):
-    r = build(tmp_path, usable_records())
-    assert all(gates(r).values()), r["gates"]
-    # Every gate passes, but 6 per class is far below the validated tier.
-    assert r["verdict"] == "DIRECTIONAL"
-    assert r["small_classes"] == ["bad", "good"]
+NO_MARKER = "Grade the {conversation}."
+
+
+def test_small_queue_is_provisional_on_size_alone(tmp_path):
+    r = build(tmp_path, usable_records(), ev=evaluator(template=NO_MARKER))
+    # 6 per class is far below 30 per label in each of dev and test; nothing else blocks.
+    assert r["status"] == "provisional"
+    assert [b["condition"].split(":")[0] for b in r["blockers"]] == ["Size"]
+    # The test records are span records for a session judge: a warning, not a blocker.
+    assert warned(r) == {"Session judge labeled on session records"}
     assert r["agree"] == 10 and len(r["gold_scored"]) == 12
     assert r["confusion"][("good", "bad")] == 1 and r["confusion"][("bad", "good")] == 1
     assert r["per_label"]["good"] == {"precision": 5 / 6, "recall": 5 / 6, "support": 6, "tp": 5, "predicted": 6}
     assert [p["kappa"] for p in r["iaa"]] == [1.0]
 
 
-def test_single_class_queue_is_not_usable(tmp_path):
-    recs = [record(f"r{i}", {A: "good"}, stored="good") for i in range(12)]
-    r = build(tmp_path, recs)
-    assert not gates(r)[f"≥2 gold classes with ≥{align.MIN_PER_CLASS} each"]
-    assert r["verdict"] == "NOT USABLE"
-
-
-def test_small_two_class_queue_is_exploratory(tmp_path):
-    recs = [record(f"r{i}", {A: "good" if i < 3 else "bad"}, stored="good") for i in range(6)]
-    r = build(tmp_path, recs)
-    assert r["verdict"] == "EXPLORATORY"
-
-
-def test_too_many_exclusions_fails_the_excluded_rate_gate(tmp_path):
-    recs = usable_records() + [record(f"na{i}", {A: "not_applicable"}) for i in range(6)]
-    r = build(tmp_path, recs)
-    assert not gates(r)["Excluded rate (not applicable + unscorable + off-rubric)"]
-    assert r["verdict"] == "EXPLORATORY"
-
-
-def test_validated_needs_30_per_label_in_both_dev_and_test(tmp_path):
+def test_measured_needs_30_per_label_in_both_dev_and_test(tmp_path):
     # 75 per label: 11 train, 32 dev, 32 test.
     recs = [record(f"r{i}", {A: "good" if i < 75 else "bad"}, stored="good" if i < 75 else "bad") for i in range(150)]
-    r = build(tmp_path, recs)
-    assert r["verdict"] == "VALIDATED" and r["small_classes"] == []
-    # 30 per label in all clears the old tier but leaves about 13 per label in test.
+    r = build(tmp_path, recs, ev=evaluator(template=NO_MARKER))
+    assert r["status"] == "measured" and r["blockers"] == []
+    # 30 per label in all leaves about 13 per label in test.
     recs = [record(f"r{i}", {A: "good" if i < 30 else "bad"}, stored="good" if i < 30 else "bad") for i in range(60)]
+    assert build(tmp_path, recs)["status"] == "provisional"
+
+
+def test_no_verdict_tiers_anywhere(tmp_path, capsys):
+    r = build(tmp_path, usable_records())
+    out = align.render(r)
+    for tier in ("VALIDATED", "DIRECTIONAL", "EXPLORATORY", "NOT USABLE", "Verdict"):
+        assert tier not in out
+    assert "verdict" not in r and "gates" not in r
+    assert "## Status: provisional" in out and "Allowed next actions" in out
+
+
+def test_single_class_queue_warns_and_stays_provisional(tmp_path):
+    recs = [record(f"r{i}", {A: "good"}, stored="good") for i in range(12)]
     r = build(tmp_path, recs)
-    assert r["verdict"] == "DIRECTIONAL" and r["small_classes"] == ["bad", "good"]
+    assert r["status"] == "provisional"
+    assert f"At least {align.MIN_PER_CLASS} gold records per label" in warned(r)
 
 
-def test_low_annotator_agreement_fails_the_kappa_gate(tmp_path):
+def test_warnings_carry_their_basis_and_never_change_the_status(tmp_path):
+    big = [record(f"r{i}", {A: "good" if i < 75 else "bad"}, stored="good" if i < 75 else "bad") for i in range(150)]
+    recs = big + [record(f"na{i}", {A: "not_applicable"}) for i in range(80)]
+    r = build(tmp_path, recs, ev=evaluator(template=NO_MARKER))
+    assert r["status"] == "measured"
+    w = {x["check"]: x for x in r["warnings"]}
+    assert w[f"Excluded share ≤ {align.MAX_EXCLUDED_RATE:.0%}"]["basis"].startswith("Arize heuristic")
+    assert "Two or more annotators on some records" in w  # single annotator
+
+
+def test_low_annotator_agreement_warns(tmp_path):
     recs = usable_records()
     for rec in recs[:5]:
-        # B flips every vote on 5 records; adjudicate them so only κ fails.
+        # B flips every vote on 5 records; adjudicate them so only κ is low.
         for ann in rec["annotations"]:
             if (ann.get("annotator") or {}).get("email") == B:
                 ann["label"] = "bad" if ann["label"] == "good" else "good"
     adj = tmp_path / "adj.json"
     adj.write_text(json.dumps({rec["id"]: "good" for rec in recs[:5]}))
     r = build(tmp_path, recs, adjudications=str(adj))
-    g = gates(r)
-    assert not g[KAPPA_GATE]
-    assert g["No unresolved disputes"]
+    assert any(c.startswith("Annotator agreement") for c in warned(r))
+    assert "No open disputes" not in warned(r)
 
 
-def test_duplicate_sessions_fail_the_join_gate(tmp_path):
+def test_duplicate_sessions_block(tmp_path):
     recs = usable_records()
     recs[1]["data"]["attributes.session.id"] = recs[0]["data"]["attributes.session.id"]
     r = build(tmp_path, recs)
-    assert not gates(r)["Join to evaluator unit"]
+    assert "Each record is one session" in blocked(r)
     assert len(r["dup_sessions"]) == 1
 
 
-def test_missing_stored_output_fails_the_coverage_gate(tmp_path):
+def test_missing_stored_output_blocks(tmp_path):
     recs = usable_records()
     for rec in recs[:3]:
         rec["evaluations"] = []
     r = build(tmp_path, recs)
-    assert not gates(r)["Stored evaluator output on gold records"]
+    assert "Every gold record carries a result from the current judge version" in blocked(r)
+
+
+def test_stale_results_block_until_rescored(tmp_path):
+    recs = usable_records()
+    recs[0]["evaluations"][0]["explanation"] = "LAST_TURN_CHECK: Turn 2"
+    r = build(tmp_path, recs, turns={recs[0]["data"]["attributes.session.id"]: 5})
+    assert "No stale results on gold records" in blocked(r)
+
+
+def test_unchecked_staleness_blocks_a_session_judge(tmp_path):
+    r = build(tmp_path, usable_records())  # the template has the marker, but no turns were counted
+    assert any("not checked" in b["value"] for b in r["blockers"] if b["condition"] == "No stale results on gold records")
+
+
+def test_definition_diff_flags_a_criterion_question(tmp_path):
+    q = queue(instructions="Labels:\n- good: the answer is right.\n- bad: the answer is wrong.\n"
+                           "Evidence: a filter block or a validate_filter call.")
+    ev = evaluator(template="Grade {conversation}. LAST_TURN_CHECK: Turn N\n- good: the answer is right and reached "
+                            "the user; validate_filter probes alone do not count.\n- bad: the answer is wrong.")
+    r = build(tmp_path, usable_records(), q=q, ev=ev)
+    assert r["definitions"]["flagged"] == ["good"]
+    assert "validate_filter" in r["definitions"]["shared_terms"]
+    assert "Queue and template define the labels the same way" in blocked(r)
+    assert "A criterion question is open" in align.render(r)
+    decided = build(tmp_path, usable_records(), q=q, ev=ev, criterion_decided=True)
+    assert "Queue and template define the labels the same way" not in blocked(decided)
+
+
+def test_matching_definitions_are_not_flagged(tmp_path):
+    defs = "\n- good: the answer is right.\n- bad: the answer is wrong."
+    r = build(tmp_path, usable_records(), q=queue(instructions="Labels:" + defs),
+              ev=evaluator(template="Grade {conversation}. LAST_TURN_CHECK: Turn N" + defs))
+    assert r["definitions"]["flagged"] == []
+
+
+def test_leniency_uses_the_named_failing_labels(tmp_path):
+    r = build(tmp_path, usable_records(), fail_label=["bad"])
+    # 6 human `bad`; the judge said `good` on one.
+    assert r["leniency"] == (1, 6)
+    out = align.render(r)
+    assert "Leniency" in out and out.index("`bad` (failing)") < out.index("`good`: ")
+    assert build(tmp_path, usable_records())["leniency"] is None
+
+
+def test_test_split_is_reported_first(tmp_path):
+    out = align.render(build(tmp_path, usable_records()))
+    assert out.index("## Test split") < out.index("## All scored gold records")
+    assert "directional" in out[out.index("## Test split"):out.index("## All scored gold records")]
+
+
+def test_no_plan_says_nothing_is_a_production_rate(tmp_path):
+    out = align.render(build(tmp_path, usable_records()))
+    assert "nothing here is a production rate" in out
 
 
 # ---------------------------------------------------------------------------
@@ -314,8 +375,8 @@ def test_report_writes_json_summary(tmp_path, capsys):
     align.cmd_report(argparse.Namespace(dir=str(tmp_path), adjudications=None, eval_column=None, config=None,
                                         not_applicable=["not_applicable"], unscorable=["cannot_judge", "unclear"],
                                         json_out=str(out), plan=None, test_from=None, rubric_version=None,
-                                        admission_filter=None))
-    assert "**Verdict: DIRECTIONAL.**" in capsys.readouterr().out
+                                        admission_filter=None, fail_label=None, criterion_decided=False))
+    assert "## Status: provisional" in capsys.readouterr().out
     slim = json.loads(out.read_text())
     assert slim["summary"]["gold"] == 12 and slim["summary"]["disagreements"] == 2
     assert len(slim["records"]) == 12
@@ -392,7 +453,7 @@ def test_kappa_gate_accepts_ac1_only_when_one_label_dominates(tmp_path):
     r = build(tmp_path, recs, adjudications=str(adj))
     pair = r["iaa"][0]
     assert pair["skewed"] and pair["kappa"] < align.MIN_KAPPA <= pair["ac1"]
-    assert gates(r)[KAPPA_GATE]
+    assert not any(c.startswith("Annotator agreement") for c in warned(r))
     out = align.render(r)
     assert "kappa paradox" in out and "AC1 = 0.88" in out
 
@@ -434,7 +495,7 @@ def test_weighted_estimates_undo_oversampling(tmp_path):
     assert r["agree"] == 6  # raw: 6/10 on the queue
     assert wt["agreement"] == pytest.approx(0.9 * 1 + 0.1 * 0.2)  # production-weighted: 92%
     assert wt["covered_share"] == 1.0 and wt["uncovered"] == []
-    assert "Production-weighted estimates" in align.render(r)
+    assert "secondary** estimate" in align.render(r)
 
 
 def test_a_random_stream_queue_is_a_measurement_and_is_not_reweighted(tmp_path):
@@ -446,7 +507,7 @@ def test_a_random_stream_queue_is_a_measurement_and_is_not_reweighted(tmp_path):
         "records": [{"span_id": f"sp-r{i}", "stratum": "random", "stream": "random"} for i in range(9)]}))
     r = build(tmp_path, recs, plan=str(plan))
     assert r["weighted"] == {"random_only": True, "streams": {"random": 9}, "frame": 880}
-    assert "measurement estimates and need no weighting" in align.render(r)
+    assert "so the numbers above are measurement estimates" in align.render(r)
 
 
 def test_random_strata_are_left_out_of_targeted_weighting(tmp_path):
@@ -520,7 +581,7 @@ def test_stale_results_are_left_out_of_agreement(tmp_path):
             record("r2", {A: "good"}, stored="good", explanation="LAST_TURN_CHECK: Turn 5", session="s2")]
     r = build(tmp_path, recs, turns={"s1": 5, "s2": 5})
     assert [row["record_id"] for row in r["gold_scored"]] == ["r2"] and r["agree"] == 1
-    assert "left out of agreement" in align.render(r)
+    assert "scored mid-session, so left out" in align.render(r)
 
 
 def test_session_evaluator_without_the_turn_marker_is_flagged(tmp_path):
@@ -535,7 +596,7 @@ def test_applicability_is_scored_apart_from_grade(tmp_path):
     assert sorted(r["app_pairs"]).count(("not_applicable", "applicable")) == 1
     assert len(r["app_pairs"]) == 14
     out = align.render(r)
-    assert "Applicability (in scope or not, per human vs judge): 13/14" in out
+    assert "Applicability (in scope or not): 13/14" in out
     assert "Grade (gold records only): 10/12" in out
 
 
@@ -552,7 +613,7 @@ def test_human_ceiling_holds_one_rater_out(tmp_path):
     assert len(human) == len(judge) == 1 + 5 * 3
     assert sum(1 for x, y in human if x == y) == 15  # C's bad on r0 is the only human miss
     assert sum(1 for x, y in judge if x == y) == 4 * 3  # the judge said bad on r0 and r1
-    assert "Human ceiling (one rater held out)" in align.render(r)
+    assert "One rater held out at a time" in align.render(r)
 
 
 def test_splits_keep_a_session_together(tmp_path):
@@ -575,7 +636,7 @@ def test_test_from_makes_a_later_batch_the_test_split(tmp_path):
     split = {row["record_id"]: row["split"] for row in r["rows"]}
     assert all(split[f"r{i}"] == "test" for i in range(20, 30))
     assert all(split[f"r{i}"] in ("train", "dev") for i in range(20))
-    assert "a later batch, labeled after the prompt was frozen" in align.render(r)
+    assert "a batch labeled after the prompt was frozen" in align.render(r)
     with pytest.raises(SystemExit, match="ISO 8601"):
         build(tmp_path, recs, test_from="yesterday")
 
@@ -612,7 +673,7 @@ def test_ppi_corrects_a_judge_that_over_calls_good(tmp_path):
     assert good["judge_only"] == pytest.approx(0.9)
     assert good["ppi"] == pytest.approx(0.7, abs=0.01)
     assert good["ppi_ci"][0] < 0.7 < good["ppi_ci"][1]
-    assert "Production rates (PPI++)" in align.render(r)
+    assert "Corrected production rates" in align.render(r)
 
 
 def test_ppi_uses_only_random_stream_labels(tmp_path):
@@ -635,7 +696,7 @@ def report_json(path, labels, judge=None):
 
 def compare_args(before, after, **kw):
     base = dict(before=before, after=after, split=None, second_judge=None, gate=False, fail_label=None,
-                ledger=None, look_budget=align.LOOK_BUDGET)
+                ledger=None, look_budget=align.LOOK_BUDGET, candidates=1, fresh=None)
     base.update(kw)
     return argparse.Namespace(**base)
 
@@ -660,7 +721,16 @@ def test_compare_flags_a_dev_to_test_drop(tmp_path, capsys):
 def test_ship_gate_passes_only_when_test_holds_and_recall_does_not_drop(tmp_path, capsys):
     before = report_json(tmp_path / "b.json", records_for(6, 6))
     good = report_json(tmp_path / "a.json", records_for(8, 8))
+    align.cmd_compare(compare_args(before, good, gate=True, second_judge=good))
+    assert "## Ship gate: PASS" in capsys.readouterr().out
+    # Without a second judge model the gate fails (Kochelka et al.; SOP step 5).
     align.cmd_compare(compare_args(before, good, gate=True))
+    assert "❌ Second judge model scored on test" in capsys.readouterr().out
+    # The best of several candidates must be re-scored on fresh sessions (SIREN).
+    align.cmd_compare(compare_args(before, good, gate=True, second_judge=good, candidates=3))
+    out = capsys.readouterr().out
+    assert "## Ship gate: FAIL" in out and "missing: pass `--fresh`" in out
+    align.cmd_compare(compare_args(before, good, gate=True, second_judge=good, candidates=3, fresh=good))
     assert "## Ship gate: PASS" in capsys.readouterr().out
     bad = report_json(tmp_path / "a2.json", records_for(10, 5))
     align.cmd_compare(compare_args(before, bad, gate=True, fail_label=["bad"]))
@@ -755,4 +825,4 @@ def test_test_split_metrics_use_only_test_records(tmp_path):
     assert len(r["test_pairs"]) == len(test_rows) > 0
     assert r["test_recall"]["bad"][1] == sum(1 for row in test_rows if row["consensus"] == "bad")
     out = align.render(r)
-    assert "Test split only" in out and "Same-batch test: directional only" in out
+    assert "## Test split" in out and "**directional**" in out

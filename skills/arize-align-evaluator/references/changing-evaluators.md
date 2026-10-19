@@ -1,6 +1,6 @@
 # Changing an evaluator safely
 
-Phase 6 creates candidate copies and, after approval, new versions of production evaluators. A new version is append-only: the previous one stays in the history. But the API does not carry every setting over, so read this before writing any version.
+Phase 5 creates candidate copies and, after approval, new versions of production evaluators. A new version is append-only: the previous one stays in the history. But the API does not carry every setting over, so read this before writing any version.
 
 ## Build each version from the current one, then read it back
 
