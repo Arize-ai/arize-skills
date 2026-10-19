@@ -712,3 +712,67 @@ def test_turn_counts_split_batches_that_fill_a_page(monkeypatch):
     monkeypatch.setattr(plan, "run_ax", fake)
     turns = plan.count_turns("ax", "proj-1", "S", ROOT_FILTER, {f"s{i}": START.isoformat() for i in range(3)})
     assert turns == {"s0": 300, "s1": 300, "s2": 300}
+
+
+# ---------------------------------------------------------------------------
+# instructions version bump
+# ---------------------------------------------------------------------------
+
+def bump(monkeypatch, tmp_path, text, version, *extra, add=None):
+    (tmp_path / "v3.txt").write_text(text)
+    monkeypatch.setattr(plan.subprocess, "run", add or FakeAdd())
+    monkeypatch.setattr("sys.argv", ["plan_queue.py", "--space", "S", "--bump", str(tmp_path / "plan.json"),
+                                     "--instructions-file", str(tmp_path / "v3.txt"),
+                                     "--instructions-version", version, "--queue", "Q", "--random-queue", "CAL",
+                                     *extra])
+    plan.main()
+    return json.loads((tmp_path / "plan.json").read_text())
+
+
+V3 = "Instructions v3, 2026-10-19"
+
+
+def test_bump_dry_run_changes_nothing(monkeypatch, tmp_path, capsys):
+    fake, first = first_plan(monkeypatch, tmp_path, plentiful(), "--instructions-version", "Instructions v2, 2026-10-15")
+    add = FakeAdd()
+    p = bump(monkeypatch, tmp_path, V3 + "\nLabels: ...", V3, add=add)
+    assert add.calls == [] and p == first
+    out = capsys.readouterr().out
+    assert "Dry run: nothing changed" in out and f"{len(first['records'])} planned record(s)" in out
+
+
+def test_bump_updates_both_queues_and_the_plan_so_intake_stamps_it(monkeypatch, tmp_path):
+    fake, first = first_plan(monkeypatch, tmp_path, plentiful() + later(), "--instructions-version",
+                             "Instructions v2, 2026-10-15")
+    add = FakeAdd()
+    p = bump(monkeypatch, tmp_path, V3 + "\nLabels: ...", V3, "--changed-labels", "no_filter_produced", "--execute",
+             add=add)
+    assert [c[2:4] for c in add.calls] == [["update", "Q"], ["update", "CAL"]]
+    assert all(c[c.index("--instructions") + 1].startswith(V3) for c in add.calls)
+    assert p["settings"]["instructions_version"] == V3
+    h = p["instructions_history"][-1]
+    assert h["previous"] == "Instructions v2, 2026-10-15" and h["changed_labels"] == ["no_filter_produced"]
+    # A later intake run, with no flag, stamps the new version on the records it adds.
+    p = intake(monkeypatch, tmp_path, fake, "--per-label", "1", "--execute")
+    new = p["records"][len(first["records"]):]
+    assert new and all(r["instructions_version"] == V3 for r in new)
+
+
+def test_a_failed_queue_update_leaves_the_plan_unchanged(monkeypatch, tmp_path):
+    fake, first = first_plan(monkeypatch, tmp_path, plentiful(), "--instructions-version", "Instructions v2, 2026-10-15")
+    with pytest.raises(SystemExit) as e:
+        bump(monkeypatch, tmp_path, V3 + "\n...", V3, "--execute", add=FakeAdd(fail_on={2}))
+    assert "Already updated: ['Q']" in str(e.value)
+    assert json.loads((tmp_path / "plan.json").read_text()) == first
+
+
+@pytest.mark.parametrize("text,version,why", [
+    ("Instructions v2, 2026-10-15\n...", V3, "not the version line"),
+    (V3 + "\n" + "x" * 5000, V3, "Arize allows 5000"),
+    ("Instructions v2, 2026-10-15\n...", "Instructions v2, 2026-10-15", "already on"),
+])
+def test_bump_refuses_bad_instructions(monkeypatch, tmp_path, text, version, why):
+    first_plan(monkeypatch, tmp_path, plentiful(), "--instructions-version", "Instructions v2, 2026-10-15")
+    with pytest.raises(SystemExit) as e:
+        bump(monkeypatch, tmp_path, text, version, "--execute")
+    assert why in str(e.value)

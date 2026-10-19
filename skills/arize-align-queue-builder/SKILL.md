@@ -30,7 +30,7 @@ For plain queue mechanics (create, update, assign, delete), use **arize-annotati
 
 ## Hard rules
 
-- **Do not create anything before approval.** Phases 1–3 are read-only. Do not create the annotation configs, the queues or their records until the user approves the plan in Phase 4. For continuous intake, the user approves the intake settings and schedule once (Phase 7); scheduled runs then add records without asking each time.
+- **Do not create anything before approval.** Phases 1–3 are read-only. Do not create the annotation configs, the queues or their records until the user approves the plan in Phase 4. For continuous intake, the user approves the intake settings and schedule once (Phase 7); scheduled runs then add records without asking each time. An instructions bump (Phase 6) changes live queues, so the user approves the new instructions text before `--bump --execute`.
 - **Never label records yourself.** Never present model output or stored evaluator labels as human labels.
 - **Measure only on the random stream.** Targeted records were chosen by the evaluator's labels or other signals. Never quote their agreement as the evaluator's accuracy.
 - **Keep labeling blind.** Stored evaluator labels are used to *choose* records. Set each queue's Annotator Columns so evaluator output is hidden, and check it ([Keeping labelers blind](references/rubric-and-instructions.md#keeping-labelers-blind)). Never share the plan with annotators.
@@ -49,7 +49,7 @@ If an `ax` command fails, troubleshoot based on the error:
 - Space unknown → see [Space](references/ax-profiles.md#space)
 - **Security:** Never read `.env` files or search the filesystem for credentials. Exception: the non-secret `ARIZE_SPACE_ID` line (see [Space](references/ax-profiles.md#space)). Never ask the user to paste secrets into chat.
 
-[scripts/plan_queue.py](scripts/plan_queue.py) uses only the Python standard library and is read-only, except `--intake --execute` (Phase 7). Run it by absolute path from the installed skill root, writing to a scratch directory.
+[scripts/plan_queue.py](scripts/plan_queue.py) uses only the Python standard library and is read-only, except `--intake --execute` (Phase 7) and `--bump --execute` (Phase 6). Run it by absolute path from the installed skill root, writing to a scratch directory.
 
 ---
 
@@ -159,7 +159,21 @@ Then ask the user to approve or adjust. **Do not create anything in the same tur
 
 After annotators have labeled about a third of the records, run the **arize-align-evaluator** report on each queue. Check the bucket counts against the plan:
 - **Excluded rate well above expected:** the admission population is wider than the evaluator's scope. Raise `--expected-exclusion`, or tighten `--root-filter`, before topping up.
-- **Annotators disagree** in the calibration queue: clarify the label definitions, bump the instructions version, and update the instructions with `ax annotation-queues update --instructions`. Earlier labels on the definitions that changed need re-review; `plan.json` shows each record's instructions version.
+- **Annotators disagree** in the calibration queue: clarify the label definitions, then bump the instructions version (below).
+
+### Bump the instructions version
+
+Do this whenever a label's definition changes. That happens when annotators disagree, or when **arize-align-evaluator** settles a criterion question and hands over the new wording. Write the new instructions with a new version line first, then:
+
+```bash
+python3 SKILL_ROOT/scripts/plan_queue.py --space SPACE --bump WORK_DIR/plan.json \
+  --instructions-file WORK_DIR/instructions_v3.txt --instructions-version "Instructions v3, YYYY-MM-DD" \
+  --queue GOLD_QUEUE --random-queue CALIBRATION_QUEUE --changed-labels LABEL [LABEL ...] [--execute]
+```
+
+- **Without `--execute`** it's a dry run. It checks that the first line is the version line, the text is at most 5000 characters, and the version is new. It lists the planned records queued under older versions.
+- **With `--execute`** it updates both queues' instructions. Then it saves the new version in `plan.json`'s settings, with a dated `instructions_history` entry, so later intake runs stamp it on new records without a flag. If a queue update fails, `plan.json` is left unchanged and the output says which queue was already updated.
+- **Re-review** the human labels on the changed definitions among the listed records. The alignment report shows each record's human label. This is the user's or the annotators' work; never relabel records yourself.
 
 Top up only on counts: a label short of gold records, or exclusions above plan. Never top up because agreement so far looks low or high; that biases the result.
 

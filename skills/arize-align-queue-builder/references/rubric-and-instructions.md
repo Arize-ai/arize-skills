@@ -84,6 +84,6 @@ If two labels seem to fit, <tie-break rule from the template>.
 - The instructions name the unit, and for session evaluators, say to label the session.
 - The blindness line is present.
 - The length is under 5000 characters: `wc -c instructions.txt`.
-- The instructions carry a version line (for example `Instructions v2, 2026-10-06`). Pass the same text to the planner as `--instructions-version`, so each record in `plan.json` carries it. Change it whenever a definition changes. Labels made under the older version, on the labels whose definitions changed, then need re-review.
+- The instructions carry a version line (for example `Instructions v2, 2026-10-06`). Pass the same text to the planner as `--instructions-version`, so each record in `plan.json` carries it. Change it whenever a definition changes, with `plan_queue.py --bump` (SKILL.md, Phase 6), which updates both queues and the version intake stamps on new records. Labels made under the older version, on the labels whose definitions changed, then need re-review.
 - The optional-critique line and the sitting limit are present.
 - Spot-check 2–3 planned records with **arize-trace**: open the session and confirm an annotator could reach a label from what is visible. If not, the unit or the instructions need adjusting before creation.

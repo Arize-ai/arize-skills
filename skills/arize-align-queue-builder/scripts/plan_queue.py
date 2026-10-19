@@ -27,13 +27,17 @@ scope_probe, signal:NAME) and the instructions version it was queued under. Writ
   random_sources.*     The random stream, split the same way, for the calibration queue
   config_values.json   Proposed categorical label values for the annotation config
 
+Bump (--bump plan.json --instructions-file FILE --instructions-version V --queue Q --random-queue C): when a
+label's definition changes, update both queues' instructions and save the new version in the plan, so intake
+stamps it on new records. Lists the records queued under older versions for re-review. Dry run unless --execute.
+
 Intake (--intake plan.json --queue QUEUE [--random-queue QUEUE --random N]): sample only the units
 that arrived since the last run, with the same strata and settings, into a new directory beside
 plan.json (intake-N/). Each run's strata are counted and stored separately, so the weighting stays
 exact. Without --execute this is a dry run. With --execute it adds the records to the queues and
 appends them, the strata and the new cursor to plan.json; run it on a schedule for continuous intake.
 
-Standard library only (Python 3.9+). Creates nothing in Arize, except `--intake --execute`.
+Standard library only (Python 3.9+). Creates nothing in Arize, except `--intake --execute` and `--bump --execute`.
 
 Example:
   plan_queue.py --space SPACE --project PROJECT --evaluator EVALUATOR \\
@@ -363,9 +367,17 @@ def main():
                    help="intake: leave out the newest hours, which evaluators may not have scored yet")
     p.add_argument("--execute", action="store_true",
                    help="intake: add the records to the queues and record the run in the plan")
+    p.add_argument("--bump", metavar="PLAN_JSON",
+                   help="Bump the queues' instructions version: update --queue and --random-queue to the text in "
+                        "--instructions-file, and save --instructions-version in the plan so intake stamps it")
+    p.add_argument("--instructions-file", help="bump: the new instructions text; its first line is the version line")
+    p.add_argument("--changed-labels", nargs="*", default=[],
+                   help="bump: the labels whose definitions changed, recorded in the plan's instructions history")
     p.add_argument("--seed", type=int, help="Random seed (default 0; intake: the run number)")
     p.add_argument("--ax", default="ax")
     a = p.parse_args()
+    if a.bump:
+        return bump_instructions(a, p)
     base = None
     if a.intake:
         if not a.queue:
@@ -772,6 +784,74 @@ def main():
     print("\n".join(out))
     with open(os.path.join(a.out_dir, "plan.md"), "w") as f:
         f.write("\n".join(out) + "\n")
+
+
+INSTRUCTIONS_MAX = 5000  # Arize's limit on queue instructions
+
+
+def bump_instructions(a, p):
+    """Bump the queues' instructions to a new version.
+
+    Changing a label's definition is a criterion change: labels made under the old definition need re-review,
+    and every record queued from now on must carry the new version. This updates both queues' instructions,
+    then saves the new version in the plan's settings, so intake runs stamp it on new records without a flag.
+    It also lists the records queued under older versions. Without --execute it is a dry run. If a queue
+    update fails, the plan is left unchanged."""
+    if not (a.instructions_file and a.instructions_version):
+        p.error("--bump needs --instructions-file and --instructions-version")
+    queues = [q for q in (a.queue, a.random_queue) if q]
+    if not queues:
+        p.error("--bump needs --queue and/or --random-queue")
+    with open(a.bump) as f:
+        base = json.load(f)
+    with open(a.instructions_file) as f:
+        text = f.read().strip() + "\n"
+    settings = base.setdefault("settings", {})
+    old = settings.get("instructions_version")
+    first = text.splitlines()[0].strip() if text.strip() else ""
+    problems = []
+    if first != a.instructions_version.strip():
+        problems.append(f"the file's first line is {first!r}, not the version line {a.instructions_version!r}")
+    if len(text) > INSTRUCTIONS_MAX:
+        problems.append(f"the instructions are {len(text)} characters; Arize allows {INSTRUCTIONS_MAX}")
+    if old and old == a.instructions_version:
+        problems.append(f"the plan is already on {old!r}; a changed definition needs a new version line")
+    if problems:
+        sys.exit("Not bumped: " + "; ".join(problems) + ".")
+
+    older = [r for r in base.get("records") or [] if r.get("instructions_version") != a.instructions_version]
+    by_stream = defaultdict(list)
+    for r in older:
+        by_stream[r.get("stream", "targeted")].append(r)
+    out = [f"# Instructions bump: {old or '(no version)'} → {a.instructions_version}\n",
+           f"- Queues: {', '.join(f'`{q}`' for q in queues)}; {len(text)} characters.",
+           f"- Changed labels: {', '.join(f'`{x}`' for x in a.changed_labels) or 'not given (pass --changed-labels)'}",
+           f"- {len(older)} planned record(s) were queued under an older version. Re-review the human labels on the "
+           "changed definitions among them; the alignment report shows each record's human label.\n"]
+    for stream, recs in sorted(by_stream.items()):
+        out.append(f"{stream}: " + ", ".join(sorted({str(r.get('session_id') or r.get('span_id')) for r in recs})))
+    if not a.execute:
+        out.append("\nDry run: nothing changed. Re-run with --execute to update the queues and the plan.")
+        print("\n".join(out))
+        return
+    for q in queues:
+        proc = subprocess.run([a.ax, "annotation-queues", "update", q, "--space", a.space, "--instructions", text,
+                               "-o", "json"], capture_output=True, text=True)
+        if proc.returncode != 0:
+            done = queues[:queues.index(q)]
+            sys.exit(f"Updating `{q}` failed: {(proc.stderr + proc.stdout).strip()[:400]}\n"
+                     + (f"Already updated: {done}. " if done else "") + "The plan was not changed; fix the error and re-run.")
+    settings["instructions_version"] = a.instructions_version
+    base.setdefault("instructions_history", []).append({
+        "version": a.instructions_version, "previous": old, "at": z(datetime.now(timezone.utc)),
+        "queues": queues, "changed_labels": a.changed_labels})
+    tmp = a.bump + ".tmp"
+    with open(tmp, "w") as f:
+        json.dump(base, f, indent=1)
+    os.replace(tmp, a.bump)
+    out.append(f"\n**Updated {len(queues)} queue(s) and saved {a.instructions_version!r} in `{a.bump}`.** Intake runs "
+               "now stamp it on new records.")
+    print("\n".join(out))
 
 
 def record_intake(a, base, run_id, run_plan, targets):
