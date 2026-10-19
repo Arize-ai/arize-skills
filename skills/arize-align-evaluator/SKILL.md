@@ -45,7 +45,8 @@ For creating evaluators, tasks and runs in general, use **arize-evaluator**. For
 | **Never quote percent agreement alone.** Report π next to it, plus recall on the failing labels. | Thakur; SOP rule 4 |
 | **Corrected production rates come only from random-stream labels.** | Angelopoulos; Chen; SOP rule 5 |
 | **Change nothing before approval.** Phases 0–4 are read-only: no evaluators, versions, tasks, runs, queues or annotations. | — |
-| **Candidate copies only.** Never create a production version automatically. Promotion needs its own approval. | — |
+| **Edit the evaluator in place, after approval.** An approved change is a new version of the evaluator itself; Arize keeps the version history, so the template can be rolled back. Save the current version first, read the new one back, and record the switch time. Never change an evaluator without the user naming the change. | Skill practice; [references/changing-evaluators.md](references/changing-evaluators.md) |
+| **Sessions read to write a rule never count as test.** List them with `--read-sessions`. | Dwork; SIREN; SOP rule 1 |
 | **Preserve human labels as given.** Never relabel, merge or coerce a label. `cannot_judge` is unscorable, never an evaluator class. Keep every annotator's original vote. | — |
 | **Never fabricate results.** If a command fails or a field is missing, say so. Never grade records yourself in place of the judge. | — |
 
@@ -97,6 +98,7 @@ Read the template's definition of each label, and its scope rule, next to the qu
   - bump the rubric version
   - re-review the affected labels
   - pass `--criterion-decided`
+- **Draft both sides of the new rule:** the template wording and the matching queue instructions, so humans and the judge apply the same rule. Updating the queue instructions is a queue change, so hand it to **arize-annotation** (or the user does it in the UI); this skill doesn't apply it.
 - **Keep applicability rules (when a session is in scope) apart from grading rules.** A scope disagreement needs a scope rule.
 - **A criterion change and a judge change are different tracks.** See [references/revision.md](references/revision.md#two-kinds-of-change-sop-step-1).
 
@@ -155,7 +157,7 @@ Meanings and sources are in [references/measurement.md](references/measurement.m
 
 **Then review:**
 
-1. **Read every disagreement.** Open the session with **arize-trace**. Decide whether the human is right, the judge is right, or it's ambiguous, and quote the evidence. Group the disagreements into patterns. See [references/disagreement-review.md](references/disagreement-review.md).
+1. **Read every disagreement.** Open the session with **arize-trace**, and add it to the `--read-sessions` file. Decide whether the human is right, the judge is right, or it's ambiguous, and quote the evidence. Group the disagreements into patterns. See [references/disagreement-review.md](references/disagreement-review.md).
 2. **Read the not-applicable records.** If humans said out of scope and the judge graded, the question is applicability. Check the scope rule and the task's admission filter. Spot-check a few sessions the filter excluded, too.
 3. **When the session supports the judge,** adjudicate the human label; don't edit the template.
 4. **Note when the judge grades its own model's output.** It's a cheap precaution, not a rule: no source here establishes self-preference.
@@ -163,7 +165,7 @@ Meanings and sources are in [references/measurement.md](references/measurement.m
 **Present the report and STOP.** Use [references/report-template.md](references/report-template.md). Propose exactly one of these:
 
 - **A criterion decision** for the user
-- **A queue or label fix:** re-score stale sessions, re-review labels, top up a label, or adjudicate
+- **A queue or label fix:** re-score stale sessions, re-review labels, top up a label, or adjudicate. Queue changes, including new instructions, go to **arize-annotation**.
 - **One batch of template edits,** quoting the exact current wording, the exact replacement and the records behind each. Only when no criterion question is open.
 
 Ask the user to approve, edit or reject. **Do not continue in the same turn.**
@@ -179,13 +181,14 @@ Ask the user to approve, edit or reject. **Do not continue in the same turn.**
 
 ## Phase 5: Revise without overfitting (SOP step 5, after approval)
 
-Approval must name the change. Then:
+Approval must name the change. Then, editing the evaluator in place:
 
-1. Make a candidate copy, and get a baseline plus its noise floor.
-2. Make batched general edits from dev. Check each with `lint`, run the reproduce check, and look at dev once per batch.
-3. Compare before and after on the same records.
-4. Freeze the candidate, label a later test batch, score it once, and score a second judge model.
-5. Run the ship gate:
+1. **Baseline first.** Save the current version's JSON (for rollback) and its report as `baseline.json`.
+2. **Write the new version** from the current version's full config, changing only what was approved. Read it back, compare every field, and report any difference. Record the version's `created_at` as the **switch time** in the changelog.
+3. **Re-score the gold sessions** with a one-off, non-continuous task, filtered to those session IDs. Then re-run the report with `--rescored-at RUN_START`. Re-run it unchanged once more to see the noise floor.
+4. **Treat what you read as dev.** Every session read while writing the rule goes in `--read-sessions`, so it never counts as test. Check each edit with `lint`, run the reproduce check, and look at dev once per batch.
+5. **Freeze, then test on a later batch:** label it after the switch, score it once with `--test-from`, and score one other judge model on it, using a temporary copy with the other model that you delete after scoring.
+6. Run the ship gate:
 
    ```bash
    python3 SKILL_ROOT/scripts/align_report.py compare baseline.json final.json --gate \
@@ -202,7 +205,11 @@ Approval must name the change. Then:
 
 Every step, the meta-prompt for drafting revisions, and the stopping rules are in [references/revision.md](references/revision.md). Read [references/changing-evaluators.md](references/changing-evaluators.md) before writing any version.
 
-**Promotion** to production is a separate approval, recorded as a criterion change or a judge change.
+**State the costs of an in-place edit before making it:** the production task scores live traffic with the new version from the switch time on, and stored results carry no version ID, so the column mixes versions. Rolling back restores the template, not the scores written since. Record the switch time; it's the only way to tell the versions' results apart.
+
+**A temporary candidate copy** is the alternative when the user wants old and new scored side by side on the same records before live traffic changes. Delete it after the ship gate.
+
+Record each change in the changelog as a criterion change or a judge change, with the switch time.
 
 ## Phase 6: Keep the judge's structure (SOP step 6)
 
@@ -223,7 +230,7 @@ Use the narrower interval. PPI assumes the labeled records match production's la
 ## Phase 8: Cadence (SOP step 9)
 
 1. **Weekly:** error analysis on new sessions, and dev revisions in batches.
-2. **When a candidate is frozen:** label a test batch, score it once, and run the ship gate.
+2. **When a new version is frozen:** label a test batch, score it once, and run the ship gate.
 3. **Revise only one or two judges at a time,** so their test batches fit the labeling budget (an Arize heuristic).
 4. **Keep the calibration queue topped up** through intake; it's the drift check.
 

@@ -10,7 +10,7 @@ There are no verdict tiers. A judge is **measured** only when every condition be
 |---|---|---|
 | Size | 30+ scored gold records per label in **each** of dev and test, for at least 2 labels | Husain & Shankar |
 | No stale results | No gold record's stored result saw fewer turns than the session has (`LAST_TURN_CHECK`). If turns weren't counted, this is "not checked". | SOP rule 3 |
-| Current version | Every gold record has a stored result, and none started before the current version was created | SOP rule 2 |
+| Current version | Every gold record has a stored result, and none started before the current version was created. After an in-place edit, re-score the sessions and pass `--rescored-at RUN_START`. | SOP rule 2 |
 | One record per unit | Every record has a session ID, and none is duplicated | SOP addendum F |
 | No open criterion question | The label-definition diff is empty, or the user has decided the question (`--criterion-decided`) | SOP step 1 and addendum G |
 
@@ -40,7 +40,7 @@ Warnings never change the status. Each one prints its basis.
 
 Every rate is shown with a count, a percentage and a 95% Wilson interval. π gets a seeded bootstrap interval.
 
-1. **Test split first.** Agreement, Scott's π, and recall per label, with the failing labels first. These are the numbers to report for a frozen judge version. A test split from the same batch as dev is marked **directional**; the real test is a batch labeled after freezing (`--test-from`). See Kochelka and SPEAR in [sources.md](sources.md).
+1. **Test split first.** Sessions read while writing a rule (`--read-sessions`) never count as test; the report moves them to dev (SOP rule 1). Agreement, Scott's π, and recall per label, with the failing labels first. These are the numbers to report for a frozen judge version. A test split from the same batch as dev is marked **directional**; the real test is a batch labeled after freezing (`--test-from`). See Kochelka and SPEAR in [sources.md](sources.md).
 2. **All scored gold records:**
    - recall per human label (TPR and TNR for a binary judge) and balanced accuracy
    - precision per judge label

@@ -32,8 +32,8 @@ Use this structure when presenting to the user at the stop point. Keep it short;
 
 Give exactly one of these:
 
-- **A criterion decision for the user.** State the question and the options, with your recommendation. No template edit until it's decided.
-- **A queue or label fix.** For example: re-score stale sessions, re-review labels, top up a label, or adjudicate.
+- **A criterion decision for the user.** State the question and the options, with your recommendation. Draft both the template wording and the matching queue instructions. No template edit until it's decided.
+- **A queue or label fix.** For example: re-score stale sessions, re-review labels, top up a label, or adjudicate. New queue instructions go to **arize-annotation** (or the user) to apply.
 - **One batch of template edits.** Quote the exact current wording, the exact replacement, and the records that justify each edit. Only when no criterion question is open.
 
 ## 6. Uncertain

@@ -60,7 +60,7 @@ def build(tmp_path, records, q=None, ev=None, turns=None, **overrides):
     if turns is not None:
         (tmp_path / "turns.json").write_text(json.dumps(turns))
     args = dict(dir=str(tmp_path), adjudications=None, eval_column=None, config=None, plan=None, test_from=None,
-                rubric_version=None, admission_filter=None, fail_label=None, criterion_decided=False,
+                rubric_version=None, admission_filter=None, fail_label=None, criterion_decided=False, read_sessions=None, rescored_at=None,
                 not_applicable=list(align.DEFAULT_NOT_APPLICABLE), unscorable=list(align.DEFAULT_UNSCORABLE))
     args.update(overrides)
     return align.build(argparse.Namespace(**args))
@@ -375,7 +375,8 @@ def test_report_writes_json_summary(tmp_path, capsys):
     align.cmd_report(argparse.Namespace(dir=str(tmp_path), adjudications=None, eval_column=None, config=None,
                                         not_applicable=["not_applicable"], unscorable=["cannot_judge", "unclear"],
                                         json_out=str(out), plan=None, test_from=None, rubric_version=None,
-                                        admission_filter=None, fail_label=None, criterion_decided=False))
+                                        admission_filter=None, fail_label=None, criterion_decided=False,
+                                        read_sessions=None, rescored_at=None))
     assert "## Status: provisional" in capsys.readouterr().out
     slim = json.loads(out.read_text())
     assert slim["summary"]["gold"] == 12 and slim["summary"]["disagreements"] == 2
@@ -826,3 +827,29 @@ def test_test_split_metrics_use_only_test_records(tmp_path):
     assert r["test_recall"]["bad"][1] == sum(1 for row in test_rows if row["consensus"] == "bad")
     out = align.render(r)
     assert "## Test split" in out and "**directional**" in out
+
+
+def test_sessions_read_while_writing_rules_never_count_as_test(tmp_path):
+    recs = [record(f"r{i}", {A: "good" if i < 20 else "bad"}, stored="good" if i < 20 else "bad") for i in range(40)]
+    base = build(tmp_path, recs)
+    test_sessions = sorted(str(row["session_id"]) for row in base["gold"] if row["split"] == "test")
+    read = tmp_path / "read.txt"
+    dev_session = next(str(row["session_id"]) for row in base["gold"] if row["split"] == "dev")
+    read.write_text("\n".join(test_sessions[:3] + [dev_session]))
+    r = build(tmp_path, recs, read_sessions=str(read))
+    split = {str(row["session_id"]): row["split"] for row in r["gold"]}
+    assert all(split[s] == "dev" for s in test_sessions[:3])
+    assert len(r["test_pairs"]) == len(base["test_pairs"]) - 3
+    assert r["moved_from_test"] == test_sessions[:3]
+    assert "never count as test" in align.render(r)
+
+
+def test_rescored_at_clears_the_older_version_blocker_after_an_in_place_edit(tmp_path):
+    ev = evaluator(created_at="2030-01-01T00:00:00Z")
+    r = build(tmp_path, usable_records(), ev=ev)
+    assert "Every gold record carries a result from the current judge version" in blocked(r)
+    r = build(tmp_path, usable_records(), ev=ev, rescored_at="2030-01-02T00:00:00Z")
+    assert "Every gold record carries a result from the current judge version" not in blocked(r)
+    assert "re-scored by a run at" in align.render(r)
+    with pytest.raises(SystemExit):
+        build(tmp_path, usable_records(), ev=ev, rescored_at="2029-12-31T00:00:00Z")

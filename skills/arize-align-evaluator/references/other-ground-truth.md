@@ -36,7 +36,7 @@ Join rules:
 - Evaluator task results are in `run.additional_properties["eval.<template_config.name>.label"]`, with `.explanation` alongside. `run.annotations` holds values written by `annotate-runs`, which may be the human labels if they were attached that way.
 - Experiment tasks evaluate runs directly; data granularity does not apply.
 
-To get a fresh baseline in Phase 5, create the candidate evaluator, then a dataset task targeting the experiment, and trigger it with `--experiment-ids`. See Workflow B in **arize-evaluator**. Column mappings use top-level run fields such as `output`, not span attribute paths.
+To re-score after a change in Phase 5, write the new evaluator version, then a dataset task targeting the experiment, and trigger it with `--experiment-ids`. See Workflow B in **arize-evaluator**. Column mappings use top-level run fields such as `output`, not span attribute paths.
 
 ## No ground truth yet
 

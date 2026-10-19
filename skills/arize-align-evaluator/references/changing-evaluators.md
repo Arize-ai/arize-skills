@@ -1,6 +1,6 @@
 # Changing an evaluator safely
 
-Phase 5 creates candidate copies and, after approval, new versions of production evaluators. A new version is append-only: the previous one stays in the history. But the API does not carry every setting over, so read this before writing any version.
+Phase 5 writes approved changes as new versions of the evaluator itself. A new version is append-only: the previous one stays in the history, so the template can be rolled back. But the API does not carry every setting over, so read this before writing any version.
 
 ## Build each version from the current one, then read it back
 
@@ -28,7 +28,7 @@ This changes what the evaluator sees, so it needs its own approval, separate fro
 
 ## Changelog
 
-Keep a changelog per evaluator, one line per promoted version, with the judge version the report prints (rubric version, prompt hash, model, admission filter). Mark each entry as one of two kinds:
+Keep a changelog per evaluator, one line per version, with its switch time (the version's `created_at`) and the judge version the report prints (rubric version, prompt hash, model, admission filter). Mark each entry as one of two kinds:
 - **Criterion change:** what "pass" means changed. Bump the rubric version, and flag older gold labels on that criterion for re-review. Scores before and after aren't comparable.
 - **Judge change:** the prompt, model or filter changed, but the criterion didn't. This is tuning, and the held-out and ship-gate rules apply.
 
@@ -38,8 +38,11 @@ Either kind changes the judge, so re-measure, and re-collect random-stream label
 
 Projects often run a second copy of an evaluator on another model provider (for example `*_anthropic`), with the same template, to compare providers. Search for copies with `ax evaluators list --name KEYWORD` and compare templates. If the copies share a template, change them together. Otherwise the comparison measures the wording difference, not the provider.
 
-## Changing production directly
+## Editing in place: what to record
 
-When the user approves changing production without a candidate, state the costs first:
-- There is no before-and-after measurement on the gold set.
-- Continuous tasks score new data with the new version, while existing scores stay, so the column mixes versions. Stored results carry no version ID.
+In-place editing is the default (SKILL.md Phase 5). Before writing the version, tell the user:
+
+- **Live traffic switches immediately.** The production task scores new data with the new version from the switch time (the version's `created_at`).
+- **The output column mixes versions.** Stored results carry no version ID, so record the switch time in the changelog; it's the only way to tell the versions' results apart.
+- **Rollback restores the template, not the scores** written while the new version ran.
+- **Re-score the gold sessions** with a one-off task after the switch, and pass its start time to `report --rescored-at`. Otherwise the report treats every earlier session's result as possibly an older version's.

@@ -300,12 +300,15 @@ def unit_key(row):
     return row.get("session_id") or row.get("trace_id") or row["record_id"]
 
 
-def assign_splits(gold, test_from=None):
+def assign_splits(gold, test_from=None, read=frozenset()):
     """Stable train/dev/test split by session, balanced within each human label by hash rank.
 
     With test_from, every session that started at or after it is test (a later batch, labeled after the
     prompt was frozen), and the earlier sessions split into train and dev in the same 15 : 42.5 ratio.
-    A session holding gold records under several labels takes the split its rarest label gives it."""
+    A session holding gold records under several labels takes the split its rarest label gives it.
+
+    Sessions in `read` were read while writing a rule (SOP rule 1: tune and report on different sessions), so
+    they never count as test: a test pick among them moves to dev."""
     group_split = {}
     if test_from:
         for row in gold:
@@ -322,6 +325,9 @@ def assign_splits(gold, test_from=None):
         n_dev = n - n_train if test_from else int(round(n * SPLIT["dev"]))
         for i, g in enumerate(ranked):
             group_split.setdefault(g, "train" if i < n_train else "dev" if i < n_train + n_dev else "test")
+    for row in gold:
+        if group_split[unit_key(row)] == "test" and str(row["session_id"]) in read:
+            group_split[unit_key(row)] = "dev"
     return {row["record_id"]: group_split[unit_key(row)] for row in gold}
 
 
@@ -387,6 +393,12 @@ def build(a):
     choices = list((tc.get("classification_choices") or {}).keys())
     granularity = (tc.get("data_granularity") or "SPAN").upper()
     eval_column = a.eval_column or f"{GRANULARITY_PREFIX.get(granularity, 'eval')}.{tc.get('name')}"
+    read = frozenset(s.strip() for s in open(a.read_sessions).read().split() if s.strip()) if a.read_sessions else frozenset()
+    rescored_at = None
+    if a.rescored_at:
+        rescored_at = parse_iso(a.rescored_at)
+        if not rescored_at or not rescored_at.tzinfo:
+            sys.exit(f"--rescored-at must be an ISO 8601 time with a zone; got {a.rescored_at!r}")
     test_from = None
     if a.test_from:
         test_from = parse_iso(a.test_from)
@@ -515,7 +527,12 @@ def build(a):
     dup_sessions = {s: c for s, c in session_counts.items() if c > 1}
     with_stored = [row for row in rows if row["stored"]]
     created = parse_iso(version.get("created_at"))
-    older = [row for row in rows if created and row["start_time"] and row["start_time"] < created]
+    # After an in-place edit every earlier session started before the version was created. A one-off scoring run
+    # on these sessions after the switch (--rescored-at) makes their stored results the current version's.
+    if rescored_at and created and rescored_at < created:
+        sys.exit(f"--rescored-at {a.rescored_at} is before the current version was created ({version.get('created_at')}); "
+                 "re-score the sessions after the switch")
+    older = [] if rescored_at else [row for row in rows if created and row["start_time"] and row["start_time"] < created]
 
     # Human vs evaluator.
     gold = [row for row in rows if row["bucket"] == "gold"]
@@ -544,7 +561,10 @@ def build(a):
     ceiling_human, ceiling_judge = held_out_ceiling(rows, decisive)
 
     # Held-out split of the gold records, by session and human label, stable across runs.
-    splits = assign_splits(gold, test_from)
+    splits = assign_splits(gold, test_from, read)
+    unread = assign_splits(gold, test_from) if read else splits
+    moved_from_test = sorted({str(row["session_id"]) for row in gold
+                              if unread[row["record_id"]] == "test" and splits[row["record_id"]] != "test"})
     for row in rows:
         row["split"] = splits.get(row["record_id"])
     split_counts = {s: Counter(row["consensus"] for row in gold if row["split"] == s) for s in ("train", "dev", "test")}
@@ -622,7 +642,7 @@ def build(a):
              if scored_split["dev"][c] >= MIN_PER_CLASS_SPLIT and scored_split["test"][c] >= MIN_PER_CLASS_SPLIT]
     stale = [row for row in rows if row["stale"]]
     stale_gold = [row for row in gold if row["stale"]]
-    older_gold = [row for row in gold if created and row["start_time"] and row["start_time"] < created]
+    older_gold = [] if rescored_at else [row for row in gold if created and row["start_time"] and row["start_time"] < created]
     unscored_gold = [row for row in gold if not row["stored"]]
     span_records = sum(1 for row in rows if (row["granularity"] or "").upper() != "SESSION")
     marker = LAST_TURN_MARKER in template
@@ -707,7 +727,8 @@ def build(a):
         "judge": judge, "judge_pi": pi_with_ci(judge_pairs), "app_pairs": app_pairs, "skew": skew,
         "test_pairs": test_pairs, "test_pi": pi_with_ci(test_pairs), "test_recall": test_recall,
         "ceiling_human": ceiling_human, "ceiling_judge": ceiling_judge, "production": production,
-        "planned": bool(plan),
+        "planned": bool(plan), "read": sorted(read), "moved_from_test": moved_from_test,
+        "rescored_at": a.rescored_at,
     }
 
 class PlanIndex:
@@ -875,8 +896,9 @@ def ppi_rates(plan, rows, labels):
 NEXT_ACTIONS = {
     "provisional": "Report every number with its interval and don't claim a target. Fix clear criterion, scope or "
                    "queue problems first, then make at most one batch of template fixes; don't tune prompt by prompt.",
-    "measured": "The revise loop and the ship gate apply: candidate copy, baseline, batched general edits, freeze, "
-                "a later test batch scored once, a second judge model, then `compare --gate`.",
+    "measured": "The revise loop and the ship gate apply: save the baseline, edit the evaluator in place and record the "
+                "switch time, re-score, batched general edits, freeze, a later test batch scored once, a second judge "
+                "model, then `compare --gate`.",
 }
 
 
@@ -933,6 +955,10 @@ def render(r):
     else:
         w("Test is drawn from the same batch as dev, so these numbers are **directional**. The real test is a batch "
           "labeled after freezing the prompt (`--test-from`).\n")
+    if r["read"]:
+        w(f"{len(r['read'])} session(s) were read while writing the rules (`--read-sessions`); they never count as test"
+          + (f", so {len(r['moved_from_test'])} moved from test to dev" if r["moved_from_test"] else "")
+          + " (SOP rule 1: tune and report on different sessions).\n")
     if not tp:
         w("No test record has a current stored result yet.\n")
     else:
@@ -1055,7 +1081,9 @@ def render(r):
         w(f"- The template reports `{LAST_TURN_MARKER}`; run `fetch --count-turns` to check for mid-session results.")
     if r["older"]:
         w(f"- {len(r['older'])} record(s) started before the current version was created; their results may be an "
-          "older version's.")
+          "older version's. After re-scoring them with the current version, pass `--rescored-at RUN_START`.")
+    if r["rescored_at"]:
+        w(f"- Stored results are taken as the current version's: re-scored by a run at `{r['rescored_at']}`.")
     if r["na_rows"]:
         w("- On records humans marked not applicable, the judge said: "
           + ", ".join(f"`{lbl}` {c}" for lbl, c in r["applicability"].most_common()))
@@ -1147,7 +1175,8 @@ def cmd_report(a):
                 "applicability_pi": scott_pi(r["app_pairs"]),
                 "ceiling": {"comparisons": len(r["ceiling_human"]), "human_pi": scott_pi(r["ceiling_human"]),
                             "judge_pi": scott_pi(r["ceiling_judge"])},
-                "production": r["production"],
+                "production": r["production"], "read_sessions": r["read"], "moved_from_test": r["moved_from_test"],
+                "rescored_at": r["rescored_at"],
                 "split_counts": {k: dict(v) for k, v in r["split_counts"].items()},
             },
             "judge": r["judge"],
@@ -1345,6 +1374,10 @@ def main():
     r.add_argument("--rubric-version", help="Rubric or instructions version the labels were made under")
     r.add_argument("--admission-filter", help="The task's admission filter, recorded as part of the judge version")
     r.add_argument("--fail-label", action="append", help="A failing label (repeat): its recall leads and leniency uses it")
+    r.add_argument("--read-sessions", metavar="FILE",
+                   help="Session IDs (whitespace-separated) read while writing a rule; they never count as test")
+    r.add_argument("--rescored-at", metavar="ISO_TIME",
+                   help="Start of a scoring run, after the current version was created, that re-scored these sessions")
     r.add_argument("--criterion-decided", action="store_true",
                    help="The user has decided the criterion question the definition diff flagged")
     r.set_defaults(func=cmd_report)
