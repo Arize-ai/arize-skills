@@ -8,7 +8,6 @@ import hashlib
 import json
 import os
 import sys
-import tempfile
 import time
 from collections import defaultdict
 from dataclasses import asdict, is_dataclass
@@ -236,42 +235,21 @@ def list_all(method, field, **kwargs):
         seen.add(cursor)
 
 
-def experiment_cache_writable(client):
-    """Return whether the SDK's enabled cache can accept a write."""
-    sdk_config = getattr(client, "sdk_config", None)
-    if sdk_config is None or not getattr(sdk_config, "enable_caching", False):
-        return True
-    cache_dir = getattr(sdk_config, "cache_dir", None)
-    if not cache_dir:
-        return False
-    # The SDK stores experiment run cache entries in this resource-specific
-    # directory, so checking only the cache root can produce a false positive.
-    cache_path = Path(cache_dir).expanduser() / "experiment_runs"
-    try:
-        cache_path.mkdir(parents=True, exist_ok=True)
-        with tempfile.NamedTemporaryFile(
-            prefix=".phoenix-migration-cache-probe-", dir=cache_path
-        ):
-            pass
-    except OSError:
-        return False
-    return True
-
-
 def experiment_runs(client, experiment_id, dataset_id):
-    """Use Flight only when its enabled local cache is writable; otherwise REST pages."""
-    if experiment_cache_writable(client):
+    """Read all runs through Flight, falling back to paginated REST on cache I/O errors."""
+    try:
         return client.experiments.list_runs(
             experiment=experiment_id, dataset=dataset_id, all=True
         ).experiment_runs
-    return list_all(
-        client.experiments.list_runs,
-        "experiment_runs",
-        experiment=experiment_id,
-        dataset=dataset_id,
-        limit=500,
-        all=False,
-    )
+    except OSError:
+        return list_all(
+            client.experiments.list_runs,
+            "experiment_runs",
+            experiment=experiment_id,
+            dataset=dataset_id,
+            limit=500,
+            all=False,
+        )
 
 
 def exact_datasets(client, name, space):
