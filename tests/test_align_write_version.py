@@ -132,3 +132,21 @@ def test_execute_without_the_sdk_explains_which_python_to_use(tmp_path, monkeypa
     monkeypatch.setitem(sys.modules, "ax.core.client_factory", None)
     with pytest.raises(SystemExit, match="Python that runs ax"):
         wv.main(args(tmp_path, "--execute"))
+
+
+def test_warns_when_the_current_version_sets_a_model_setting_the_api_drops(tmp_path, monkeypatch, capsys):
+    ax = FakeAx()
+    ax.ev["version"]["template_config"]["llm_config"]["invocation_parameters"] = {
+        "temperature": 0, "top_p": None, "additional_properties": {"seed": 7}}
+    monkeypatch.setattr(wv.subprocess, "run", ax.run)
+    assert wv.main(args(tmp_path)) == 0
+    out = capsys.readouterr().out
+    assert "won't keep the current model settings" in out
+    assert "`invocation_parameters.temperature` = 0" in out and "`invocation_parameters.seed` = 7" in out
+    assert "top_p" not in out
+
+
+def test_no_warning_without_model_settings(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(wv.subprocess, "run", FakeAx().run)
+    wv.main(args(tmp_path))
+    assert "model settings" not in capsys.readouterr().out

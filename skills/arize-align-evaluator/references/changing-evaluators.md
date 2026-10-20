@@ -24,7 +24,7 @@ Model parameters such as `temperature` sit at the top level of `invocation_param
 | Setting | Limitation | What to do |
 |---|---|---|
 | `use_structured_output` | `ax evaluators create-evaluator-version template` has no flag for it. | Use `write_version.py`, which creates the version through the SDK and keeps it. |
-| `temperature` | Dropped when a version is created through the API; the new version stores empty model parameters. | If it matters, set it in the Arize UI after creating the version, and tell the user it changed. |
+| `temperature` | Dropped when a version is created through the API; the new version stores empty model parameters. | If it matters, set it in the Arize UI after creating the version, and tell the user it changed. `write_version.py` warns when the current version sets one. |
 | `{turn_data}` templates | The API rejects a new version with `Turn data mode requires a Turn Definition`. The turn definition is set in the UI and the API has no field for it. | Edit the template in the UI, or migrate the evaluator to `{conversation}` (below). |
 
 ## Turn-data templates

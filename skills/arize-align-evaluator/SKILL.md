@@ -188,7 +188,7 @@ Approval must name the change. Then, editing the evaluator in place:
      --commit-message "Rubric vN, YYYY-MM-DD (criterion change|judge change): what changed" [--execute]
    ```
 
-   It saves the current version for rollback, changes only the template, reads the version back and compares every field, and prints the **switch time** (the new version's `created_at`). The commit message is the changelog ([Changelog](references/changing-evaluators.md#changelog)). Run `--execute` with the Python that runs `ax`; the script says how.
+   It saves the current version for rollback, changes only the template, reads the version back and compares every field, and prints the **switch time** (the new version's `created_at`). It warns when the current version sets a model setting such as temperature: the API drops those on every write, so set them again in the Arize UI afterwards. The commit message is the changelog ([Changelog](references/changing-evaluators.md#changelog)). Run `--execute` with the Python that runs `ax`; the script says how.
 3. **Re-score the gold sessions** with a one-off, non-continuous task, filtered to those session IDs. Then re-run the report with `--rescored-at RUN_START`, and once more unchanged to see the noise floor. After a criterion change, this only shows the rule took effect.
 4. **The tuning batch is dev.** Check each edit with `lint`, and look at dev once per batch.
 5. **Freeze, then test on a later batch** labeled after the switch, and run the ship gate. That's the validation stage; its gate, look ledger, second judge model and reproduce check are in [references/revision.md](references/revision.md#validation-stage-test-batch-and-ship-gate).

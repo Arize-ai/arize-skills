@@ -60,6 +60,20 @@ def new_config(current, template):
     return cfg
 
 
+def model_settings(current):
+    """Model settings the current version sets, such as temperature: every non-null entry of invocation_parameters
+    and provider_parameters, including those nested in additional_properties."""
+    found = {}
+    for group in ("invocation_parameters", "provider_parameters"):
+        params = (current.get("llm_config") or {}).get(group) or {}
+        for k, v in params.items():
+            if k == "additional_properties" and isinstance(v, dict):
+                found.update({f"{group}.{x}": y for x, y in v.items() if y is not None})
+            elif v is not None:
+                found[f"{group}.{k}"] = v
+    return found
+
+
 def without_nulls(v):
     """A null setting and a missing one mean the same to the API, so they compare equal."""
     if isinstance(v, dict):
@@ -108,6 +122,12 @@ def main(argv=None):
     sys.stdout.writelines(difflib.unified_diff(current["template"].splitlines(True), template.splitlines(True),
                                                "current", "new"))
     print("```\n")
+    settings = model_settings(current)
+    if settings:
+        print("**Warning: the new version won't keep the current model settings** ("
+              + ", ".join(f"`{k}` = {json.dumps(v)}" for k, v in settings.items())
+              + "). The Arize API drops them when a version is written, through the CLI or the SDK. "
+              "After writing, set them again in the Arize UI.\n")
     if not a.execute:
         print("Dry run: nothing written. Pass --execute after the user approves this diff.")
         return 0
