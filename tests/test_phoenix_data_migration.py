@@ -152,6 +152,44 @@ def test_experiment_runs_falls_back_to_rest_when_cache_is_unwritable(
     ]
 
 
+def test_experiment_runs_falls_back_when_resource_cache_is_unwritable(
+    monkeypatch, tmp_path
+):
+    calls = []
+    cache_dir = tmp_path / "sdk-cache"
+    resource_cache_dir = cache_dir / "experiment_runs"
+    resource_cache_dir.mkdir(parents=True)
+    response = SimpleNamespace(
+        experiment_runs=["run"],
+        pagination=SimpleNamespace(has_more=False, next_cursor=None),
+    )
+    client = SimpleNamespace(
+        sdk_config=SimpleNamespace(enable_caching=True, cache_dir=str(cache_dir)),
+        experiments=SimpleNamespace(
+            list_runs=lambda **kwargs: calls.append(kwargs) or response
+        ),
+    )
+
+    def denied_resource_cache_write(**kwargs):
+        assert Path(kwargs["dir"]) == resource_cache_dir
+        raise PermissionError("experiment run cache is not writable")
+
+    monkeypatch.setattr(
+        data.tempfile, "NamedTemporaryFile", denied_resource_cache_write
+    )
+
+    assert data.experiment_runs(client, "experiment", "dataset") == ["run"]
+    assert calls == [
+        {
+            "experiment": "experiment",
+            "dataset": "dataset",
+            "limit": 500,
+            "all": False,
+            "cursor": None,
+        }
+    ]
+
+
 def test_get_dataset_after_create_retries():
     calls = []
 

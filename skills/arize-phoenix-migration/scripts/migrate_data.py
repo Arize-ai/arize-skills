@@ -244,7 +244,9 @@ def experiment_cache_writable(client):
     cache_dir = getattr(sdk_config, "cache_dir", None)
     if not cache_dir:
         return False
-    cache_path = Path(cache_dir).expanduser()
+    # The SDK stores experiment run cache entries in this resource-specific
+    # directory, so checking only the cache root can produce a false positive.
+    cache_path = Path(cache_dir).expanduser() / "experiment_runs"
     try:
         cache_path.mkdir(parents=True, exist_ok=True)
         with tempfile.NamedTemporaryFile(
