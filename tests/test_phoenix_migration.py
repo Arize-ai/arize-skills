@@ -361,6 +361,70 @@ def test_sdk_validation_and_arrow_conversion_without_network(config, span):
         assert network.call_args.kwargs["pa_table"].num_rows == 1
 
 
+def test_mixed_optional_collection_fields_upload_through_sdk(config, span):
+    from unittest.mock import patch
+
+    span_with_collections = copy.deepcopy(span)
+    span_with_collections["events"] = [
+        {"name": "tool_call", "attributes": {"tool.name": "search"}}
+    ]
+    span_with_collections["attributes"].update(
+        {
+            "embedding.embeddings": [
+                {"embedding.vector": [0.1, 0.2], "embedding.text": "query"}
+            ],
+            "llm.input_messages.0.message.role": "user",
+            "llm.input_messages.0.message.content": "Find the answer.",
+            "llm.output_messages.0.message.role": "assistant",
+            "llm.output_messages.0.message.content": "Here is the answer.",
+            "llm.tools.0.tool.name": "search",
+            "llm.prompt_template.variables": {"topic": "migration"},
+            "llm.token_count.prompt": 5,
+            "retrieval.documents": [
+                {
+                    "document.id": "doc-1",
+                    "document.content": "A sample document.",
+                    "document.metadata": {"source": "fixture"},
+                }
+            ],
+            "reranker.input_documents": [
+                {"document.id": "doc-1", "document.content": "A sample document."}
+            ],
+            "reranker.output_documents": [
+                {"document.id": "doc-1", "document.content": "A sample document."}
+            ],
+        }
+    )
+    span_without_collections = copy.deepcopy(span)
+    span_without_collections["context"]["span_id"] = "c" * 16
+    span_without_collections.pop("events")
+
+    with patch("arize.spans.client.post_arrow_table") as network:
+        migrate.upload_sdk(
+            config,
+            [span_with_collections, span_without_collections],
+            {"space_id": "space-1", "project_name": "test"},
+        )
+
+    table = network.call_args.kwargs["pa_table"]
+    assert table.num_rows == 2
+    event_rows = table["events"].to_pylist()
+    assert json.loads(event_rows[0][0])["name"] == "tool_call"
+    assert event_rows[1] == []
+    for column in (
+        "attributes.embedding.embeddings",
+        "attributes.llm.input_messages",
+        "attributes.llm.output_messages",
+        "attributes.llm.tools",
+        "attributes.retrieval.documents",
+        "attributes.reranker.input_documents",
+        "attributes.reranker.output_documents",
+    ):
+        values = table[column].to_pylist()
+        assert values[0]
+        assert values[1] == []
+
+
 @pytest.mark.parametrize("field", ["parent_id", "start_time", "name", "status_code"])
 def test_readback_catches_core_changes(span, field):
     actual = observed(span)
