@@ -19,7 +19,7 @@ This skill builds the annotation queues whose labels are used to align one evalu
 - Records picked using the evaluator's own labels are then used to measure it, which biases the result.
 
 So the skill builds two streams ([Two streams](references/sampling.md#two-streams)):
-- **Random (calibration queue):** a uniform sample with a known rate, never filtered on the evaluator's labels. Agreement, the human ceiling and the VALIDATED verdict come from it.
+- **Random (calibration queue):** a uniform sample with a known rate, never filtered on the evaluator's labels. Agreement and the human ceiling come from it; **arize-align-evaluator** reports them with the evaluator's status.
 - **Targeted (gold queue):** a quota per stored label, so every label, rare ones included, has human labels for checking its precision and for dev and few-shot examples. Optional extras look for errors directly: provider disagreements, judge-independent signals and scope probes.
 
 The output is queues that **arize-align-evaluator** can measure. This skill does not measure agreement or change evaluators.
@@ -34,6 +34,7 @@ For plain queue mechanics (create, update, assign, delete), use **arize-annotati
 - **Never label records yourself.** Never present model output or stored evaluator labels as human labels.
 - **Measure only on the random stream.** Targeted records were chosen by the evaluator's labels or other signals. Never quote their agreement as the evaluator's accuracy.
 - **Keep labeling blind.** Stored evaluator labels are used to *choose* records. Set each queue's Annotator Columns so evaluator output is hidden, and check it ([Keeping labelers blind](references/rubric-and-instructions.md#keeping-labelers-blind)). Never share the plan with annotators.
+- **No queue while a label is flagged.** The definition check (Phase 3) compares the draft instructions with the template. While it flags a label, don't create the queues: fix the instructions or the template first, or read both definitions with the user and confirm they state the same rule. Annotators and the judge applying different rules was the main reason a past alignment couldn't be read.
 - **One record per unit.** For a session evaluator, each session appears once across both queues, and sessions already in the user's other queues for this evaluator are excluded. The one exception is a re-grade queue the user asked for after a definition change.
 
 ---
@@ -74,7 +75,7 @@ Follow [references/rubric-and-instructions.md](references/rubric-and-instruction
 - **Label values** are the evaluator's choices, spelled exactly the same, plus `not_applicable` (if the evaluator lacks it) and `cannot_judge`. The script writes these to `config_values.json`. Don't add labels the evaluator cannot output. They become off-rubric records that can't be compared.
 - **A critique config:** an optional free-text config attached next to the label config. Labeling time is the main cost, so a critique is asked for only on close calls and `cannot_judge`. Fuller critiques for few-shot examples are written during adjudication, on the records that need them.
 - **Reuse existing configs** if they already have exactly these values, so labels stay comparable across rounds. Otherwise propose new ones with dated names.
-- **Instructions** define every label in the template's own terms. They say which unit to judge (the whole session for session evaluators), when `cannot_judge` is allowed, when a critique is wanted (optional, but asked for on close calls and `cannot_judge`), and to work in sittings of about 100 records. They tell annotators not to look at evaluator output. For session evaluators, they also say to put the label on the **session**, not on an individual span. They start with a version line, which you also pass to the script as `--instructions-version`.
+- **Instructions** define every label in the template's own terms. They say which unit to judge (the whole session for session evaluators), when `cannot_judge` is allowed, when a critique is wanted (optional, but asked for on close calls and `cannot_judge`), and to work in sittings of about 100 records. They tell annotators not to look at evaluator output. For session evaluators, they also say to put the label on the **session**, not on an individual span. They start with a version line. Save the draft to a file and pass it to the script as `--instructions-file`; its first line becomes the instructions version.
 
 ## Phase 3: Plan the records
 
@@ -85,7 +86,7 @@ python3 SKILL_ROOT/scripts/plan_queue.py \
   --mode discovery|validation \
   --compare-eval OTHER_COPY_TEMPLATE_NAME \
   --signal NAME="SPAN_FILTER" \
-  --instructions-version "Instructions v1, YYYY-MM-DD" \
+  --instructions-file WORK_DIR/instructions.txt \
   --exclude-queue EXISTING_QUEUE [EXISTING_QUEUE ...] \
   --out-dir WORK_DIR
 ```
@@ -99,6 +100,8 @@ python3 SKILL_ROOT/scripts/plan_queue.py \
 - `--signal NAME=FILTER` (repeatable) adds `--signal-count` records (default 5) matching a judge-independent span filter.
 - `--na-probe-eval` is the template name of another evaluator that grades the same sessions, for example the version this one replaces. It adds `--na-probe-count` records (default 5) that this evaluator called not applicable but the other graded decisively. Use it when a label comes up empty because the new scope rule moved those sessions to not applicable. If humans label the probes decisively, the scope rule is too strict. The other evaluator only chooses records; labelers stay blind to it.
 - `--max-turns N` (session evaluators, default 40) skips sessions with more than N turns, counted as spans matching `--root-filter`. Long sessions take far longer to label (roughly 1 minute plus 15 seconds a turn), and a few 100+ turn sessions can cost more than the rest of the queue. Both streams, their strata and the production counts then cover only sessions up to the cap, so the evaluator is unchecked on longer ones; say so when quoting results. `--max-turns 0` turns it off.
+- `--instructions-file` runs the **definition check**: each label's definition in the draft instructions next to the template's, flagging labels whose wording differs or that name a tool or field on only one side. It's the same check **arize-align-evaluator** runs after labeling, so a mismatch is caught before anyone labels. It also notes a version line that differs from `--instructions-version` and instructions over 5000 characters.
+- **Stale results are skipped.** When a session evaluator's template reports `LAST_TURN_CHECK`, sessions whose stored result graded fewer turns than the session has are left out of both streams and the production counts, the same way as the turn cap. They were scored mid-session, so the label being checked isn't the session's. `plan.md` lists them. `--keep-stale` keeps them; the check needs `--root-filter` to count turns.
 - `--expected-exclusion` is the share of records you expect humans to mark not applicable or cannot judge. The default is 0.30. If an earlier queue for this evaluator exists, use its actual excluded rate from the **arize-align-evaluator** report.
 
 It draws the random stream first, then the signals, the label strata (provider disagreements first, spread across entry points) and the not-applicable checks. Each record gets its stratum, `routing_reason`, stream, period and instructions version. How and why it picks each are in [references/sampling.md](references/sampling.md).
@@ -114,12 +117,14 @@ Show the user:
 - the random stream: its size, the frame it was drawn from, and its rate
 - the targeted table from `plan.md`, including any shortfall, and the expected number of gold records
 - the proposed label and critique configs (or existing ones to reuse), and the full instructions text with its version line
+- the **definition check** from `plan.md`: every flagged label with both definitions. Resolve each flag before approval (hard rules)
+- how many sessions were left out as stale
 - annotators and assignment for each queue:
   - In `validation` mode the calibration queue needs 3 or more annotators with `ALL`, for human–human agreement. If their agreement is high, the gold queue can be single-annotated.
   - In `discovery` mode one domain expert labels the random records.
 - the queue names, for example `<evaluator> calibration (YYYY-MM-DD)` and `<evaluator> gold (YYYY-MM-DD)`, and the config names from `plan.md` (Arize caps them at 40 characters)
 - when the records came from a backfill, the column **arize-align-evaluator** will compare against: the backfill copy's `*_backfill` column, not the live one, because the live task never scored these sessions
-- the sizing mode and the expected gold per label; in discovery mode, say that the queues can start an alignment but not validate one
+- the sizing mode and the expected gold per label; in discovery mode, say that the queues can start an alignment but not validate one, and that a discovery round normally ends in a criterion decision and template edits, not an agreement number
 - the caveats:
   - Agreement comes from the calibration queue. Targeted records cover every label, and agreement within a stored label is only that label's precision. Without disagreements or signals, they barely test errors hidden inside a common label.
   - Labelers must stay blind; the Annotator Columns step is manual.
@@ -167,7 +172,7 @@ A definition changes when annotators disagree on it, or when **arize-align-evalu
 
 - **The old queues stay as they are.** Their labels are the record under the old instructions version, and their instructions aren't changed; a queue whose instructions no longer match its labels misreports what annotators saw.
 - **Tell the user a re-grade would be a good next step,** and leave it to them: EvalGen suggests reassessing outputs after updating criteria (Shankar et al. §8.1). Never re-grade yourself. If they want one, build a re-grade queue of the old sessions under the new instructions, from the plan's `random_sources.*` and `record_sources.*` files, rather than editing the old queue. Re-graded labels serve dev and few-shot examples; the new queue pair stays the measurement.
-- **The new pair** is a normal run of Phases 1–5. Write the instructions with the new version line, pass it as `--instructions-version`, set `--start-time` to the evaluator's switch time when the template changed too, and pass `--exclude-queue` with the old queues so the new pair holds none of their sessions.
+- **The new pair** is a normal run of Phases 1–5. Write the instructions with the new version line, pass them as `--instructions-file` so the definition check runs against the new template, set `--start-time` to the evaluator's switch time when the template changed too, and pass `--exclude-queue` with the old queues so the new pair holds none of their sessions.
 - **Only a queue with no labels yet** may have its wording fixed in place, with `ax annotation-queues update QUEUE --space SPACE --instructions TEXT`.
 
 Top up only on counts: a label short of gold records, or exclusions above plan. Never top up because agreement so far looks low or high; that biases the result.

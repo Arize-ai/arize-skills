@@ -59,9 +59,10 @@ def is_turn_count(filt):
 class FakeAx:
     """Answers the ax calls plan_queue makes from an in-memory list of spans."""
 
-    def __init__(self, spans, queues=None, missing_before=None, granularity="SESSION"):
+    def __init__(self, spans, queues=None, missing_before=None, granularity="SESSION", template=""):
         self.spans = spans
         self.granularity = granularity
+        self.template = template
         self.queues = queues or {}
         self.missing_before = missing_before
         self.filters = []
@@ -70,7 +71,7 @@ class FakeAx:
     def __call__(self, ax, args, allow_empty=False, retries=5):
         if args[:2] == ["evaluators", "get"]:
             return {"id": "ev-1", "name": "My Eval", "version": {"id": "v-1", "template_config": {
-                "name": "my_eval", "data_granularity": self.granularity,
+                "name": "my_eval", "data_granularity": self.granularity, "template": self.template,
                 "classification_choices": {"good": 1, "bad": 0, "wrong": 0, "not_applicable": None}}}}
         if args[:2] == ["projects", "get"]:
             return {"id": "proj-1", "name": "prod"}
@@ -712,3 +713,100 @@ def test_turn_counts_split_batches_that_fill_a_page(monkeypatch):
     monkeypatch.setattr(plan, "run_ax", fake)
     turns = plan.count_turns("ax", "proj-1", "S", ROOT_FILTER, {f"s{i}": START.isoformat() for i in range(3)})
     assert turns == {"s0": 300, "s1": 300, "s2": 300}
+
+
+# ---------------------------------------------------------------------------
+# definition check
+# ---------------------------------------------------------------------------
+
+TEMPLATE = """Grade {conversation}. LAST_TURN_CHECK: Turn N
+- good: the answer is right and reached the user; validate_filter probes alone do not count.
+- bad: the answer is wrong.
+- wrong: the answer answers a different question.
+Evidence: the final turn."""
+
+
+def instructions(tmp_path, good):
+    path = tmp_path / "instructions.txt"
+    path.write_text("Instructions v3, 2026-10-19\n\nLabels:\n"
+                    f"- good: {good}\n- bad: the answer is wrong.\n- wrong: the answer answers a different question.\n"
+                    "Evidence: a filter block or a validate_filter call.\n")
+    return str(path)
+
+
+def test_definition_check_flags_a_label_the_instructions_define_differently(monkeypatch, tmp_path):
+    out = tmp_path / "plan"
+    f = instructions(tmp_path, "a filter reached the user, or Alyx called finalize_filter.")
+    p = run(monkeypatch, out, FakeAx(plentiful(), template=TEMPLATE), "--instructions-file", f, "--keep-stale")
+    check = p["definition_check"]
+    assert check["flagged"] == ["good"]
+    good = next(r for r in check["rows"] if r["label"] == "good")
+    assert good["template"].startswith("the answer is right") and "finalize_filter" in good["only_one_side"]
+    assert "validate_filter" in check["shared_terms"]
+    assert {r["instructions_version"] for r in p["records"]} == {"Instructions v3, 2026-10-19"}
+    md = (out / "plan.md").read_text()
+    assert "Flagged: `good`" in md and "candidate criterion question" in md
+
+
+def test_definition_check_passes_matching_definitions_and_notes_a_version_mismatch(monkeypatch, tmp_path):
+    out = tmp_path / "plan"
+    f = instructions(tmp_path, "the answer is right and reached the user; validate_filter probes alone do not count.")
+    p = run(monkeypatch, out, FakeAx(plentiful(), template=TEMPLATE), "--instructions-file", f, "--keep-stale",
+            "--instructions-version", "Instructions v2")
+    assert p["definition_check"]["flagged"] == []
+    assert "not the `--instructions-version` `Instructions v2`" in p["definition_check"]["notes"][0]
+    assert "No label flagged" in (out / "plan.md").read_text()
+
+
+def test_without_instructions_the_definition_check_is_reported_as_not_run(monkeypatch, tmp_path):
+    p = run(monkeypatch, tmp_path, FakeAx(plentiful()))
+    assert p["definition_check"] is None
+    assert "Definition check: not run" in (tmp_path / "plan.md").read_text()
+
+
+# ---------------------------------------------------------------------------
+# stale results
+# ---------------------------------------------------------------------------
+
+def stale_bad_sessions(n_stale=10, turns=3):
+    """plentiful() with n_stale bad sessions of `turns` turns whose stored result saw only turn 1."""
+    spans = plentiful()
+    for s in spans:
+        s["evaluations"][0]["explanation"] = "... LAST_TURN_CHECK: Turn 1"
+    for i in range(n_stale):
+        spans = with_turns(spans, f"s-bad-{i}", turns)
+    return spans
+
+
+def test_sessions_with_a_stale_stored_result_are_skipped(monkeypatch, tmp_path):
+    p = run(monkeypatch, tmp_path, FakeAx(stale_bad_sessions(), template=TEMPLATE), "--random", "10")
+    bad = [r for r in p["records"] if r["sampled_as"] == "bad"]
+    assert len(bad) == 5 and all(int(r["session_id"].rsplit("-", 1)[1]) >= 10 for r in bad)
+    assert not {r["session_id"] for r in p["records"]} & {f"s-bad-{i}" for i in range(10)}
+    assert p["stale_skipped"]["checked"] and p["stale_skipped"]["count"] == 10
+    assert p["stale_skipped"]["sessions"][0] == {"session_id": "s-bad-0", "last_turn_seen": 1, "turns": 3}
+    st = {s["stratum"]: s for s in p["strata"]}
+    assert st["random"]["population"] == 80 - 10 and st["bad"]["population"] == 10
+    md = (tmp_path / "plan.md").read_text()
+    assert "10 session(s) with a stale stored result were left out" in md and "`s-bad-0`" in md
+
+
+def test_keep_stale_keeps_them(monkeypatch, tmp_path):
+    p = run(monkeypatch, tmp_path, FakeAx(stale_bad_sessions(), template=TEMPLATE), "--keep-stale",
+            "--per-label", "20")
+    assert len([r for r in p["records"] if r["sampled_as"] == "bad"]) == 20
+    assert p["stale_skipped"] == {"checked": False, "count": 0, "sessions": []}
+    assert p["settings"]["keep_stale"] is True
+
+
+def test_no_marker_means_no_stale_check_and_no_turn_counts_when_uncapped(monkeypatch, tmp_path):
+    fake = FakeAx(stale_bad_sessions())
+    p = run(monkeypatch, tmp_path, fake, "--max-turns", "0")
+    assert not p["stale_skipped"]["checked"] and not any(is_turn_count(f) for f in fake.filters)
+    assert "the template doesn't report `LAST_TURN_CHECK`" in (tmp_path / "plan.md").read_text()
+
+
+def test_stale_check_counts_turns_even_with_the_cap_off(monkeypatch, tmp_path):
+    fake = FakeAx(stale_bad_sessions(), template=TEMPLATE)
+    p = run(monkeypatch, tmp_path, fake, "--max-turns", "0")
+    assert p["stale_skipped"]["count"] == 10 and any(is_turn_count(f) for f in fake.filters)

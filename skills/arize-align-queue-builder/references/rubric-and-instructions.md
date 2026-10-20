@@ -80,10 +80,10 @@ If two labels seem to fit, <tie-break rule from the template>.
 
 ## Checks before proposing
 
-- Every evaluator label has a definition in the instructions, and the definitions agree with the template.
+- Every evaluator label has a definition in the instructions, and the planner's **definition check** (`--instructions-file`) flags none. A flag means annotators and the judge would apply different rules: fix one side, or read both and confirm they state the same rule, before creating the queues.
 - The instructions name the unit, and for session evaluators, say to label the session.
 - The blindness line is present.
 - The length is under 5000 characters: `wc -c instructions.txt`.
-- The instructions carry a version line (for example `Instructions v2, 2026-10-06`). Pass the same text to the planner as `--instructions-version`, so each record in `plan.json` carries it. When a definition changes, the new version goes on a new queue pair, not on the labeled queues ([SKILL.md, Phase 6](../SKILL.md#when-a-definition-changes)).
+- The instructions carry a version line (for example `Instructions v2, 2026-10-06`). Pass the instructions to the planner with `--instructions-file` (or the version line alone as `--instructions-version`), so each record in `plan.json` carries it. When a definition changes, the new version goes on a new queue pair, not on the labeled queues ([SKILL.md, Phase 6](../SKILL.md#when-a-definition-changes)).
 - The optional-critique line and the sitting limit are present.
 - Spot-check 2–3 planned records with **arize-trace**: open the session and confirm an annotator could reach a label from what is visible. If not, the unit or the instructions need adjusting before creation.

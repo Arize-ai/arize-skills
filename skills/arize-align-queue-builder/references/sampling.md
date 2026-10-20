@@ -6,7 +6,7 @@ A plan has two streams, and they answer different questions:
 
 | Stream | How records are chosen | Use it for | Queue |
 |---|---|---|---|
-| **Random** (measurement) | Uniformly from every unit the evaluator scored in the window, with a known probability, never filtered on its labels | Agreement, recall per label, the human–human ceiling, the VALIDATED verdict, weekly drift | Its own calibration queue |
+| **Random** (measurement) | Uniformly from every unit the evaluator scored in the window, with a known probability, never filtered on its labels | Agreement, recall per label, the human–human ceiling, weekly drift | Its own calibration queue |
 | **Targeted** (label coverage) | A quota per stored label, plus optional provider disagreements, judge-independent signals, not-applicable checks and scope probes | Each label's precision, dev and few-shot examples, and (through the optional extras) finding errors | The gold queue |
 
 Agreement estimates assume the labeled records were drawn at random. Records chosen by the evaluator's own labels, or by where two copies disagree, are not, and they over-represent the cases the selection looked for. Many judge errors are also stable: the judge is wrong the same way on every run, so disagreement or flip signals never surface them, and only a random sample finds them. So the targeted stream gives every label examples to check, its optional extras look for errors, and the random stream measures.
@@ -61,8 +61,8 @@ The other evaluator only chooses records. Humans label blind, and its labels are
 
 | Mode | target_gold | min_per_class | Random | Use when |
 |---|---:|---:|---:|---|
-| `discovery` (default; `directional` is accepted as an alias) | 10 | 3 | 30 | Error analysis and a first alignment pass |
-| `validation` | 142 | 71 | 100 | Supporting an agreement claim (the VALIDATED verdict) |
+| `discovery` (default; `directional` is accepted as an alias) | 10 | 3 | 30 | Error analysis and a first alignment pass; it normally ends in a criterion decision and template edits, not an agreement number |
+| `validation` | 142 | 71 | 100 | Supporting an agreement claim (a measured status) |
 
 - **Discovery.** Each label gets about 3.5–5.6 gold records, which is a smoke test: 5/5 agreement still has a 95% interval of about 57–100%. The 30 random records are for an expert to read and open-code: note the first failure in each, group the notes into failure modes, and check the rubric against them before scaling up.
 - **Validation.** The evaluator report splits gold records 15% train, 42.5% dev and 42.5% test within each human label, and tests once. 30 per label in each of dev and test needs 30 / 0.425 ≈ 71 gold records per label. Below about 60 records, intervals are too wide to separate a good judge from a mediocre one.
@@ -105,6 +105,7 @@ Arize's own "run continuously" option on a queue samples new spans at random, bu
 - **Time spread.** One export returns only the newest spans, so the script splits the window into `--slices` (default 4) and draws `pool / slices` from each slice.
 - **One span per unit.** Candidates are deduplicated by session ID (session evaluators), trace ID (trace evaluators) or span ID. Use `--root-filter` so each candidate is the unit's entry span. For a session, that is usually the root span of a turn. For session evaluators the queue record is the whole session (a `SESSION` record); the span only places the session's first trace in a record source's time window.
 - **Turn cap.** For session evaluators, sessions with more than `--max-turns` turns (default 40; root-filter spans per session) are dropped before anything is sampled: from the random frame, from each label's candidates, and from the production counts. The cap changes what the plan measures, not how it's weighted. Every selection rate and estimate is for sessions up to the cap, and `plan.md` reports how many scored sessions it left out. If that share is large, or long sessions are where the evaluator matters most, raise the cap or plan a small separate queue for them. Intake runs keep the plan's cap.
+- **Stale results.** When the template asks the judge to report `LAST_TURN_CHECK`, the script reads the turn each stored result says it saw (the same parse as **arize-align-evaluator**) and drops sessions where that's below the session's turn count. These results were scored before the session ended, so humans would label a longer session than the judge graded. They're dropped from the random frame, each label's candidates and the production counts, like the turn cap, and `plan.json` lists them under `stale_skipped`. Without the marker or `--root-filter`, staleness can't be read, and `plan.md` says so. `--keep-stale` turns the check off. Intake runs of a plan made before this check keep sampling as they did.
 - **Exclusions.** `--exclude-queue` removes any session, trace or span already in those queues, so units are never labeled twice across rounds.
 
 ## Picking within a label

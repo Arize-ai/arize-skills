@@ -4,15 +4,21 @@
 Builds two streams of records from a project:
 
   random    A uniform sample of the units the evaluator scored, drawn with a known probability and
-            never filtered on its labels. This is the measurement set: agreement, the human ceiling
-            and the evaluator's VALIDATED verdict come from it. It goes in its own calibration queue.
+            never filtered on its labels. This is the measurement set: agreement and the human ceiling
+            come from it. It goes in its own calibration queue.
   targeted  A balanced quota per stored label, so every label has human examples (provider
             disagreements first), plus optional judge-independent signals (--signal), not-applicable
             checks and scope probes that look for errors. Use them for each label's precision and
             dev/few-shot examples.
 
 Session evaluators skip sessions longer than --max-turns turns (default 40), which take far longer to label;
-both streams, their strata and the production counts then cover only sessions up to the cap.
+both streams, their strata and the production counts then cover only sessions up to the cap. When the template
+reports LAST_TURN_CHECK, sessions whose stored result graded fewer turns than the session has are skipped too
+(stale results, scored mid-session); --keep-stale keeps them.
+
+With --instructions-file, the draft queue instructions' label definitions are checked against the template's
+(the definition check in plan.md and plan.json). A flagged label is a candidate criterion question: settle it
+before creating the queues.
 
 Every record carries a routing_reason (random, label_stratum, provider_disagreement, na_check,
 scope_probe, signal:NAME) and the instructions version it was queued under. Writes:
@@ -85,8 +91,14 @@ CONFIG_NAME_MAX = 40  # annotation config name length
 # Settings saved in plan.json so each intake run samples the way the first plan did.
 CARRIED = ("root_filter", "eval_name", "compare_eval", "max_disagreement_share", "mode", "expected_exclusion",
            "labels", "not_applicable", "na_count", "pool", "slices", "signal", "signal_count", "instructions_version",
-           "max_turns")
+           "max_turns", "keep_stale")
 SETTLE_HOURS = 2  # leave time for evaluator tasks to score the newest units before an intake counts them
+INSTRUCTIONS_MAX = 5000  # annotation queue instructions length
+
+# Templates that ask the judge to name the highest turn it saw, e.g. "LAST_TURN_CHECK: Turn 7". Without the
+# marker, a "Turn N" in an explanation is only the decisive turn, so staleness can't be read from it.
+# Kept in sync with arize-align-evaluator's align_report.py (LAST_TURN_MARKER, last_turn_seen).
+LAST_TURN_MARKER = "LAST_TURN_CHECK"
 
 
 class ColumnMissing(Exception):
@@ -129,6 +141,92 @@ def parse_time(v):
 
 def z(t):
     return t.isoformat().replace("+00:00", "Z")
+
+
+def last_turn_seen(explanation):
+    """The highest turn the judge says it saw, or None when the explanation doesn't say."""
+    m = re.search(LAST_TURN_MARKER + r"\D{0,40}?(\d+)", explanation or "", re.I)
+    return int(m.group(1)) if m else None
+
+
+# The definition check is a copy of arize-align-evaluator's align_report.py (DEF_LINE, SECTION, IDENT,
+# label_definitions, definition_diff), so the queue builder flags before labeling what the alignment report
+# would flag after it. Change both together.
+DEF_LINE = re.compile(r"^\s*[-*]\s*`?([A-Za-z0-9_]+)`?\s*:\s*(.*)$")
+SECTION = re.compile(r"^\s*[A-Z][A-Za-z ]{0,30}:")  # "Evidence:", "Labels:" start a new section
+IDENT = re.compile(r"`?\b([a-z]+(?:_[a-z0-9]+)+)\b`?")
+
+
+def label_definitions(text, labels):
+    """Each label's definition from `- label: text` lines, with indented or unbulleted continuation lines."""
+    out, current = {}, None
+    for line in (text or "").splitlines():
+        m = DEF_LINE.match(line)
+        if m:
+            current = m.group(1) if m.group(1) in labels else None
+            if current:
+                out[current] = m.group(2).strip()
+        elif not line.strip() or SECTION.match(line):
+            current = None
+        elif current and not line.lstrip().startswith(("-", "*", "#")):
+            out[current] += " " + line.strip()
+    return out
+
+
+def definition_diff(instructions, template, labels):
+    """Put the queue's and the template's definition of each label side by side, and flag candidates where they
+    differ: text that is mostly different, or a tool or field name that one side's definition uses and the other
+    side's doesn't. The script only points at candidates; reading both decides."""
+    from difflib import SequenceMatcher
+    q, t = label_definitions(instructions, labels), label_definitions(template, labels)
+    rows, flagged = [], []
+    for lbl in labels:
+        a, b = q.get(lbl), t.get(lbl)
+        if not (a and b):
+            rows.append({"label": lbl, "queue": a, "template": b, "similarity": None, "only_one_side": []})
+            continue
+        ids = lambda s: {x for x in IDENT.findall(s) if x not in labels}
+        one_side = sorted(ids(a) ^ ids(b))
+        sim = SequenceMatcher(None, a.lower(), b.lower()).ratio()
+        rows.append({"label": lbl, "queue": a, "template": b, "similarity": sim, "only_one_side": one_side})
+        if sim < 0.6 or one_side:
+            flagged.append(lbl)
+    # A tool or field name both documents mention outside the label lines is a rule both sides state;
+    # list it so both rules can be checked to agree.
+    shared = sorted({x for x in IDENT.findall(instructions or "")} & {x for x in IDENT.findall(template or "")} - set(labels))
+    return {"rows": rows, "flagged": flagged, "shared_terms": shared}
+
+
+def definition_check_md(check):
+    """The plan.md section for the definition check."""
+    if not check:
+        return ["**Definition check: not run.** Pass the draft instructions with `--instructions-file` to compare "
+                "each label's definition with the template's before creating the queues.\n"]
+    out = ["**Definition check** (draft instructions vs the evaluator template):\n"]
+    out += [f"- {note}" for note in check["notes"]]
+    if check["notes"]:
+        out.append("")
+    if check["flagged"]:
+        out.append("Flagged: " + ", ".join(f"`{x}`" for x in check["flagged"]) + ". A flag is a candidate criterion "
+                   "question: annotators and the judge would apply different rules. Fix the instructions or the "
+                   "template, or read both definitions and confirm they state the same rule, before creating the "
+                   "queues.\n")
+    else:
+        out.append("No label flagged. Still read both definitions; the check compares text.\n")
+    out += ["| Label | Instructions | Template | Flag |", "|---|---|---|---|"]
+    cell = lambda v: (v or "*(no definition)*").replace("|", "\\|")
+    for r in check["rows"]:
+        if r["similarity"] is None:
+            flag = "missing on one side"
+        else:
+            flag = "**flagged**" if r["label"] in check["flagged"] else ""
+            if r["only_one_side"]:
+                flag += ": only one side names " + ", ".join(f"`{x}`" for x in r["only_one_side"])
+        out.append(f"| `{r['label']}` | {cell(r['queue'])} | {cell(r['template'])} | {flag} |")
+    if check["shared_terms"]:
+        out.append("\nTerms both documents use (check they state the same rule): "
+                   + ", ".join(f"`{x}`" for x in check["shared_terms"]))
+    return out + [""]
 
 
 def queue_units(ax, space, queue):
@@ -351,6 +449,12 @@ def main():
     p.add_argument("--signal-count", type=int, default=5)
     p.add_argument("--instructions-version", help="Version line of the queue instructions, stored on each record "
                                                   "so labels made under older definitions can be found")
+    p.add_argument("--instructions-file", metavar="PATH",
+                   help="The draft queue instructions. Their label definitions are checked against the template's, and "
+                        "their first line is the version line (used as --instructions-version when that isn't given)")
+    p.add_argument("--keep-stale", action="store_true",
+                   help="Session evaluators whose template reports LAST_TURN_CHECK: keep sessions whose stored result "
+                        "graded fewer turns than the session has (by default they are skipped)")
     p.add_argument("--max-turns", type=int,
                    help=f"Session evaluators: skip sessions with more than this many turns (spans matching --root-filter), "
                         f"which take far longer to label. Default {DEFAULT_MAX_TURNS}; 0 turns the cap off")
@@ -383,6 +487,8 @@ def main():
                 setattr(a, k, v)
         if "max_turns" not in (base.get("settings") or {}) and a.max_turns is None:
             a.max_turns = 0  # a plan from before the turn cap: keep sampling uncapped, as it did
+        if "keep_stale" not in (base.get("settings") or {}):
+            a.keep_stale = True  # a plan from before the stale check: keep sampling as it did
         a.evaluator, a.project = a.evaluator or base["evaluator_id"], a.project or base["project_id"]
         a.na_probe_eval = None
         a.exclude_queue = list(dict.fromkeys(a.exclude_queue + [q for q in (a.queue, a.random_queue) if q]))
@@ -429,6 +535,26 @@ def main():
     elif a.max_turns is None:
         a.max_turns = DEFAULT_MAX_TURNS
     cap = a.max_turns
+    template = tc.get("template") or ""
+    marker = gran == "SESSION" and LAST_TURN_MARKER in template
+    check_stale = marker and bool(a.root_filter) and not a.keep_stale
+    if marker and not a.root_filter and not a.keep_stale:
+        print("Not checking for stale results: counting turns needs --root-filter.")
+
+    definition_check = None
+    if a.instructions_file:
+        with open(a.instructions_file) as f:
+            instructions = f.read()
+        first = next((l.strip() for l in instructions.splitlines() if l.strip()), "")
+        notes = []
+        if a.instructions_version and a.instructions_version != first:
+            notes.append(f"The first line is `{first}`, not the `--instructions-version` `{a.instructions_version}`.")
+        a.instructions_version = a.instructions_version or first
+        if len(instructions) > INSTRUCTIONS_MAX:
+            notes.append(f"The instructions are {len(instructions)} characters; Arize allows {INSTRUCTIONS_MAX}.")
+        decisive = [c for c in choices if c not in na]
+        definition_check = {"instructions_file": os.path.abspath(a.instructions_file), "characters": len(instructions),
+                            "notes": notes, **definition_diff(instructions, template, decisive)}
 
     project = run_ax(a.ax, ["projects", "get", a.project, "--space", a.space, "-o", "json"])
     excluded_units = set()
@@ -491,19 +617,30 @@ def main():
             "instructions_version": a.instructions_version,
         }
 
-    turns = {}
+    turns, stale_skipped = {}, {}
 
     def within_cap(rows):
-        """Drop rows whose session has more than --max-turns turns. Returns (kept, number dropped)."""
-        if not cap:
+        """Drop rows whose session has more than --max-turns turns, and rows whose stored result is stale (it graded
+        fewer turns than the session has). Returns (kept, number dropped over the cap); stale rows go to
+        stale_skipped."""
+        if not (cap or check_stale):
             return rows, 0
         need = {r[unit_key]: r["start_time"] for r in rows if r[unit_key] not in turns}
         if need:
             turns.update(count_turns(a.ax, project["id"], a.space, a.root_filter, need))
-        kept = [r for r in rows if turns.get(r[unit_key], 0) <= cap]
-        for r in kept:
-            r["turns"] = turns.get(r[unit_key])
-        return kept, len(rows) - len(kept)
+        kept, long = [], 0
+        for r in rows:
+            n = turns.get(r[unit_key], 0)
+            if cap and n > cap:
+                long += 1
+                continue
+            seen = last_turn_seen(r["stored_explanation"]) if check_stale else None
+            if n and seen and seen < n:
+                stale_skipped[str(r[unit_key])] = {"session_id": r[unit_key], "last_turn_seen": seen, "turns": n}
+                continue
+            r["turns"] = n
+            kept.append(r)
+        return kept, long
 
     def candidates(filt, label):
         """One candidate per unit not already used and within the turn cap, keeping the unit's earliest matching
@@ -662,6 +799,9 @@ def main():
                 "column": column, "granularity": gran, "project_id": project["id"], "per_label_quota": per,
                 "config_name": config_name, "critique_config_name": critique_name, "mode": a.mode, "max_turns": cap or None,
                 "window": {"start": z(start), "end": z(end)}, "settings": {k: getattr(a, k) for k in CARRIED},
+                "definition_check": definition_check,
+                "stale_skipped": {"checked": check_stale, "count": len(stale_skipped),
+                                  "sessions": sorted(stale_skipped.values(), key=lambda x: str(x["session_id"]))},
                 "summary": summary, "random_stream": rand, "strata": strata, "records": picks}
     with open(os.path.join(a.out_dir, "plan.json"), "w") as f:
         json.dump(run_plan, f, indent=1)
@@ -688,16 +828,24 @@ def main():
         (f"- Sessions over {cap} turns are left out (`--max-turns`; 0 turns this off)"
          + (f": {rand['skipped_over_max_turns']} of {rand['skipped_over_max_turns'] + rand['pool_units'] + rand['skipped_dupes_or_excluded']} "
             "scored sessions" if rand else "") if cap else "- No turn cap (`--max-turns 0`, or not a session evaluator)"),
+        (f"- {len(stale_skipped)} session(s) with a stale stored result were left out: the result graded fewer turns "
+         f"than the session has (`{LAST_TURN_MARKER}`; `--keep-stale` keeps them)" if check_stale
+         else f"- Stale results not checked: counting turns needs `--root-filter`" if marker and not a.keep_stale
+         else "- Stale results kept (`--keep-stale`)" if marker
+         else f"- Stale results not checked: the template doesn't report `{LAST_TURN_MARKER}`" if gran == "SESSION"
+         else None),
         f"- Sizing mode `{a.mode}`: per-label quota {per} = max({a.min_per_class}, {a.target_gold}/{k}) / "
         f"(1 − {a.expected_exclusion:.0%} expected exclusions), about {per * (1 - a.expected_exclusion):.1f} gold "
-        "records per label" + (" (enough to start aligning, not to validate; use `--mode validation` for that)"
-                                if a.mode == "discovery" else "") + "\n",
+        "records per label" + (" (enough to start aligning, not to validate; use `--mode validation` for that). "
+                                "A discovery round normally ends in a criterion decision and template edits, not an "
+                                "agreement number" if a.mode == "discovery" else "") + "\n",
     ]
+    out = [x for x in out if x is not None] + definition_check_md(definition_check)
     if rand:
         rate = f"{rand['picked'] / rand['pool_units']:.1%}" if rand["pool_units"] else "—"
         out.append(f"**Random stream (measurement): {rand['picked']} records**, drawn uniformly from {rand['pool_units']} "
                    f"scored units not already queued ({rate}), with no filter on the evaluator's labels. Agreement, the "
-                   "human ceiling and the VALIDATED verdict come from these. They go in a separate calibration queue "
+                   "human ceiling come from these. They go in a separate calibration queue "
                    "(`random_sources.*.json`)"
                    + (". Assign it to 3 or more annotators (`ALL`) for human-human agreement." if a.mode == "validation"
                       else ". In discovery mode, an expert reads and open-codes them before the rubric is settled.")
@@ -740,6 +888,11 @@ def main():
                    + (f", {rand['skipped_over_max_turns']} from the random frame" if rand else "")
                    + f"). Agreement and production estimates from this plan cover sessions of up to {cap} turns "
                    "only; say so when quoting them. The evaluator is unchecked on longer sessions.")
+    if stale_skipped:
+        ids = sorted(str(x) for x in stale_skipped)
+        out.append(f"- Stale sessions left out ({len(ids)}): " + ", ".join(f"`{x}`" for x in ids[:50])
+                   + (f", and {len(ids) - 50} more in `plan.json`" if len(ids) > 50 else "")
+                   + ". Re-score them with the current version if they're needed.")
     if a.signal:
         out.append("- Signals " + ", ".join(f"`{n}`" for n, _ in a.signal) + " pick records by span filters that don't "
                    "depend on the evaluator. They are targeted and never weighted.")
