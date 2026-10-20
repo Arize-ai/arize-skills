@@ -235,6 +235,23 @@ def list_all(method, field, **kwargs):
         seen.add(cursor)
 
 
+def experiment_runs(client, experiment_id, dataset_id):
+    """Read all runs through Flight, falling back to paginated REST on cache I/O errors."""
+    try:
+        return client.experiments.list_runs(
+            experiment=experiment_id, dataset=dataset_id, all=True
+        ).experiment_runs
+    except OSError:
+        return list_all(
+            client.experiments.list_runs,
+            "experiment_runs",
+            experiment=experiment_id,
+            dataset=dataset_id,
+            limit=500,
+            all=False,
+        )
+
+
 def exact_datasets(client, name, space):
     return [
         item
@@ -725,9 +742,7 @@ def verify_data(config, path):
             expected = by_source.get(mapping["source_id"])
             if expected is None:
                 continue
-            actual = client.experiments.list_runs(
-                experiment=mapping["id"], dataset=state["dataset_id"], all=True
-            ).experiment_runs
+            actual = experiment_runs(client, mapping["id"], state["dataset_id"])
             totals["experiments"] += 1
             totals["runs"] += len(expected["task_runs"])
             totals["evaluations"] += len(expected["evaluation_runs"])

@@ -84,6 +84,65 @@ def test_destination_examples_rejects_missing_cursor():
         data.destination_examples(client, "dataset")
 
 
+def test_experiment_runs_uses_flight_when_successful():
+    calls = []
+    client = SimpleNamespace(
+        experiments=SimpleNamespace(
+            list_runs=lambda **kwargs: calls.append(kwargs)
+            or SimpleNamespace(experiment_runs=["run"])
+        ),
+    )
+
+    assert data.experiment_runs(client, "experiment", "dataset") == ["run"]
+    assert calls == [
+        {"experiment": "experiment", "dataset": "dataset", "all": True}
+    ]
+
+
+def test_experiment_runs_falls_back_to_rest_when_flight_cache_write_fails():
+    calls = []
+    first = SimpleNamespace(
+        experiment_runs=["run-1"],
+        pagination=SimpleNamespace(has_more=True, next_cursor="next"),
+    )
+    second = SimpleNamespace(
+        experiment_runs=["run-2"],
+        pagination=SimpleNamespace(has_more=False, next_cursor=None),
+    )
+
+    def list_runs(**kwargs):
+        calls.append(kwargs)
+        if kwargs.get("all") is True:
+            raise PermissionError("experiment run cache is not writable")
+        return second if kwargs["cursor"] == "next" else first
+
+    client = SimpleNamespace(
+        experiments=SimpleNamespace(list_runs=list_runs),
+    )
+
+    assert data.experiment_runs(client, "experiment", "dataset") == [
+        "run-1",
+        "run-2",
+    ]
+    assert calls == [
+        {"experiment": "experiment", "dataset": "dataset", "all": True},
+        {
+            "experiment": "experiment",
+            "dataset": "dataset",
+            "limit": 500,
+            "all": False,
+            "cursor": None,
+        },
+        {
+            "experiment": "experiment",
+            "dataset": "dataset",
+            "limit": 500,
+            "all": False,
+            "cursor": "next",
+        },
+    ]
+
+
 def test_get_dataset_after_create_retries():
     calls = []
 

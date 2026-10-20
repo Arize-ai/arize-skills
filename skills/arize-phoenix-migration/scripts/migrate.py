@@ -381,6 +381,7 @@ def expand_indexed(attrs):
 
 def span_row(span):
     attrs = dict(span.get("attributes") or {})
+    events = span.get("events") or []
     row = {
         "context.trace_id": span["context"]["trace_id"],
         "context.span_id": span["context"]["span_id"],
@@ -418,14 +419,15 @@ def span_row(span):
     metadata["phoenix_migration"] = dump(
         {
             "attributes": attrs,
-            "events": span.get("events", []),
+            "events": events,
             "start_time": span["start_time"],
             "end_time": span["end_time"],
         }
     )
     row["attributes.metadata"] = metadata
-    if span.get("events"):
-        row["events"] = span["events"]
+    # Always provide a list: pandas otherwise turns missing event values in a
+    # mixed batch into NaN, which the SDK event validator cannot iterate.
+    row["events"] = events
     return row
 
 
