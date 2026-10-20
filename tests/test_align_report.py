@@ -60,7 +60,7 @@ def build(tmp_path, records, q=None, ev=None, turns=None, **overrides):
     if turns is not None:
         (tmp_path / "turns.json").write_text(json.dumps(turns))
     args = dict(dir=str(tmp_path), adjudications=None, eval_column=None, config=None, plan=None, test_from=None,
-                rubric_version=None, admission_filter=None, fail_label=None, definitions_agree=False, read_sessions=None, rescored_at=None,
+                admission_filter=None, fail_label=None, definitions_agree=False, rescored_at=None,
                 not_applicable=list(align.DEFAULT_NOT_APPLICABLE), unscorable=list(align.DEFAULT_UNSCORABLE))
     args.update(overrides)
     return align.build(argparse.Namespace(**args))
@@ -72,6 +72,22 @@ def warned(report):
 
 def blocked(report):
     return {b["condition"] for b in report["blockers"]}
+
+
+LATER_MS = 1780000000000 + 30 * 86400 * 1000
+LATER = align.parse_ms(str(LATER_MS)).isoformat()
+
+
+def two_batches(tuning_per_label, test_per_label):
+    """A tuning batch and a later batch labeled after freezing (pass test_from=LATER); the judge is always right."""
+    recs = []
+    for batch, n, t in (("t", tuning_per_label, 1780000000000), ("x", test_per_label, LATER_MS)):
+        for lbl in ("good", "bad"):
+            for i in range(n):
+                rec = record(f"{batch}{lbl}{i}", {A: lbl}, stored=lbl)
+                rec["data"]["start_time"] = str(t)
+                recs.append(rec)
+    return recs
 
 
 def usable_records():
@@ -212,14 +228,14 @@ def test_small_queue_is_provisional_on_size_alone(tmp_path):
     assert [p["kappa"] for p in r["iaa"]] == [1.0]
 
 
-def test_measured_needs_30_per_label_in_both_dev_and_test(tmp_path):
-    # 75 per label: 11 train, 32 dev, 32 test.
-    recs = [record(f"r{i}", {A: "good" if i < 75 else "bad"}, stored="good" if i < 75 else "bad") for i in range(150)]
-    r = build(tmp_path, recs, ev=evaluator(template=NO_MARKER))
+def test_measured_needs_30_per_label_in_dev_and_in_a_later_test_batch(tmp_path):
+    # 40 per label in the tuning batch (6 train, 34 dev) and 30 per label labeled after freezing.
+    r = build(tmp_path, two_batches(40, 30), ev=evaluator(template=NO_MARKER), test_from=LATER)
     assert r["status"] == "measured" and r["blockers"] == []
-    # 30 per label in all leaves about 13 per label in test.
-    recs = [record(f"r{i}", {A: "good" if i < 30 else "bad"}, stored="good" if i < 30 else "bad") for i in range(60)]
-    assert build(tmp_path, recs)["status"] == "provisional"
+    # The same records without a later batch have no test split, so the size condition fails.
+    r = build(tmp_path, two_batches(40, 30), ev=evaluator(template=NO_MARKER))
+    assert r["status"] == "provisional" and r["test_pairs"] == []
+    assert {row["split"] for row in r["gold"]} == {"train", "dev"}
 
 
 def test_no_verdict_tiers_anywhere(tmp_path, capsys):
@@ -239,9 +255,8 @@ def test_single_class_queue_warns_and_stays_provisional(tmp_path):
 
 
 def test_warnings_carry_their_basis_and_never_change_the_status(tmp_path):
-    big = [record(f"r{i}", {A: "good" if i < 75 else "bad"}, stored="good" if i < 75 else "bad") for i in range(150)]
-    recs = big + [record(f"na{i}", {A: "not_applicable"}) for i in range(80)]
-    r = build(tmp_path, recs, ev=evaluator(template=NO_MARKER))
+    recs = two_batches(40, 30) + [record(f"na{i}", {A: "not_applicable"}) for i in range(80)]
+    r = build(tmp_path, recs, ev=evaluator(template=NO_MARKER), test_from=LATER)
     assert r["status"] == "measured"
     w = {x["check"]: x for x in r["warnings"]}
     assert w[f"Excluded share ≤ {align.MAX_EXCLUDED_RATE:.0%}"]["basis"].startswith("Arize heuristic")
@@ -320,10 +335,11 @@ def test_leniency_uses_the_named_failing_labels(tmp_path):
     assert build(tmp_path, usable_records())["leniency"] is None
 
 
-def test_test_split_is_reported_first(tmp_path):
+def test_test_batch_is_reported_first_and_same_batch_numbers_are_dev(tmp_path):
     out = align.render(build(tmp_path, usable_records()))
-    assert out.index("## Test split") < out.index("## All scored gold records")
-    assert "directional" in out[out.index("## Test split"):out.index("## All scored gold records")]
+    assert out.index("## Test batch") < out.index("## All scored gold records (dev)")
+    assert "No test batch labeled after freezing" in out and "**dev**" in out
+    assert "directional" not in out
 
 
 def test_no_plan_says_nothing_is_a_production_rate(tmp_path):
@@ -374,9 +390,9 @@ def test_report_writes_json_summary(tmp_path, capsys):
     out = tmp_path / "report.json"
     align.cmd_report(argparse.Namespace(dir=str(tmp_path), adjudications=None, eval_column=None, config=None,
                                         not_applicable=["not_applicable"], unscorable=["cannot_judge", "unclear"],
-                                        json_out=str(out), plan=None, test_from=None, rubric_version=None,
+                                        json_out=str(out), plan=None, test_from=None,
                                         admission_filter=None, fail_label=None, definitions_agree=False,
-                                        read_sessions=None, rescored_at=None))
+                                        rescored_at=None))
     assert "## Status: provisional" in capsys.readouterr().out
     slim = json.loads(out.read_text())
     assert slim["summary"]["gold"] == 12 and slim["summary"]["disagreements"] == 2
@@ -473,8 +489,8 @@ def test_split_is_stable_per_label_and_written_to_json(tmp_path):
     again = {row["record_id"]: row["split"] for row in build(tmp_path, list(reversed(recs)))["rows"]}
     assert first == again
     r = build(tmp_path, recs)
-    # 20 per label: 3 train (15%), 8 dev (42.5%, rounded), 9 test
-    assert [r["split_counts"][s]["good"] for s in ("train", "dev", "test")] == [3, 8, 9]
+    # 20 per label: 3 train (15%), 17 dev; no test without a later batch
+    assert [r["split_counts"][s]["good"] for s in ("train", "dev", "test")] == [3, 17, 0]
 
 
 def test_weighted_estimates_undo_oversampling(tmp_path):
@@ -642,13 +658,17 @@ def test_test_from_makes_a_later_batch_the_test_split(tmp_path):
         build(tmp_path, recs, test_from="yesterday")
 
 
-def test_judge_version_tuple_is_reported(tmp_path):
-    r = build(tmp_path, usable_records(), rubric_version="v3", admission_filter="parent_id IS NULL")
+def test_rubric_version_comes_from_the_commit_message(tmp_path):
+    ev = evaluator()
+    ev["version"]["commit_message"] = "Rubric v3, 2026-10-19 (criterion change): empty validated filters count."
+    r = build(tmp_path, usable_records(), ev=ev, admission_filter="parent_id IS NULL")
     j = r["judge"]
-    assert j["evaluator_version"] == "v-1" and len(j["prompt_sha"]) == 12 and j["rubric_version"] == "v3"
+    assert j["evaluator_version"] == "v-1" and len(j["prompt_sha"]) == 12
+    assert (j["rubric_version"], j["change"], j["switch_time"]) == ("v3", "criterion change", "2026-01-01T00:00:00Z")
     out = align.render(r)
-    assert "rubric `v3`, admission filter `parent_id IS NULL`" in out and "Pass `--rubric-version`" not in out
-    assert "Pass `--rubric-version`" in align.render(build(tmp_path, usable_records()))
+    assert "rubric `v3` (criterion change, switch time 2026-01-01T00:00:00Z), admission filter `parent_id IS NULL`" in out
+    plain = align.render(build(tmp_path, usable_records()))  # commit message "init"
+    assert "rubric version: not in the commit message" in plain and "Rubric vN, YYYY-MM-DD" in plain
 
 
 def ppi_plan(tmp_path, recs, pops, random_ids):
@@ -663,11 +683,11 @@ def ppi_plan(tmp_path, recs, pops, random_ids):
 
 
 def test_ppi_corrects_a_judge_that_over_calls_good(tmp_path):
-    # Production: the judge says good on 900 of 1,000. Random labels: humans say good on 14 of 20, and the
-    # judge says good on 18 of them (it calls 4 human-bad records good).
-    recs = [record(f"g{i}", {A: "good"}, stored="good") for i in range(14)]
-    recs += [record(f"b{i}", {A: "bad"}, stored="good") for i in range(4)]
-    recs += [record(f"c{i}", {A: "bad"}, stored="bad") for i in range(2)]
+    # Production: the judge says good on 900 of 1,000. Random labels: humans say good on 70 of 100, and the
+    # judge says good on 90 of them (it calls 20 human-bad records good).
+    recs = [record(f"g{i}", {A: "good"}, stored="good") for i in range(70)]
+    recs += [record(f"b{i}", {A: "bad"}, stored="good") for i in range(20)]
+    recs += [record(f"c{i}", {A: "bad"}, stored="bad") for i in range(10)]
     plan = ppi_plan(tmp_path, recs, {"good": 900, "bad": 100, "not_applicable": 0}, [x["id"] for x in recs])
     r = build(tmp_path, recs, plan=plan)
     good = r["production"]["rates"]["good"]
@@ -675,6 +695,14 @@ def test_ppi_corrects_a_judge_that_over_calls_good(tmp_path):
     assert good["ppi"] == pytest.approx(0.7, abs=0.01)
     assert good["ppi_ci"][0] < 0.7 < good["ppi_ci"][1]
     assert "Corrected production rates" in align.render(r)
+
+
+def test_production_rates_need_a_validation_size_random_stream(tmp_path):
+    recs = [record(f"g{i}", {A: "good"}, stored="good") for i in range(19)]
+    plan = ppi_plan(tmp_path, recs, {"good": 900, "bad": 100}, [x["id"] for x in recs])
+    r = build(tmp_path, recs, plan=plan)
+    assert r["production"] == {"skipped": "not computed: 19 random labels; needs about 100", "n": 19}
+    assert "Corrected production rates not computed: 19 random labels; needs about 100" in align.render(r)
 
 
 def test_ppi_uses_only_random_stream_labels(tmp_path):
@@ -696,7 +724,7 @@ def report_json(path, labels, judge=None):
 
 
 def compare_args(before, after, **kw):
-    base = dict(before=before, after=after, split=None, second_judge=None, gate=False, fail_label=None,
+    base = dict(before=before, after=after, split=None, test=None, second_judge=None, gate=False, fail_label=None,
                 ledger=None, look_budget=align.LOOK_BUDGET, candidates=1, fresh=None)
     base.update(kw)
     return argparse.Namespace(**base)
@@ -737,6 +765,20 @@ def test_ship_gate_passes_only_when_test_holds_and_recall_does_not_drop(tmp_path
     align.cmd_compare(compare_args(before, bad, gate=True, fail_label=["bad"]))
     out = capsys.readouterr().out
     assert "## Ship gate: FAIL" in out and "❌ Test agreement holds" in out
+
+
+def test_gate_reads_test_from_a_separate_later_batch(tmp_path, capsys):
+    # In-place edit: the baseline and the re-scored old queue have only dev; the later batch is its own report.
+    dev_only = lambda hits: [x for x in records_for(hits, 0) if x[1] == "dev"]
+    before = report_json(tmp_path / "b.json", dev_only(6))
+    after = report_json(tmp_path / "a.json", dev_only(8))
+    later = report_json(tmp_path / "t.json", [(f"n{i}", "dev", "good" if i % 2 else "bad", "good" if i % 2 else "bad")
+                                              for i in range(10)])
+    align.cmd_compare(compare_args(before, after, gate=True, test=later, second_judge=later))
+    out = capsys.readouterr().out
+    assert "## Ship gate: PASS" in out and "before on dev" in out and "test π 1.00 on 10" in out
+    align.cmd_compare(compare_args(before, after, gate=True, second_judge=later))
+    assert "## Ship gate: FAIL" in capsys.readouterr().out  # no test batch at all
 
 
 def test_second_judge_is_scored_on_test(tmp_path, capsys):
@@ -783,22 +825,22 @@ def test_lint_flags_case_specific_rules(tmp_path, capsys):
 def test_ppi_and_frames_combine_intake_periods(tmp_path):
     """Two periods: the first plan (judge good on 900/1,000) and an intake run (good on 50/100).
     The judge is right on every random record, so each period's rate is its judge rate."""
-    recs = [record(f"a{i}", {A: "good" if i < 9 else "bad"}, stored="good" if i < 9 else "bad") for i in range(10)]
-    recs += [record(f"b{i}", {A: "good" if i < 5 else "bad"}, stored="good" if i < 5 else "bad") for i in range(10)]
+    recs = [record(f"a{i}", {A: "good" if i < 45 else "bad"}, stored="good" if i < 45 else "bad") for i in range(50)]
+    recs += [record(f"b{i}", {A: "good" if i < 25 else "bad"}, stored="good" if i < 25 else "bad") for i in range(50)]
     plan = tmp_path / "plan.json"
     plan.write_text(json.dumps({
         "strata": [{"stratum": "random", "stream": "random", "period": "", "frame": 1000,
                     "label_counts": {"good": 900, "bad": 100}},
                    {"stratum": "random@intake-1", "stream": "random", "period": "intake-1", "frame": 100,
                     "label_counts": {"good": 50, "bad": 50}}],
-        "records": [{"span_id": f"sp-a{i}", "stratum": "random", "stream": "random", "period": ""} for i in range(10)]
+        "records": [{"span_id": f"sp-a{i}", "stratum": "random", "stream": "random", "period": ""} for i in range(50)]
         + [{"span_id": f"sp-b{i}", "stratum": "random@intake-1", "stream": "random", "period": "intake-1"}
-           for i in range(10)]}))
+           for i in range(50)]}))
     r = build(tmp_path, recs, plan=str(plan))
     pr = r["production"]
     assert pr["periods"] == 2 and pr["units"] == 1100
     assert pr["rates"]["good"]["ppi"] == pytest.approx((900 + 50) / 1100)
-    assert r["weighted"] == {"random_only": True, "streams": {"random": 20}, "frame": 1100}
+    assert r["weighted"] == {"random_only": True, "streams": {"random": 100}, "frame": 1100}
 
 
 def test_skewed_gold_reports_prevalence_robust_measures(tmp_path):
@@ -818,30 +860,26 @@ def test_balanced_gold_reports_no_skew(tmp_path):
     assert r["skew"] is None and "π understates agreement" not in align.render(r)
 
 
-def test_test_split_metrics_use_only_test_records(tmp_path):
-    recs = [record(f"g{i}", {A: "good"}, stored="good" if i % 2 else "bad") for i in range(20)]
-    recs += [record(f"b{i}", {A: "bad"}, stored="bad") for i in range(20)]
-    r = build(tmp_path, recs)
+def test_test_metrics_use_only_the_later_batch(tmp_path):
+    recs = two_batches(10, 5)
+    for rec in recs[:5]:
+        rec["evaluations"][0]["label"] = "bad"  # tuning-batch errors must not touch test numbers
+    r = build(tmp_path, recs, test_from=LATER)
     test_rows = [row for row in r["gold_scored"] if row["split"] == "test"]
-    assert len(r["test_pairs"]) == len(test_rows) > 0
-    assert r["test_recall"]["bad"][1] == sum(1 for row in test_rows if row["consensus"] == "bad")
-    out = align.render(r)
-    assert "## Test split" in out and "**directional**" in out
+    assert len(r["test_pairs"]) == len(test_rows) == 10
+    assert r["test_recall"] == {"bad": (5, 5), "good": (5, 5)}
+    assert "a batch labeled after the prompt was frozen" in align.render(r)
 
 
-def test_sessions_read_while_writing_rules_never_count_as_test(tmp_path):
-    recs = [record(f"r{i}", {A: "good" if i < 20 else "bad"}, stored="good" if i < 20 else "bad") for i in range(40)]
-    base = build(tmp_path, recs)
-    test_sessions = sorted(str(row["session_id"]) for row in base["gold"] if row["split"] == "test")
-    read = tmp_path / "read.txt"
-    dev_session = next(str(row["session_id"]) for row in base["gold"] if row["split"] == "dev")
-    read.write_text("\n".join(test_sessions[:3] + [dev_session]))
-    r = build(tmp_path, recs, read_sessions=str(read))
-    split = {str(row["session_id"]): row["split"] for row in r["gold"]}
-    assert all(split[s] == "dev" for s in test_sessions[:3])
-    assert len(r["test_pairs"]) == len(base["test_pairs"]) - 3
-    assert r["moved_from_test"] == test_sessions[:3]
-    assert "never count as test" in align.render(r)
+def test_discovery_round_collapses_the_size_blocker(tmp_path):
+    plan = tmp_path / "plan.json"
+    plan.write_text(json.dumps({"mode": "discovery", "records": []}))
+    r = build(tmp_path, usable_records(), plan=str(plan))
+    size = next(b for b in r["blockers"] if b["condition"].startswith("Size"))
+    assert size["value"] == "discovery round: provisional by design"
+    assert "normally ends in a criterion decision and template edits" in align.render(r)
+    assert "dev" in next(b for b in build(tmp_path, usable_records())["blockers"]
+                         if b["condition"].startswith("Size"))["value"]
 
 
 def test_rescored_at_clears_the_older_version_blocker_after_an_in_place_edit(tmp_path):

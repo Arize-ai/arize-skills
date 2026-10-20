@@ -56,3 +56,4 @@ These have no published source. Each is labeled wherever it appears:
 - the dev look budget of 5
 - the 80% skew threshold
 - revising one or two judges per week
+- 100 random-stream labels before corrected production rates are computed (the queue builder's validation size)

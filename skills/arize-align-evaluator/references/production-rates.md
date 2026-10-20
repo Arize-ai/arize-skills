@@ -1,5 +1,7 @@
 # Production rates (SOP step 8)
 
+The report computes corrected rates only with at least 100 random-stream labels, the queue builder's validation size (an Arize heuristic). Below that it prints "not computed: N random labels; needs about 100": on a discovery round's 20–30 labels the intervals are too wide to act on.
+
 A judge's raw pass rate is biased whenever it errs: too high when the true rate is low, and too low when it's high (Lee). The report corrects it with human labels. Source names refer to [sources.md](sources.md).
 
 ## What the report computes

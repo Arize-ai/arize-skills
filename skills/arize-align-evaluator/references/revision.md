@@ -11,12 +11,12 @@ Never tune your way around an open criterion question. A misread criterion can't
 
 ## The loop: edit in place
 
-Arize keeps every evaluator version, so an approved change is written as a new version of the evaluator itself. No copy is made, and the template can be rolled back.
+Arize keeps every evaluator version, so an approved change is written as a new version of the evaluator itself. No copy is made, and the template can be rolled back. A discovery round makes one batch of edits and stops here; the validation stage below comes once a later batch can be labeled.
 
-1. **Save the baseline.** Save the current version's JSON (`ax evaluators get … -o json`) for rollback, and run `report … --json-out baseline.json` on the stored results. Leave out stale results, as the report does.
-2. **Write the new version** from the current version's full config, changing only what was approved. Read it back and compare every field ([changing-evaluators.md](changing-evaluators.md)). Its `created_at` is the **switch time**; record it in the changelog.
+1. **Save the baseline.** Run `report … --json-out baseline.json` on the stored results. Leave out stale results, as the report does.
+2. **Write the new version** with `write_version.py` ([changing-evaluators.md](changing-evaluators.md#writing-a-version)). It saves the current version's JSON for rollback, changes only the template, reads the version back and compares every field, and prints the **switch time** (the version's `created_at`). Its commit message is the changelog entry.
 3. **Re-score the gold sessions.** Run a one-off, non-continuous task for the evaluator on those sessions only. Use `--query-filter` with the session IDs and a data window covering them, and try a small `--max-spans` first. Then run `report --rescored-at RUN_START --json-out after.json`. Run the same task once more and compare the two runs to get the **noise floor**. A gain smaller than that isn't a gain.
-4. **Treat what you read as dev.** Every session you read while writing the rule goes in a `--read-sessions` file, so it never counts as test, whatever its hash split. Those sessions can show that the edit does what it says. They can't show the judge is aligned, because the rule was written to fit them (SOP rule 1; Dwork).
+4. **The tuning batch is dev.** Every session in it, read or not, is train or dev; only a batch labeled after freezing is test. Dev can show that the edit does what it says. It can't show the judge is aligned, because the rule was written to fit it (SOP rule 1; Dwork).
 5. **Revise from dev only.** Train and dev come from the gold queue (SOP addendum A). Train records can be few-shot examples; prefer 2–3 human-rated examples over rescaling scores (Mukherjee). Test records stay out of the template and this prompt.
 6. **Make general edits.** Each edit states a rule. Before writing the version, check it:
 
@@ -25,16 +25,14 @@ Arize keeps every evaluator version, so an approved change is written as a new v
    ```
 
    `lint` flags added lines that name a record, session or trace, or copy wording from dev records. Rewrite those as general rules (SPEAR; Elganayni).
-7. **Batch, and look at dev once per batch.** Combine several edits into one version, then score dev once. `compare --ledger looks.json` counts the looks and warns past `--look-budget` (default 5, an Arize heuristic; Dwork).
-8. **Reproduce check.** Summarize the change in 2–3 sentences. Give a fresh agent only the baseline template and that summary, never the dev records, and have it write its own version. Score it on dev. If it doesn't reproduce most of the gain, the gain came from fitting the records (Bertran, Roth, Wu).
-9. **Compare on the same records:**
+7. **Compare on the same records:**
 
    ```bash
-   python3 SKILL_ROOT/scripts/align_report.py compare baseline.json after.json --split dev --ledger looks.json
+   python3 SKILL_ROOT/scripts/align_report.py compare baseline.json after.json --split dev
    ```
 
    It prints both rates and π with intervals, recall per label, the records that flipped each way, and the shift in the judge's label mix. After a criterion change this shows the rule took effect, not an improvement: scores before and after aren't comparable.
-10. **Optimizers.** If one drafts revisions instead, give it train and dev only. Have it maximize π or macro-F1, never accuracy, which collapses to the majority label (SPEAR). Keep a rollback to the best dev version.
+8. **Optimizers.** If one drafts revisions instead, give it train and dev only. Have it maximize π or macro-F1, never accuracy, which collapses to the majority label (SPEAR). Keep a rollback to the best dev version.
 
 ### What an in-place edit costs
 
@@ -48,36 +46,40 @@ Tell the user before writing the version:
 
 Make a copy with its own `template_config.name` only when the user wants old and new scored side by side on the same records before live traffic changes. Delete it after the ship gate, so it doesn't clutter the space.
 
-## Freeze and test (SOP steps 3 and 9)
+## Validation stage: test batch and ship gate
 
-1. **Freeze** the template: no more edits to this version.
-2. **Label a later batch** after the switch. Queue intake into the calibration queue does this. Then run `report --test-from FREEZE_TIME`, and score it **once** per frozen version, not on a calendar. A tuning judge can hold on its own batch and collapse on a later one (Kochelka). Use the same-batch test split only when no later batch can be labeled, call the result directional, and still leave out every session in `--read-sessions`.
-3. **Score one other judge model** on the same test records, with the frozen template. Use a temporary evaluator copy with the other model, and delete it after scoring. A judge can agree well overall and still carry a model-specific bias (Kochelka).
-4. **Revise only as many judges at a time as the labeling budget can test,** usually one or two a week (SOP addendum B, an Arize heuristic).
+This applies once a judge is past discovery: several batches of edits, and a batch that can be labeled after freezing.
 
-## Ship gate (SOP step 9.4)
+1. **Batch, and look at dev once per batch.** Combine several edits into one version, then score dev once. Add `--ledger looks.json` to each `compare`: it counts the looks and warns past `--look-budget` (default 5, an Arize heuristic; Dwork).
+2. **Reproduce check.** Summarize the change in 2–3 sentences. Give a fresh agent only the baseline template and that summary, never the dev records, and have it write its own version. Score it on dev. If it doesn't reproduce most of the gain, the gain came from fitting the records (Bertran, Roth, Wu).
+3. **Freeze** the template: no more edits to this version.
+4. **Label a later batch** after the switch. Queue intake into the calibration queue does this. Then run `report --test-from FREEZE_TIME`, and score it **once** per frozen version, not on a calendar. A tuning judge can hold on its own batch and collapse on a later one (Kochelka). If the later batch is its own queue, report on it and pass that file to `compare --test`.
+5. **Score one other judge model** on the same test records, with the frozen template. Use a temporary evaluator copy with the other model, and delete it after scoring. A judge can agree well overall and still carry a model-specific bias (Kochelka).
+6. **Run the ship gate:**
 
-```bash
-python3 SKILL_ROOT/scripts/align_report.py compare baseline.json final.json --gate \
-  --fail-label FAILING_LABEL --second-judge second.json --ledger looks.json \
-  [--candidates N --fresh fresh.json]
-```
+   ```bash
+   python3 SKILL_ROOT/scripts/align_report.py compare baseline.json after.json --gate \
+     --test test.json --fail-label FAILING_LABEL --second-judge second.json --ledger looks.json \
+     [--candidates N --fresh fresh.json]
+   ```
 
-It passes only when all of these hold:
+   `after.json` is the re-scored tuning batch (dev); `test.json` is the later batch. Without `--test`, test is `after.json`'s test split. After an in-place edit the baseline never scored the later batch, so the gate compares against the baseline's dev numbers and says so. It passes only when all of these hold:
 
-| Check | Basis |
-|---|---|
-| Test π after ≥ before | SOP step 9.4 |
-| Dev → test π gap ≤ 0.10 | Arize heuristic; observed gaps were 0.25–0.44 κ (SPEAR) and 0.205 κ_w (Kochelka) |
-| Test recall on each failing label didn't drop | SOP step 9.4 |
-| A second judge model was scored on test | Kochelka; SOP step 5 |
-| With `--candidates` > 1, the winner was re-scored on fresh sessions (`--fresh`) | SIREN: the best of several on the same data looks better than it is |
+   | Check | Basis |
+   |---|---|
+   | Test π after ≥ before | SOP step 9.4 |
+   | Dev → test π gap ≤ 0.10 | Arize heuristic; observed gaps were 0.25–0.44 κ (SPEAR) and 0.205 κ_w (Kochelka) |
+   | Test recall on each failing label didn't drop | SOP step 9.4 |
+   | A second judge model was scored on test | Kochelka; SOP step 5 |
+   | With `--candidates` > 1, the winner was re-scored on fresh sessions (`--fresh`) | SIREN: the best of several on the same data looks better than it is |
 
-## If the gate fails
+### If the gate fails
 
-Roll back to the saved version, or write a fixed one, and say so in the changelog with the time. The scores written while the failed version ran stay in the column; note their time range so reports can leave them out.
+Roll back by writing the saved version's template as a new version with `write_version.py`, with a commit message that says so. The scores written while the failed version ran stay in the column; note their time range so reports can leave them out.
 
-Record every version in the changelog as a **criterion change** or a **judge change**, with its switch time ([changing-evaluators.md](changing-evaluators.md#changelog)).
+## Structure and cadence (SOP steps 6 and 9)
+
+Keep the judge's categories, and test any change of scale (binary, coarse, continuous) on dev first: no source shows binary beats the alternatives for LLM judges. Keep one criterion per judge; the support for this is qualitative. Chain of thought is optional; its measured gains were small. For cadence: run error analysis on new sessions weekly and revise dev in batches; when a version is frozen, label a test batch, score it once and run the ship gate; revise only one or two judges at a time, so their test batches fit the labeling budget (SOP addendum B, an Arize heuristic); and keep the calibration queue topped up through intake, since it's the drift check.
 
 ## When to stop
 

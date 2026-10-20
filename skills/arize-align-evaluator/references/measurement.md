@@ -8,7 +8,7 @@ There are no verdict tiers. A judge is **measured** only when every condition be
 
 | Condition | Checked as | Source |
 |---|---|---|
-| Size | 30+ scored gold records per label in **each** of dev and test, for at least 2 labels | Husain & Shankar |
+| Size | 30+ scored gold records per label in dev and in a test batch labeled after freezing (`--test-from`), for at least 2 labels. With a discovery plan the value is one line: "discovery round: provisional by design". | Husain & Shankar; Kochelka |
 | No stale results | No gold record's stored result saw fewer turns than the session has (`LAST_TURN_CHECK`). If turns weren't counted, this is "not checked". | SOP rule 3 |
 | Current version | Every gold record has a stored result, and none started before the current version was created. After an in-place edit, re-score the sessions and pass `--rescored-at RUN_START`. | SOP rule 2 |
 | One record per unit | Every record has a session ID, and none is duplicated | SOP addendum F |
@@ -19,7 +19,7 @@ There are no verdict tiers. A judge is **measured** only when every condition be
 - **Provisional:** report every number with its interval and don't claim a target. Fix criterion, scope and queue problems first, then make at most one batch of template fixes. Don't tune prompt by prompt: on small sets that overfits (Dwork; SPEAR).
 - **Measured:** the revise loop and the ship gate apply. See [revision.md](revision.md).
 
-Most judges stay provisional at discovery scale (about 30 random records). That's expected. The numbers are still worth reading, with their intervals.
+Most judges stay provisional at discovery scale (about 30 random records). That's expected: a discovery round normally ends in a criterion decision and template edits, not a measured number. The numbers are still worth reading, with their intervals.
 
 ## Warnings
 
@@ -40,14 +40,14 @@ Warnings never change the status. Each one prints its basis.
 
 Every rate is shown with a count, a percentage and a 95% Wilson interval. π gets a seeded bootstrap interval.
 
-1. **Test split first.** Sessions read while writing a rule (`--read-sessions`) never count as test; the report moves them to dev (SOP rule 1). Agreement, Scott's π, and recall per label, with the failing labels first. These are the numbers to report for a frozen judge version. A test split from the same batch as dev is marked **directional**; the real test is a batch labeled after freezing (`--test-from`). See Kochelka and SPEAR in [sources.md](sources.md).
-2. **All scored gold records:**
+1. **Test batch first.** Test is only a batch labeled after freezing (`--test-from`): agreement, Scott's π, and recall per label, with the failing labels first. These are the numbers to report for a frozen judge version. Without a later batch there is no test split: every gold record is train or dev, and the report labels its numbers **dev**. A same-batch test split was read or tuned on, so it could only be directional (Kochelka; SPEAR; SOP rule 1).
+2. **All scored gold records** (dev, without a later batch):
    - recall per human label (TPR and TNR for a binary judge) and balanced accuracy
    - precision per judge label
    - percent agreement next to π, never alone (Thakur)
    - the confusion matrix
 3. **Leniency.** Of the records humans gave a failing label, the share the judge didn't fail. Name the failing labels with `--fail-label` (repeatable). Judges lean toward "correct" when unsure (Thakur §5.4).
-4. **Skew.** When one human label holds ≥ 80% of the scored records, π is low even at high raw agreement, the same prevalence effect as κ. The report then adds Gwet's AC1, PABAK and balanced accuracy. Read the failing labels' recall first, and don't treat a low π on a skewed judge as a verdict on its own (SOP addendum C).
+4. **Skew.** When one human label holds ≥ 80% of the scored records, π is low even at high raw agreement, the same prevalence effect as κ. The report then adds Gwet's AC1, PABAK and balanced accuracy. Read the failing labels' recall first, and don't read a low π on a skewed judge as a finding on its own (SOP addendum C).
 5. **Applicability and grade** as separate lines. A scope disagreement needs a scope rule, not a grading rule (SOP step 1).
 6. **Human ceiling.** Hold one rater out at a time, and score that rater and the judge against the same reference made from the others (Mukherjee). Don't tune past the ceiling. With one annotator, the report says no ceiling was measured.
 

@@ -4,9 +4,9 @@ Use this structure when presenting to the user at the stop point. Keep it short;
 
 ## 1. Judge and status
 
-- **Judge version:** the evaluator version, prompt hash, model, rubric version and admission filter.
+- **Judge version:** the evaluator version, prompt hash, model, rubric version (from the commit message) and admission filter.
 - **Status: provisional or measured.** For each blocker, give one plain sentence: what it is, its value and its source. For example, "10 of 29 calibration sessions were scored before they ended (SOP rule 3); re-score them with the current version."
-- **What the status allows,** in one line.
+- **What the status allows,** in one line. For a discovery round, say it normally ends in a criterion decision and template edits, not a measured number.
 
 ## 2. Human labels
 
@@ -15,10 +15,10 @@ Use this structure when presenting to the user at the stop point. Keep it short;
 
 ## 3. Numbers
 
-- **Test split first:** agreement, π and recall per label, failing labels first, each with its interval. Say whether test is a later batch or the same batch (directional).
+- **Test batch first:** agreement, π and recall per label, failing labels first, each with its interval, on the batch labeled after freezing. Without one, say there's no test batch and that the numbers are dev.
 - **All scored gold:** recall per label, balanced accuracy, leniency, precision, π next to percent agreement.
 - **If skewed:** AC1 and PABAK next to π.
-- **Calibration queue:** corrected production rates and which interval to use.
+- **Calibration queue:** corrected production rates and which interval to use, or that they weren't computed (fewer than about 100 random labels).
 - **Gold queue:** the weighted secondary estimate, labeled as secondary.
 - **Warnings** that fired, each with its basis, in one list.
 

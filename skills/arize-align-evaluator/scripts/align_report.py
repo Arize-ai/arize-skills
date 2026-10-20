@@ -8,7 +8,7 @@ Four subcommands, standard library only (Python 3.9+):
           counts each session's turns so `report` can flag stale stored outputs.
   report  Joins the saved files and prints a Markdown alignment report: the
           judge version, its status (provisional or measured) with blockers,
-          heuristic warnings with their basis, test-split numbers first, fit
+          heuristic warnings with their basis, test-batch numbers first, fit
           (including the queue-vs-template label definitions), and production
           estimates. No verdict tiers. Writes nothing to Arize.
 
@@ -60,16 +60,21 @@ MIN_KAPPA = 0.60
 # (the kappa paradox), so the gate also accepts Gwet's AC1.
 SKEW_SHARE = 0.80
 MIN_SHARED_FOR_KAPPA = 20
-SPLIT = {"train": 0.15, "dev": 0.425}  # the rest is test, scored once at the end
+TRAIN_SHARE = 0.15  # of the tuning batch; the rest is dev. Test is only a batch labeled after freezing (--test-from).
 # Heuristics for revising without overfitting: a larger π drop from dev to test means the revision fit dev,
 # and dev scorings beyond the budget make dev agreement optimistic. Neither has a published small-n value.
 MAX_DEV_TEST_GAP = 0.10
 LOOK_BUDGET = 5
+# Corrected production rates need a validation-size random stream: the queue builder's validation mode draws 100
+# random records. An Arize heuristic; below it the intervals are too wide to act on.
+MIN_RANDOM_FOR_RATES = 100
+# The version's commit message is the changelog: "Rubric v3, 2026-10-19 (criterion change): what changed".
+COMMIT_FORMAT = re.compile(r"^\s*Rubric (v[\w.]+), (\d{4}-\d{2}-\d{2}) \((criterion change|judge change)\):\s*\S")
 
 # Where each status condition comes from, printed next to a blocker.
 SRC = {
     "size": "Husain & Shankar, How many examples, \"LLM judges need labeled examples\" ¶2: 30 to 50 per label "
-            "in both dev and test",
+            "in both dev and test; test is a batch labeled after freezing (Kochelka; SPEAR)",
     "stale": "Eval alignment SOP rule 3: grade the whole session and reject stale results",
     "version": "Eval alignment SOP rule 2: a judge version is (rubric, prompt, model, admission filter)",
     "unit": "Eval alignment SOP addendum F: one record per session",
@@ -300,15 +305,13 @@ def unit_key(row):
     return row.get("session_id") or row.get("trace_id") or row["record_id"]
 
 
-def assign_splits(gold, test_from=None, read=frozenset()):
-    """Stable train/dev/test split by session, balanced within each human label by hash rank.
+def assign_splits(gold, test_from=None):
+    """Stable split by session, balanced within each human label by hash rank.
 
-    With test_from, every session that started at or after it is test (a later batch, labeled after the
-    prompt was frozen), and the earlier sessions split into train and dev in the same 15 : 42.5 ratio.
-    A session holding gold records under several labels takes the split its rarest label gives it.
-
-    Sessions in `read` were read while writing a rule (SOP rule 1: tune and report on different sessions), so
-    they never count as test: a test pick among them moves to dev."""
+    Test is only a later batch: with test_from, every session that started at or after it is test (labeled after
+    the prompt was frozen). Every other session is the tuning batch, split 15 : 85 into train and dev. A same-batch
+    test split is left out: it was read or tuned on, so it can only be directional (Kochelka; SPEAR). A session
+    holding gold records under several labels takes the split its rarest label gives it."""
     group_split = {}
     if test_from:
         for row in gold:
@@ -320,14 +323,9 @@ def assign_splits(gold, test_from=None, read=frozenset()):
             by_label[row["consensus"]].add(unit_key(row))
     for lbl in sorted(by_label, key=lambda l: (len(by_label[l]), l)):
         ranked = stable_order(by_label[lbl])
-        n = len(ranked)
-        n_train = int(n * (SPLIT["train"] / (SPLIT["train"] + SPLIT["dev"]) if test_from else SPLIT["train"]))
-        n_dev = n - n_train if test_from else int(round(n * SPLIT["dev"]))
+        n_train = int(len(ranked) * TRAIN_SHARE)
         for i, g in enumerate(ranked):
-            group_split.setdefault(g, "train" if i < n_train else "dev" if i < n_train + n_dev else "test")
-    for row in gold:
-        if group_split[unit_key(row)] == "test" and str(row["session_id"]) in read:
-            group_split[unit_key(row)] = "dev"
+            group_split.setdefault(g, "train" if i < n_train else "dev")
     return {row["record_id"]: group_split[unit_key(row)] for row in gold}
 
 
@@ -393,7 +391,6 @@ def build(a):
     choices = list((tc.get("classification_choices") or {}).keys())
     granularity = (tc.get("data_granularity") or "SPAN").upper()
     eval_column = a.eval_column or f"{GRANULARITY_PREFIX.get(granularity, 'eval')}.{tc.get('name')}"
-    read = frozenset(s.strip() for s in open(a.read_sessions).read().split() if s.strip()) if a.read_sessions else frozenset()
     rescored_at = None
     if a.rescored_at:
         rescored_at = parse_iso(a.rescored_at)
@@ -405,10 +402,14 @@ def build(a):
         if not test_from or not test_from.tzinfo:
             sys.exit(f"--test-from must be an ISO 8601 time with a zone, e.g. 2026-10-14T00:00:00Z; got {a.test_from!r}")
     # A judge is (rubric, prompt, model, admission filter): change any one and agreement must be re-measured.
+    # The rubric version and the kind of change come from the version's commit message, which is the changelog.
+    commit = COMMIT_FORMAT.match(version.get("commit_message") or "")
     judge = {"evaluator_version": version.get("id"),
              "prompt_sha": hashlib.sha256((tc.get("template") or "").encode()).hexdigest()[:12],
              "model": (tc.get("llm_config") or {}).get("model_name"),
-             "rubric_version": a.rubric_version, "admission_filter": a.admission_filter, "test_from": a.test_from}
+             "rubric_version": commit.group(1) if commit else None, "change": commit.group(3) if commit else None,
+             "switch_time": version.get("created_at"),
+             "admission_filter": a.admission_filter, "test_from": a.test_from}
 
     configs = [config_of(c) for c in queue.get("annotation_configs", [])]
     if a.config:
@@ -561,10 +562,7 @@ def build(a):
     ceiling_human, ceiling_judge = held_out_ceiling(rows, decisive)
 
     # Held-out split of the gold records, by session and human label, stable across runs.
-    splits = assign_splits(gold, test_from, read)
-    unread = assign_splits(gold, test_from) if read else splits
-    moved_from_test = sorted({str(row["session_id"]) for row in gold
-                              if unread[row["record_id"]] == "test" and splits[row["record_id"]] != "test"})
+    splits = assign_splits(gold, test_from)
     for row in rows:
         row["split"] = splits.get(row["record_id"])
     split_counts = {s: Counter(row["consensus"] for row in gold if row["split"] == s) for s in ("train", "dev", "test")}
@@ -583,6 +581,7 @@ def build(a):
     plan = load(a.plan) if a.plan else None
     weighted = weight_by_plan(plan, gold_scored) if plan else None
     production = ppi_rates(plan, rows, choices) if plan else None
+    discovery = bool(plan) and plan.get("mode") == "discovery"
     na_rows = [row for row in rows if row["bucket"] == "not_applicable" and row["stored"]]
     applicability = Counter(row["stored"].get("label") for row in na_rows)
 
@@ -649,9 +648,11 @@ def build(a):
     defs = definition_diff(instructions, template, decisive)
     blockers = []
     if len(sized) < 2:
+        # A discovery round is sized for error analysis, never for a measured status; per-label counts are noise there.
         blockers.append({
             "condition": f"Size: {MIN_PER_CLASS_SPLIT}+ scored gold records per label in each of dev and test, for 2+ labels",
-            "value": "; ".join(f"`{c}` dev {scored_split['dev'][c]} / test {scored_split['test'][c]}"
+            "value": "discovery round: provisional by design" if discovery else
+                     "; ".join(f"`{c}` dev {scored_split['dev'][c]} / test {scored_split['test'][c]}"
                                for c in sorted(gold_classes)) or "no gold records",
             "source": SRC["size"]})
     if stale_gold:
@@ -727,8 +728,7 @@ def build(a):
         "judge": judge, "judge_pi": pi_with_ci(judge_pairs), "app_pairs": app_pairs, "skew": skew,
         "test_pairs": test_pairs, "test_pi": pi_with_ci(test_pairs), "test_recall": test_recall,
         "ceiling_human": ceiling_human, "ceiling_judge": ceiling_judge, "production": production,
-        "planned": bool(plan), "read": sorted(read), "moved_from_test": moved_from_test,
-        "rescored_at": a.rescored_at,
+        "planned": bool(plan), "discovery": discovery, "rescored_at": a.rescored_at,
     }
 
 class PlanIndex:
@@ -835,13 +835,13 @@ def weight_by_plan(plan, gold_scored):
             "lower_bound": any(s.get("population_lower_bound") for s in strata.values())}
 
 
-def ppi_rates(plan, rows, labels):
+def ppi_rates(plan, rows, labels, min_labels=MIN_RANDOM_FOR_RATES):
     """Production rate of each human label, corrected with PPI++ from the plan's random-stream labels.
 
     The judge's labels on all production units are the random stratum's label_counts (every scored unit
     in that period); the human labels come only from random-stream records, because PPI assumes the
     labeled set is a random sample of that traffic. Each period (the first plan and every intake run) is
-    estimated on its own and combined by its production size. λ is tuned per label and clipped to
+    estimated on its own and combined by its production size. Below min_labels random labels nothing is computed. λ is tuned per label and clipped to
     [0, 1]: 0 is the human-only estimate, 1 is plain PPI. The human-only estimate is reported too; use
     whichever interval is narrower."""
     planned = plan_index(plan)
@@ -855,6 +855,9 @@ def ppi_rates(plan, rows, labels):
             labeled[p.get("period", "")].append((row["consensus"], row["stored"].get("label")))
     if not labeled:
         return {"error": "no labeled records from the plan's random stream; corrected rates need a random sample"}
+    n_labeled = sum(len(v) for v in labeled.values())
+    if n_labeled < min_labels:
+        return {"skipped": f"not computed: {n_labeled} random labels; needs about {min_labels}", "n": n_labeled}
     missing = sorted(p or "first plan" for p in labeled if not sum(pops.get(p, Counter()).values()))
     if missing:
         return {"error": f"no production label counts for {missing} (re-plan with a current plan_queue.py)"}
@@ -913,14 +916,18 @@ def render(r):
     w("## Judge version\n")
     w(f"- Evaluator `{ev.get('id')}`, version `{j['evaluator_version']}` created {v.get('created_at')} "
       f"(\"{clip(v.get('commit_message'), 120)}\")")
-    w(f"- Prompt `{j['prompt_sha']}`, model `{j['model']}`, rubric `{j['rubric_version'] or 'not given'}`, admission "
-      "filter " + (f"`{clip(j['admission_filter'], 120)}`" if j["admission_filter"] else "`not given`")
+    w(f"- Prompt `{j['prompt_sha']}`, model `{j['model']}`, "
+      + (f"rubric `{j['rubric_version']}` ({j['change']}, switch time {j['switch_time']})" if j["rubric_version"]
+         else "rubric version: not in the commit message")
+      + ", admission filter " + (f"`{clip(j['admission_filter'], 120)}`" if j["admission_filter"] else "`not given`")
       + (f"; test batch from `{j['test_from']}`" if j["test_from"] else ""))
     w(f"- Granularity `{r['granularity']}`, output column `{r['eval_column']}`, choices {r['choices']}")
     w(f"- Queue `{q.get('id')}`: {len(rows)} records, annotation config `{r['config_name']}`, rubric {r['rubric']}")
-    if not (j["rubric_version"] and j["admission_filter"]):
-        w("  - Pass `--rubric-version` and `--admission-filter`: a change to either is a different judge, and these "
-          "numbers don't carry over.")
+    if not j["rubric_version"]:
+        w("  - Write each version's commit message as `Rubric vN, YYYY-MM-DD (criterion change|judge change): what "
+          "changed` (`write_version.py` checks it). It is the changelog, and a rubric change is a different judge.")
+    if not j["admission_filter"]:
+        w("  - Pass `--admission-filter`: a change to it is a different judge, and these numbers don't carry over.")
     w("")
 
     w(f"## Status: {r['status']}\n")
@@ -936,6 +943,9 @@ def render(r):
       + (" A criterion question is open: no template edits until it's decided, and the decided rule is measured on a new queue." if any(
           "criterion" in b["source"] for b in r["blockers"]) else "") + "\n")
 
+    if r["discovery"]:
+        w("A discovery round normally ends in a criterion decision and template edits, not a measured number.\n")
+
     if r["warnings"]:
         w("## Warnings\n")
         w("These don't change the status. Each states its basis.\n")
@@ -948,18 +958,14 @@ def render(r):
     gs, tp = r["gold_scored"], r["test_pairs"]
     fail = r["fail_labels"]
     order = lambda labels: sorted(labels, key=lambda lbl: (lbl not in fail, lbl))
-    w("## Test split (the numbers to report)\n")
+    w("## Test batch (the numbers to report)\n")
     if r["judge"]["test_from"]:
         w(f"Test is every gold session that started at or after `{r['judge']['test_from']}`: a batch labeled after "
           "the prompt was frozen. Score it once per judge version.\n")
     else:
-        w("Test is drawn from the same batch as dev, so these numbers are **directional**. The real test is a batch "
-          "labeled after freezing the prompt (`--test-from`).\n")
-    if r["read"]:
-        w(f"{len(r['read'])} session(s) were read while writing the rules (`--read-sessions`); they never count as test"
-          + (f", so {len(r['moved_from_test'])} moved from test to dev" if r["moved_from_test"] else "")
-          + " (SOP rule 1: tune and report on different sessions).\n")
-    if not tp:
+        w("No test batch labeled after freezing: every gold record here is train or dev, so the numbers below are "
+          "**dev**. Label a later batch and pass `--test-from` for test numbers (Kochelka; SPEAR).\n")
+    if r["judge"]["test_from"] and not tp:
         w("No test record has a current stored result yet.\n")
     else:
         w(f"- Exact agreement: {pct_ci(n_agree(tp), len(tp))}; Scott's {fmt_pi(r['test_pi'])}")
@@ -968,7 +974,7 @@ def render(r):
             w(f"- Recall for `{lbl}`{' (failing)' if lbl in fail else ''}: {pct_ci(hit, n)}")
         w("")
 
-    w("## All scored gold records\n")
+    w("## All scored gold records" + ("" if r["judge"]["test_from"] else " (dev)") + "\n")
     if not gs:
         w("No gold record has a usable stored result, so agreement can't be computed yet.\n")
     else:
@@ -1113,7 +1119,9 @@ def render(r):
             w(f"- Strata with gold cover {100 * (wt['covered_share'] or 0):.0f}% of the planned production units"
               + (f"; no gold in: {wt['uncovered']}" if wt["uncovered"] else "") + ".\n")
     if pr:
-        if pr.get("error"):
+        if pr.get("skipped"):
+            w(f"Corrected production rates {pr['skipped']} (a validation-size random stream; Arize heuristic).\n")
+        elif pr.get("error"):
             w(f"Corrected production rates not computed: {pr['error']}.\n")
         else:
             w(f"Corrected production rates from the judge's labels on {pr['units']} units and {pr['n']} human-labeled "
@@ -1126,8 +1134,6 @@ def render(r):
                   f"({100 * m['ppi_ci'][0]:.1f}–{100 * m['ppi_ci'][1]:.1f}%) | {100 * m['human']:.1f}% "
                   f"({100 * m['human_ci'][0]:.1f}–{100 * m['human_ci'][1]:.1f}%) | "
                   + ("corrected" if m["use"] == "ppi" else "human only") + " |")
-            if pr["n"] < 30:
-                w(f"\nOnly {pr['n']} random-stream labels: these intervals are rough.")
             w("\nPPI assumes the labeled records have the same label mix as production. That holds for the random "
               "stream; a stratified sample without its weights biases it (Lee et al. §8). Re-collect labels after any "
               "judge version change.\n")
@@ -1136,7 +1142,8 @@ def render(r):
     if r["gold"]:
         w("## Split\n")
         w("By session, within each human label, stable across runs. Train may supply few-shot examples, dev is for "
-          "reading disagreements and iterating, test is scored once per frozen version.\n")
+          "reading disagreements and iterating. Test is only a batch labeled after freezing, scored once per frozen "
+          "version.\n")
         w("| Human label | Train | Dev | Test |")
         w("|---|---:|---:|---:|")
         for lbl in sorted(r["gold_classes"]):
@@ -1175,8 +1182,7 @@ def cmd_report(a):
                 "applicability_pi": scott_pi(r["app_pairs"]),
                 "ceiling": {"comparisons": len(r["ceiling_human"]), "human_pi": scott_pi(r["ceiling_human"]),
                             "judge_pi": scott_pi(r["ceiling_judge"])},
-                "production": r["production"], "read_sessions": r["read"], "moved_from_test": r["moved_from_test"],
-                "rescored_at": r["rescored_at"],
+                "production": r["production"], "rescored_at": r["rescored_at"],
                 "split_counts": {k: dict(v) for k, v in r["split_counts"].items()},
             },
             "judge": r["judge"],
@@ -1204,6 +1210,14 @@ def stats(recs):
         recall[lbl] = sum(1 for j in has if j == lbl) / len(has)
     return {"n": len(pairs), "agree": n_agree(pairs), "pi": scott_pi(pairs), "pairs": pairs,
             "recall": recall}
+
+
+def test_stats(report):
+    """Stats on a report's test split, or on all its gold records when it has none: a report of the later batch
+    run without --test-from is that batch."""
+    gold = [x for x in report["records"] if x["bucket"] == "gold"]
+    test = [x for x in gold if x.get("split") == "test"]
+    return stats(test or gold)
 
 
 def cmd_compare(a):
@@ -1234,8 +1248,11 @@ def cmd_compare(a):
     print("\nA change smaller than the run-to-run noise floor is not an improvement. Re-run the unchanged "
           "candidate once and compare it with itself to measure that floor.")
 
-    # Dev-to-test gap on the AFTER judge: dev was used to choose the revision, test wasn't.
-    dev, test = on_split(c_all, "dev"), on_split(c_all, "test")
+    # Dev-to-test gap on the AFTER judge: dev was used to choose the revision, test wasn't. Test is a batch labeled
+    # after freezing: with --test it's that report's gold records (often a separate queue), else AFTER's test split.
+    test_report = load(a.test) if a.test else None
+    dev = on_split(c_all, "dev")
+    test = test_stats(test_report) if test_report else on_split(c_all, "test")
     gap = dev["pi"] - test["pi"] if dev["n"] and test["n"] and dev["pi"] is not None and test["pi"] is not None else None
     if gap is not None:
         print(f"\n## Dev → test\n\n- After: dev π {dev['pi']:.2f} on {dev['n']}, test π {test['pi']:.2f} on {test['n']}, "
@@ -1245,7 +1262,7 @@ def cmd_compare(a):
     second = load(a.second_judge) if a.second_judge else None
     s_test = None
     if second:
-        s_test = on_split({x["record_id"]: x for x in second["records"]}, "test")
+        s_test = test_stats(second)
         print(f"\n## Second judge model\n\n- {(second.get('judge') or {}).get('model') or 'second judge'} on test: "
               f"{pct_ci(s_test['agree'], s_test['n'])}; Scott's {pi_ci(s_test['pairs'])}")
         if s_test["pi"] is not None and test["pi"] is not None and abs(s_test["pi"] - test["pi"]) > MAX_DEV_TEST_GAP:
@@ -1253,10 +1270,14 @@ def cmd_compare(a):
                   "the measured agreement is a property of the judge model, not of the criterion.")
 
     if a.gate:
+        # After an in-place edit the baseline never scored the later batch, so its reference is its dev split.
         bt = on_split(b_all, "test")
+        ref = "test" if bt["n"] else "dev"
+        if not bt["n"]:
+            bt = on_split(b_all, "dev")
         fails = a.fail_label or sorted(bt["recall"])
         checks = [
-            ("Test agreement holds (π after ≥ before)",
+            (f"Test agreement holds (π after on test ≥ before on {ref})",
              bt["pi"] is not None and test["pi"] is not None and test["pi"] >= bt["pi"],
              f"{bt['pi'] if bt['pi'] is None else round(bt['pi'], 2)} → {test['pi'] if test['pi'] is None else round(test['pi'], 2)}"),
             (f"Dev → test gap ≤ {MAX_DEV_TEST_GAP:.2f}", gap is not None and gap <= MAX_DEV_TEST_GAP,
@@ -1264,7 +1285,7 @@ def cmd_compare(a):
         ]
         for lbl in fails:
             rb, ra = bt["recall"].get(lbl), test["recall"].get(lbl)
-            checks.append((f"Recall for `{lbl}` on test didn't drop", rb is not None and ra is not None and ra >= rb,
+            checks.append((f"Recall for `{lbl}` on test didn't drop (before on {ref})", rb is not None and ra is not None and ra >= rb,
                            f"{fmt_rate(rb)} → {fmt_rate(ra)}"))
         # A judge can agree well overall and still carry a model-specific bias; a second judge model on the same
         # test records separates the judge from the criterion (Kochelka et al.). Required, per SOP step 5.
@@ -1371,11 +1392,8 @@ def main():
     r.add_argument("--test-from", metavar="ISO_TIME",
                    help="Make every gold session that started at or after this time the test split: a later batch "
                         "labeled after the prompt was frozen")
-    r.add_argument("--rubric-version", help="Rubric or instructions version the labels were made under")
     r.add_argument("--admission-filter", help="The task's admission filter, recorded as part of the judge version")
     r.add_argument("--fail-label", action="append", help="A failing label (repeat): its recall leads and leniency uses it")
-    r.add_argument("--read-sessions", metavar="FILE",
-                   help="Session IDs (whitespace-separated) read while writing a rule; they never count as test")
     r.add_argument("--rescored-at", metavar="ISO_TIME",
                    help="Start of a scoring run, after the current version was created, that re-scored these sessions")
     r.add_argument("--definitions-agree", action="store_true",
@@ -1386,8 +1404,10 @@ def main():
     c.add_argument("before")
     c.add_argument("after")
     c.add_argument("--split", choices=["train", "dev", "test"], help="Only records in this split of the BEFORE file")
-    c.add_argument("--second-judge", metavar="JSON", help="report --json-out from the same candidate run on another "
-                                                          "judge model; scored on test next to AFTER")
+    c.add_argument("--test", metavar="JSON", help="report --json-out of the batch labeled after freezing, scored by "
+                                                  "the AFTER version; its gold records are test (default: AFTER's test split)")
+    c.add_argument("--second-judge", metavar="JSON", help="report --json-out of another judge model on the same test "
+                                                          "batch; scored next to AFTER")
     c.add_argument("--gate", action="store_true", help="Apply the ship gate on the test split")
     c.add_argument("--fail-label", action="append", help="Label whose test recall must not drop (default: every label)")
     c.add_argument("--ledger", metavar="JSON", help="Append this comparison to a looks ledger and count looks at dev")

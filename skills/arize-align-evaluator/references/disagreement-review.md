@@ -18,7 +18,7 @@ For each record, decide **human right**, **evaluator right** or **ambiguous**, a
 
 With many queues (dozens of discrepancies), group the records by evaluator and give each group to a read-only subagent. Pass it the template, the queue instructions, the record and session IDs, and the stored explanations. Ask for a table of record, session, human label, evaluator label, finding (human right, judge right or ambiguous) and evidence, plus any pattern seen in 2 or more records. Tell it not to change anything in Arize.
 
-Keep a list of every session you open. They go in `--read-sessions`: a rule written from them can't be tested on them (SOP rule 1).
+Every session you open is in the tuning batch, so a rule written from it is tested only on a batch labeled after freezing (SOP rule 1).
 
 ## Patterns that point at the labels, not the evaluator
 
