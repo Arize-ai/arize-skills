@@ -1,7 +1,7 @@
 {
   "name": "arize-skills",
   "displayName": "Arize AX",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "description": "Query Arize AX projects, traces, datasets, and experiments from Antigravity, with skills for tracing, evals, and prompt optimization.",
   "logo": "assets/logo.svg",
   "suggestedPrompts": [
@@ -30,6 +30,8 @@
   "homepage": "https://arize.com/docs/api-clients/mcp/overview",
   "repository": "https://github.com/Arize-ai/arize-skills",
   "license": "MIT",
-  "skills": ["./skills"],
+  "skills": [
+    "./skills"
+  ],
   "mcpServers": "./mcp_config.json"
 }
