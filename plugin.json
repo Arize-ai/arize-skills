@@ -1,4 +1,5 @@
 {
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "arize-skills",
   "version": "1.2.0",
   "description": "Add Arize AX observability to LLM applications — auto-instrumentation, trace export, dataset management, experiment workflows, prompt optimization, deep linking, and migrations from Langfuse, LangSmith, and Braintrust via the ax CLI.",
