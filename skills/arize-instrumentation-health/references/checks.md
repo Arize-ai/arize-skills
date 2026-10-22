@@ -61,6 +61,11 @@ Key attributes by span kind:
 - **Guardrail:** skip or downgrade when the root is infrastructure-only, a background/maintenance job, intentionally redacted, partially exported, failed before producing output, or when a child span is intentionally the semantic entrypoint.
 - **Fix direction:** set end-to-end user input and final response on the semantic root span, or make the semantic entrypoint explicit so infrastructure parent spans are not treated as missing payloads.
 
+### 5b. Missing input/output on semantic spans
+- **Trigger:** any confidently-classified, inspectable AI/workflow span is missing a meaningful `input.value` or `output.value`; report the affected kinds and share of spans. Include `LLM`, `CHAIN`, `AGENT`, `TOOL`, `RETRIEVER`, and other semantic operation spans, not only roots.
+- **Guardrail:** do not require payload fields on raw HTTP/REST, DB, queue, exporter, or other infrastructure spans solely because they exist in the trace. For unclassified REST/HTTP spans, use span name, instrumentation scope, attributes, and tree position to determine whether the span is transport detail or the app's user-facing request boundary. Do not label intent as certain when the evidence is ambiguous.
+- **Fix direction:** for AI/workflow spans, enrich the span or report an instrumentor limitation. For transport-only spans, filter them from the Arize pipeline when supported. For a user-facing REST boundary, add safe request input and final response output or create an explicit semantic CHAIN/AGENT span; ask the user to choose a safe representation when payloads are sensitive or unavailable. Never fabricate I/O or advise capturing secrets/irrelevant headers.
+
 ### 6. Root status unset
 - **Trigger:** more than 80% of root spans are null/`UNSET` **and** there is impact evidence (child `ERROR` spans, or status-based eval/filter usage).
 - **Guardrail:** if no impact signal exists, report as **advisory**.
