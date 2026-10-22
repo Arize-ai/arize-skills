@@ -34,17 +34,18 @@ Attribute and column semantics (span kind, `input.value`/`output.value`, `llm.to
 
 ## The checks
 
-Run the nine deterministic checks defined in [references/checks.md](references/checks.md). Each has a trigger threshold, a guardrail that downgrades confidence when a benign explanation is plausible, and a fix direction. Summary:
+Run the ten deterministic checks defined in [references/checks.md](references/checks.md). Each has a trigger threshold, a guardrail that downgrades confidence when a benign explanation is plausible, and a fix direction. Summary:
 
 1. **Orphaned spans** — parent references with no matching parent in the exported trace.
 2. **Flat trace structure** — multi-span traces stuck at depth 1 in a known multi-step framework.
 3. **Uncategorized spans** — too few spans classify to a known span kind.
 4. **Repeated span names** — a few names dominate multi-step traces.
 5. **Blank root input/output** — semantic root spans missing expected `input.value`/`output.value`.
-6. **Root status unset** — root `UNSET`/null with impact evidence.
-7. **Missing token counts** — confidently-classified LLM spans with null/zero total tokens.
-8. **Missing child spans / payload truncation** — traces losing expected children.
-9. **Duplicate spans** — the same LLM call emitted twice by stacked instrumentors.
+6. **Missing semantic-span I/O** — AI/workflow spans missing meaningful input/output; assess raw REST/HTTP spans as transport detail or user-facing boundaries before recommending filtering or enrichment.
+7. **Root status unset** — root `UNSET`/null with impact evidence.
+8. **Missing token counts** — confidently-classified LLM spans with null/zero total tokens.
+9. **Missing child spans / payload truncation** — traces losing expected children.
+10. **Duplicate spans** — the same LLM call emitted twice by stacked instrumentors.
 
 For each finding, label the likely cause (app instrumentation vs. instrumentor limitation vs. product/UI — see [references/checks.md](references/checks.md) § Cause attribution) and do not report a check as high-confidence when its guardrail applies.
 
