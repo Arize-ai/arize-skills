@@ -1,0 +1,812 @@
+"""Behavioral tests for the arize-align-queue-builder planner; no live services or ax CLI.
+
+Run: pytest --noconftest -c /dev/null -p no:cacheprovider tests/test_align_plan_queue.py -q
+"""
+
+import importlib.util
+import json
+import random
+import re
+import subprocess
+from collections import Counter
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+
+import pytest
+
+ROOT = Path(__file__).resolve().parents[1]
+SCRIPT = ROOT / "skills" / "arize-align-queue-builder" / "scripts" / "plan_queue.py"
+spec = importlib.util.spec_from_file_location("plan_queue", SCRIPT)
+plan = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(plan)
+
+START = datetime(2026, 9, 1, tzinfo=timezone.utc)
+END = START + timedelta(days=28)
+ROOT_FILTER = "parent_id IS NULL"
+
+
+def span(i, label, t, session=None, name="ROUTER-CHAT", compare=None, probe=None):
+    evals = [{"name": "my_eval", "label": label}]
+    if compare:
+        evals.append({"name": "my_eval_anthropic", "label": compare})
+    if probe:
+        evals.append({"name": "v1_eval", "label": probe})
+    return {"name": name, "start_time": t.isoformat(), "attributes": {"session.id": session or f"s-{label}-{i}"},
+            "context": {"trace_id": f"t-{label}-{i}", "span_id": f"sp-{label}-{i}"}, "evaluations": evals}
+
+
+def matches(s, filt):
+    """The filter clauses plan_queue builds: eval label =, != and IS NOT NULL, attribute equality, and a session.id
+    IN list (turn counts)."""
+    labels = {e["name"]: e["label"] for e in s["evaluations"]}
+    for name, op, value in re.findall(r"(?:session_eval|eval)\.(\w+)\.label (=|!=|IS NOT NULL)\s*(?:'([^']*)')?", filt):
+        got = labels.get(name)
+        if got is None or (op == "=" and got != value) or (op == "!=" and got == value):
+            return False
+    for key, value in re.findall(r"attributes\.(\w+) = '([^']*)'", filt):
+        if s["attributes"].get(key) != value:
+            return False
+    ids = re.search(r"attributes\.session\.id IN \(([^)]*)\)", filt)
+    if ids and s["attributes"]["session.id"] not in re.findall(r"'([^']*)'", ids.group(1)):
+        return False
+    return True
+
+
+def is_turn_count(filt):
+    return "session.id IN (" in filt
+
+
+class FakeAx:
+    """Answers the ax calls plan_queue makes from an in-memory list of spans."""
+
+    def __init__(self, spans, queues=None, missing_before=None, granularity="SESSION", template=""):
+        self.spans = spans
+        self.granularity = granularity
+        self.template = template
+        self.queues = queues or {}
+        self.missing_before = missing_before
+        self.filters = []
+        self.limits = []
+
+    def __call__(self, ax, args, allow_empty=False, retries=5):
+        if args[:2] == ["evaluators", "get"]:
+            return {"id": "ev-1", "name": "My Eval", "version": {"id": "v-1", "template_config": {
+                "name": "my_eval", "data_granularity": self.granularity, "template": self.template,
+                "classification_choices": {"good": 1, "bad": 0, "wrong": 0, "not_applicable": None}}}}
+        if args[:2] == ["projects", "get"]:
+            return {"id": "proj-1", "name": "prod"}
+        if args[:2] == ["annotation-queues", "get"]:
+            return {"id": args[2]}
+        if args[:2] == ["annotation-queues", "list-records"]:
+            return {"records": [{"data": {"attributes.session.id": s}} for s in self.queues.get(args[2], [])],
+                    "pagination": {"has_more": False}}
+        if args[:2] == ["spans", "export"]:
+            filt = args[args.index("--filter") + 1]
+            self.filters.append(filt)
+            lo = datetime.fromisoformat(args[args.index("--start-time") + 1])
+            hi = datetime.fromisoformat(args[args.index("--end-time") + 1])
+            if self.missing_before and hi <= self.missing_before:
+                raise plan.ColumnMissing("session_eval.my_eval.label")
+            limit = int(args[args.index("-l") + 1])
+            self.limits.append(limit)
+            hits = [s for s in self.spans if lo <= datetime.fromisoformat(s["start_time"]) < hi and matches(s, filt)]
+            return sorted(hits, key=lambda s: s["start_time"], reverse=True)[:limit]
+        raise AssertionError(f"unexpected ax call {args}")
+
+
+def run(monkeypatch, tmp_path, fake, *extra):
+    monkeypatch.setattr(plan, "run_ax", fake)
+    monkeypatch.setattr("sys.argv", ["plan_queue.py", "--space", "S", "--project", "prod", "--evaluator", "My Eval",
+                                     "--out-dir", str(tmp_path), "--root-filter", ROOT_FILTER,
+                                     "--start-time", START.isoformat(), "--end-time", END.isoformat(),
+                                     "--random", "0", *extra])
+    plan.main()
+    return json.loads((tmp_path / "plan.json").read_text())
+
+
+def plentiful(per_label=20, labels=("good", "bad", "wrong", "not_applicable"), hours=30):
+    """per_label spans for each label, spread over the window at distinct times."""
+    out = []
+    for li, label in enumerate(labels):
+        for i in range(per_label):
+            t = START + timedelta(hours=i * hours + li)
+            out.append(span(i, label, t, name="ROUTER-CHAT" if i % 2 else "ROUTER-SEARCH"))
+    return out
+
+
+def by_label(p):
+    out = {}
+    for r in p["records"]:
+        out.setdefault(r["sampled_as"], []).append(r)
+    return out
+
+
+# ---------------------------------------------------------------------------
+# sizing and balance
+# ---------------------------------------------------------------------------
+
+def test_quota_follows_the_sizing_formula(monkeypatch, tmp_path):
+    p = run(monkeypatch, tmp_path, FakeAx(plentiful()))
+    # 3 decisive labels: ceil(max(3, 10/3) / 0.7) = 5; not_applicable gets --na-count (2)
+    assert p["per_label_quota"] == 5
+    assert {k: len(v) for k, v in by_label(p).items()} == {"good": 5, "bad": 5, "wrong": 5, "not_applicable": 2}
+    assert all(s["shortfall"] == 0 for s in p["summary"])
+
+
+def test_higher_expected_exclusion_raises_the_quota(monkeypatch, tmp_path):
+    p = run(monkeypatch, tmp_path, FakeAx(plentiful()), "--expected-exclusion", "0.7")
+    assert p["per_label_quota"] == 12  # ceil(3.34 / 0.3)
+
+
+def test_shortfall_is_reported_not_filled_from_other_labels(monkeypatch, tmp_path):
+    spans = [s for s in plentiful() if s["evaluations"][0]["label"] != "wrong"]
+    spans += [span(i, "wrong", START + timedelta(days=i, minutes=7)) for i in range(2)]
+    p = run(monkeypatch, tmp_path, FakeAx(spans))
+    wrong = next(s for s in p["summary"] if s["label"] == "wrong")
+    assert (wrong["picked"], wrong["shortfall"]) == (2, 3)
+    assert len(by_label(p)["good"]) == 5
+    assert "Not enough candidates for: `wrong` (short 3)" in (tmp_path / "plan.md").read_text()
+
+
+def test_labels_flag_limits_sampling_for_a_top_up(monkeypatch, tmp_path):
+    p = run(monkeypatch, tmp_path, FakeAx(plentiful()), "--labels", "wrong", "--per-label", "4")
+    assert {k: len(v) for k, v in by_label(p).items()} == {"wrong": 4}
+
+
+# ---------------------------------------------------------------------------
+# dedupe, exclusions, filters
+# ---------------------------------------------------------------------------
+
+def test_one_record_per_session_and_excluded_queues_are_skipped(monkeypatch, tmp_path):
+    spans = plentiful()
+    # Two spans of one session: only the earlier one may be picked.
+    spans.append(span(99, "good", START + timedelta(minutes=1), session="s-good-0"))
+    fake = FakeAx(spans, queues={"old-q": ["s-good-1", "s-good-3"]})
+    p = run(monkeypatch, tmp_path, fake, "--exclude-queue", "old-q")
+    sessions = [r["session_id"] for r in p["records"]]
+    assert len(sessions) == len(set(sessions))
+    assert not {"s-good-1", "s-good-3"} & set(sessions)
+    picked = {r["session_id"]: r for r in p["records"]}
+    if "s-good-0" in picked:
+        assert picked["s-good-0"]["span_id"] == "sp-good-99"
+
+
+def test_root_filter_is_parenthesized_before_the_label_filter(monkeypatch, tmp_path):
+    fake = FakeAx(plentiful())
+    run(monkeypatch, tmp_path, fake, "--root-filter", "name = 'A' OR name = 'B'")
+    assert all(f.startswith("(name = 'A' OR name = 'B') AND ") for f in fake.filters)
+
+
+def test_window_is_drawn_from_every_slice(monkeypatch, tmp_path):
+    fake = FakeAx(plentiful())
+    run(monkeypatch, tmp_path, fake, "--skip-population")
+    assert len([f for f in fake.filters if not is_turn_count(f)]) == 4 * 4  # 4 labels x 4 slices
+
+
+def test_periods_without_the_column_are_skipped_and_listed(monkeypatch, tmp_path):
+    fake = FakeAx(plentiful(), missing_before=START + timedelta(days=8))
+    run(monkeypatch, tmp_path, fake)
+    assert "No values for an eval column in: 2026-09-01" in (tmp_path / "plan.md").read_text()
+
+
+def test_column_missing_everywhere_exits(monkeypatch, tmp_path):
+    with pytest.raises(SystemExit, match="No part of the window has values"):
+        run(monkeypatch, tmp_path, FakeAx(plentiful(), missing_before=END + timedelta(days=1)))
+
+
+# ---------------------------------------------------------------------------
+# disagreements and probes
+# ---------------------------------------------------------------------------
+
+def test_provider_disagreements_go_first_but_are_capped(monkeypatch, tmp_path):
+    spans = []
+    for label in ("good", "bad", "wrong", "not_applicable"):
+        for i in range(20):
+            t = START + timedelta(hours=i * 30) + timedelta(minutes=hash(label) % 50)
+            spans.append(span(i, label, t, compare="bad" if label == "good" else label))
+    p = run(monkeypatch, tmp_path, FakeAx(spans), "--compare-eval", "my_eval_anthropic")
+    good = by_label(p)["good"]
+    # All 20 good records disagree, so the cap (40% of 5 = 2) gives way only when nothing else is left.
+    assert len(good) == 5 and all(r["disagree"] for r in good)
+    spans = [s for s in spans if s["evaluations"][0]["label"] != "good"]
+    spans += [span(i, "good", START + timedelta(hours=i * 30, minutes=3), compare="bad" if i < 10 else "good")
+              for i in range(20)]
+    p = run(monkeypatch, tmp_path, FakeAx(spans), "--compare-eval", "my_eval_anthropic")
+    assert sum(r["disagree"] for r in by_label(p)["good"]) == 2
+
+
+def test_scope_probes_pick_records_the_other_evaluator_graded(monkeypatch, tmp_path):
+    spans = plentiful()
+    for i, s in enumerate(x for x in spans if x["evaluations"][0]["label"] == "not_applicable"):
+        s["evaluations"].append({"name": "v1_eval", "label": ["wrong", "good", "not_applicable"][i % 3]})
+    p = run(monkeypatch, tmp_path, FakeAx(spans), "--na-probe-eval", "v1_eval", "--na-probe-count", "4")
+    probes = [r for r in p["records"] if "probe" in r["sampled_as"]]
+    assert len(probes) == 4
+    assert {r["probe_label"] for r in probes} == {"wrong", "good"}
+    assert not {r["session_id"] for r in probes} & {r["session_id"] for r in by_label(p)["not_applicable"]}
+
+
+# ---------------------------------------------------------------------------
+# outputs
+# ---------------------------------------------------------------------------
+
+def test_record_sources_respect_arize_limits(monkeypatch, tmp_path):
+    p = run(monkeypatch, tmp_path, FakeAx(plentiful()))
+    sources = json.loads((tmp_path / "record_sources.json").read_text())
+    assert sum(len(s["session_ids"]) for s in sources) == len(p["records"])
+    for s in sources:
+        lo = datetime.fromisoformat(s["start_time"].replace("Z", "+00:00"))
+        hi = datetime.fromisoformat(s["end_time"].replace("Z", "+00:00"))
+        assert hi - lo <= timedelta(days=plan.SOURCE_MAX_DAYS)
+    files = sorted(f.name for f in tmp_path.glob("record_sources.*.json"))
+    batches = [json.loads((tmp_path / f).read_text()) for f in files]
+    assert all(len(b) <= plan.SOURCES_PER_CALL for b in batches)
+    assert sum(len(b) for b in batches) == len(sources)
+    assert "record_sources.create.json" in files
+
+
+def test_session_evaluators_get_session_records(monkeypatch, tmp_path):
+    # A session record shows and labels the whole session the evaluator graded, not one span of it.
+    p = run(monkeypatch, tmp_path, FakeAx(plentiful()), "--random", "5")
+    for name in ("record_sources.json", "random_sources.json"):
+        for s in json.loads((tmp_path / name).read_text()):
+            assert s["record_type"] == "SESSION" and "span_ids" not in s
+    planned = {r["session_id"] for r in p["records"]}
+    queued = {i for name in ("record_sources.json", "random_sources.json")
+              for s in json.loads((tmp_path / name).read_text()) for i in s["session_ids"]}
+    assert queued == planned
+    assert "SESSION sources" in (tmp_path / "plan.md").read_text()
+
+
+def test_span_evaluators_keep_span_records(monkeypatch, tmp_path):
+    p = run(monkeypatch, tmp_path, FakeAx(plentiful(), granularity="SPAN"))
+    sources = json.loads((tmp_path / "record_sources.json").read_text())
+    assert all(s["record_type"] == "SPAN" and "session_ids" not in s for s in sources)
+    assert {i for s in sources for i in s["span_ids"]} == {r["span_id"] for r in p["records"]}
+
+
+def test_session_calls_stay_within_100_session_ids():
+    t = START + timedelta(hours=1)
+    recs = [{"session_id": f"s{i}", "span_id": f"sp{i}", "start_time": (t + timedelta(minutes=i)).isoformat()}
+            for i in range(230)]
+    recs += [{"session_id": f"late{i}", "span_id": f"lsp{i}", "start_time": (t + timedelta(days=9, minutes=i)).isoformat()}
+             for i in range(30)]
+    sources, batches = plan.split_sources(recs, "proj-1", "SESSION")
+    assert all(len(s["session_ids"]) <= plan.SESSIONS_PER_CALL for s in sources)
+    assert all(len(b) <= plan.SOURCES_PER_CALL and sum(len(s["session_ids"]) for s in b) <= plan.SESSIONS_PER_CALL
+               for b in batches)
+    assert sorted(i for b in batches for s in b for i in s["session_ids"]) == sorted(r["session_id"] for r in recs)
+
+
+def test_stale_split_files_from_an_earlier_run_are_removed(monkeypatch, tmp_path):
+    (tmp_path / "record_sources.add_9.json").write_text("[]")
+    run(monkeypatch, tmp_path, FakeAx(plentiful()))
+    assert not (tmp_path / "record_sources.add_9.json").exists()
+
+
+def test_picks_with_identical_start_times_do_not_crash(monkeypatch, tmp_path):
+    t = START + timedelta(days=3)
+    spans = [span(i, label, t) for label in ("good", "bad", "wrong", "not_applicable") for i in range(6)]
+    p = run(monkeypatch, tmp_path, FakeAx(spans))
+    assert len(p["records"]) == 17
+
+
+def test_config_values_add_not_applicable_and_cannot_judge_once(monkeypatch, tmp_path):
+    run(monkeypatch, tmp_path, FakeAx(plentiful()))
+    assert json.loads((tmp_path / "config_values.json").read_text()) == [
+        "good", "bad", "wrong", "not_applicable", "cannot_judge"]
+
+
+def test_spread_pick_round_robins_across_span_names():
+    items = [{"span_name": "A", "i": i} for i in range(6)] + [{"span_name": "B", "i": i} for i in range(2)]
+    picked = plan.spread_pick(items, 4, random.Random(0))
+    assert sorted(p["span_name"] for p in picked) == ["A", "A", "B", "B"]
+    assert len(plan.spread_pick(items, 20, random.Random(0))) == 8
+
+
+def test_run_ax_maps_missing_column_and_retries_rate_limits(monkeypatch):
+    replies = [subprocess.CompletedProcess([], 1, "", "429 Too Many Requests"),
+               subprocess.CompletedProcess([], 1, "", 'column "session_eval.x.label" does not exist')]
+    monkeypatch.setattr(plan.subprocess, "run", lambda cmd, **_: replies.pop(0))
+    monkeypatch.setattr(plan.time, "sleep", lambda _: None)
+    with pytest.raises(plan.ColumnMissing):
+        plan.run_ax("ax", ["spans", "export"])
+
+
+# ---------------------------------------------------------------------------
+# strata and sizing modes
+# ---------------------------------------------------------------------------
+
+def test_strata_record_production_counts_and_selection_rates(monkeypatch, tmp_path):
+    p = run(monkeypatch, tmp_path, FakeAx(plentiful()))
+    strata = {s["stratum"]: s for s in p["strata"]}
+    assert strata["good"]["population"] == 20 and strata["good"]["picked"] == 5
+    assert strata["good"]["selection_rate"] == 0.25
+    assert strata["not_applicable"]["picked"] == 2
+    assert all(r["stratum"] in strata for r in p["records"])
+    assert "Strata (`report --plan plan.json`)" in (tmp_path / "plan.md").read_text()
+
+
+def test_provider_disagreements_are_their_own_stratum(monkeypatch, tmp_path):
+    spans = []
+    for label in ("good", "bad", "wrong", "not_applicable"):
+        for i in range(20):
+            t = START + timedelta(hours=i * 30, minutes=len(label))
+            spans.append(span(i, label, t, compare="bad" if (label == "good" and i < 5) else label))
+    fake = FakeAx(spans)
+    p = run(monkeypatch, tmp_path, fake, "--compare-eval", "my_eval_anthropic")
+    strata = {s["stratum"]: s for s in p["strata"]}
+    # Counted in full, not estimated from the candidate pool.
+    assert strata["good|disagree"]["population"] == 5 and strata["good|disagree"]["subgroup"] == "disagree"
+    assert any("my_eval_anthropic.label != 'good'" in f for f in fake.filters)
+    assert strata["good|agree"]["population"] == 15
+    assert strata["good|disagree"]["picked"] == 2 and strata["good|agree"]["picked"] == 3
+    assert {r["stratum"] for r in by_label(p)["good"]} == {"good|disagree", "good|agree"}
+
+
+def test_population_count_splits_periods_that_fill_a_page(monkeypatch, tmp_path):
+    spans = plentiful(per_label=6)
+    spans += [span(1000 + i, "good", START + timedelta(minutes=30 * i + 1)) for i in range(1200)]
+    fake = FakeAx(spans)
+    p = run(monkeypatch, tmp_path, fake)
+    good = next(s for s in p["strata"] if s["stratum"] == "good")
+    assert good["population"] == 1206 and not good["population_lower_bound"]
+    assert fake.limits.count(plan.PAGE) > 4  # the count bisected at least once
+
+
+def test_validation_mode_sizes_for_dev_and_test_splits(monkeypatch, tmp_path):
+    p = run(monkeypatch, tmp_path, FakeAx(plentiful(per_label=120, hours=5)), "--mode", "validation", "--pool", "800")
+    # 30 per label in each of dev and test after a 42.5% split is 71 gold; ceil(71 / 0.7) = 102 per label
+    assert p["per_label_quota"] == 102 and p["mode"] == "validation"
+    assert len(by_label(p)["good"]) == 102
+    assert "about 71.4 gold records per label" in (tmp_path / "plan.md").read_text()
+
+
+def test_directional_is_an_alias_for_discovery(monkeypatch, tmp_path):
+    p = run(monkeypatch, tmp_path, FakeAx(plentiful()), "--mode", "directional")
+    assert p["mode"] == "discovery" and p["per_label_quota"] == 5
+
+
+def test_probes_are_kept_out_of_weighting_strata(monkeypatch, tmp_path):
+    spans = plentiful()
+    for i, s in enumerate(x for x in spans if x["evaluations"][0]["label"] == "not_applicable"):
+        s["evaluations"].append({"name": "v1_eval", "label": "wrong"})
+    p = run(monkeypatch, tmp_path, FakeAx(spans), "--na-probe-eval", "v1_eval", "--na-probe-count", "3")
+    probes = [r for r in p["records"] if "probe" in r["sampled_as"]]
+    assert {r["stratum"] for r in probes} == {"probe:not_applicable probe vs v1_eval"}
+    # Probes have a stratum entry, with no population or frame, so they are never weighted.
+    st = next(s for s in p["strata"] if s["stratum"].startswith("probe:"))
+    assert st["population"] is None and st["frame"] is None and st["picked"] == 3
+
+
+# ---------------------------------------------------------------------------
+# intake
+# ---------------------------------------------------------------------------
+
+def later(per_label=6, labels=("good", "bad", "wrong", "not_applicable")):
+    """per_label spans for each label in the 3 days after END."""
+    return [span(100 + i, label, END + timedelta(hours=i * 10 + li + 1))
+            for li, label in enumerate(labels) for i in range(per_label)]
+
+
+class FakeAdd:
+    """Stands in for `ax annotation-queues add-records`; fails on the call numbers in fail_on."""
+
+    def __init__(self, fail_on=()):
+        self.calls, self.fail_on = [], set(fail_on)
+
+    def __call__(self, cmd, **_):
+        self.calls.append(cmd)
+        if len(self.calls) in self.fail_on:
+            return subprocess.CompletedProcess(cmd, 1, "", "500 Internal Server Error")
+        return subprocess.CompletedProcess(cmd, 0, "{}", "")
+
+
+def first_plan(monkeypatch, tmp_path, spans, *extra):
+    fake = FakeAx(spans)
+    p = run(monkeypatch, tmp_path, fake, *extra)
+    fake.queues["Q"] = [r["session_id"] for r in p["records"]]
+    return fake, p
+
+
+def intake(monkeypatch, tmp_path, fake, *extra, add=None, end=END + timedelta(days=3)):
+    monkeypatch.setattr(plan, "run_ax", fake)
+    monkeypatch.setattr(plan.subprocess, "run", add or FakeAdd())
+    argv = ["plan_queue.py", "--space", "S", "--intake", str(tmp_path / "plan.json"), "--queue", "Q", *extra]
+    if end:
+        argv += ["--end-time", end.isoformat()]
+    monkeypatch.setattr("sys.argv", argv)
+    plan.main()
+    return json.loads((tmp_path / "plan.json").read_text())
+
+
+def test_intake_samples_only_units_since_the_plan_with_their_own_strata(monkeypatch, tmp_path):
+    fake, first = first_plan(monkeypatch, tmp_path, plentiful() + later())
+    add = FakeAdd()
+    p = intake(monkeypatch, tmp_path, fake, "--per-label", "2", "--execute", add=add)
+    new = p["records"][len(first["records"]):]
+    assert new and all(datetime.fromisoformat(r["start_time"]) >= END for r in new)
+    assert {r["stratum"] for r in new} == {"good@intake-1", "bad@intake-1", "wrong@intake-1",
+                                            "not_applicable@intake-1"}
+    good = next(s for s in p["strata"] if s["stratum"] == "good@intake-1")
+    assert good["population"] == 6 and good["picked"] == 2 and good["period"] == "intake-1"
+    assert {r["period"] for r in new} == {"intake-1"} and {r["period"] for r in first["records"]} == {""}
+    assert p["strata"][:len(first["strata"])] == first["strata"]
+    assert p["intake_cursor"] == plan.parse_time((END + timedelta(days=3)).isoformat()).isoformat().replace(
+        "+00:00", "Z")
+    assert all(c[:4] == ["ax", "annotation-queues", "add-records", "Q"] for c in add.calls)
+    assert all(f"({ROOT_FILTER}) AND" in f for f in fake.filters)  # settings carried from the plan
+    assert (tmp_path / "intake-1" / "record_sources.add_1.json").exists()
+    assert not (tmp_path / "intake-1" / "record_sources.create.json").exists()
+
+
+def test_intake_dry_run_leaves_the_plan_unchanged(monkeypatch, tmp_path):
+    fake, first = first_plan(monkeypatch, tmp_path, plentiful() + later())
+    add = FakeAdd()
+    p = intake(monkeypatch, tmp_path, fake, add=add)
+    assert p == first and not add.calls
+    assert "Nothing has been created" in (tmp_path / "intake-1" / "plan.md").read_text()
+
+
+def test_a_second_intake_starts_at_the_cursor_and_skips_queued_units(monkeypatch, tmp_path):
+    fake, _ = first_plan(monkeypatch, tmp_path, plentiful() + later())
+    p1 = intake(monkeypatch, tmp_path, fake, "--execute", end=END + timedelta(days=1))
+    fake.queues["Q"] += [r["session_id"] for r in p1["records"]]
+    p2 = intake(monkeypatch, tmp_path, fake, "--execute")
+    assert [i["id"] for i in p2["intakes"]] == ["intake-1", "intake-2"]
+    assert p2["intakes"][1]["window"]["start"] == p1["intake_cursor"]
+    sessions = [r["session_id"] for r in p2["records"]]
+    assert len(sessions) == len(set(sessions))
+    second = [r for r in p2["records"] if r["stratum"].endswith("@intake-2")]
+    assert second and all(datetime.fromisoformat(r["start_time"]) >= END + timedelta(days=1) for r in second)
+
+
+def test_intake_without_end_time_leaves_the_settle_period(monkeypatch, tmp_path):
+    fake, _ = first_plan(monkeypatch, tmp_path, plentiful())
+    now = datetime.now(timezone.utc)
+    p = intake(monkeypatch, tmp_path, fake, "--execute", "--settle-hours", "6", end=None)
+    cursor = plan.parse_time(p["intake_cursor"])
+    assert timedelta(hours=5.9) < now - cursor < timedelta(hours=6.1)
+
+
+def test_intake_with_nothing_new_does_nothing(monkeypatch, tmp_path, capsys):
+    fake, first = first_plan(monkeypatch, tmp_path, plentiful())
+    assert intake(monkeypatch, tmp_path, fake, "--execute", end=END) == first
+    assert "Nothing to take in" in capsys.readouterr().out
+
+
+def test_intake_refuses_a_new_evaluator_version(monkeypatch, tmp_path):
+    fake, _ = first_plan(monkeypatch, tmp_path, plentiful() + later())
+    original = fake.__call__
+
+    class Bumped(FakeAx):
+        def __call__(self, ax, args, allow_empty=False, retries=5):
+            out = original(ax, args, allow_empty, retries)
+            if args[:2] == ["evaluators", "get"]:
+                out["version"]["id"] = "v-2"
+            return out
+
+    bumped = Bumped(fake.spans, fake.queues)
+    with pytest.raises(SystemExit, match="plan a new queue"):
+        intake(monkeypatch, tmp_path, bumped, "--execute")
+
+
+def test_a_failed_batch_records_only_the_added_records(monkeypatch, tmp_path):
+    fake, first = first_plan(monkeypatch, tmp_path, plentiful() + later(per_label=12, labels=("good",)) + [
+        span(500 + i, "bad", END + timedelta(days=2, hours=i)) for i in range(3)])
+    # Spans 8+ days apart land in separate sources, two per call, so this run needs two add-records calls.
+    fake.spans += [span(600 + d, "wrong", END + timedelta(days=10 * d)) for d in (1, 2, 3)]
+    add = FakeAdd(fail_on={2})
+    p = intake(monkeypatch, tmp_path, fake, "--per-label", "3", "--execute", add=add,
+               end=END + timedelta(days=32))
+    assert len(add.calls) == 2
+    run_ = p["intakes"][0]
+    assert run_["failed"] and run_["picked"] < run_["planned"]
+    new = p["records"][len(first["records"]):]
+    assert len(new) == run_["picked"] and p["intake_cursor"] == run_["window"]["end"]
+    for st in (s for s in p["strata"] if s.get("intake")):
+        assert st["picked"] == sum(1 for r in new if r["stratum"] == st["stratum"])
+    assert "add-records` failed" in (tmp_path / "intake-1" / "plan.md").read_text()
+
+
+def test_intake_needs_a_current_plan(monkeypatch, tmp_path):
+    (tmp_path / "plan.json").write_text(json.dumps({"evaluator_id": "ev-1", "project_id": "proj-1"}))
+    with pytest.raises(SystemExit, match="re-plan"):
+        intake(monkeypatch, tmp_path, FakeAx([]))
+
+
+# ---------------------------------------------------------------------------
+# random stream, routing reasons and signals
+# ---------------------------------------------------------------------------
+
+def test_random_stream_is_uniform_over_scored_units_with_a_known_rate(monkeypatch, tmp_path):
+    fake = FakeAx(plentiful())
+    p = run(monkeypatch, tmp_path, fake, "--random", "10")
+    rand = [r for r in p["records"] if r["routing_reason"] == "random"]
+    assert len(rand) == 10 and all(r["stream"] == "random" and r["stratum"] == "random" for r in rand)
+    st = next(s for s in p["strata"] if s["stratum"] == "random")
+    assert st["population"] == 80 and st["frame"] == 80 and st["selection_rate"] == 10 / 80
+    # Drawn with no filter on the evaluator's label values, only on it having scored the unit.
+    assert any(f == f"({ROOT_FILTER}) AND session_eval.my_eval.label IS NOT NULL" for f in fake.filters)
+    # Its own sources, for the calibration queue; never mixed into the targeted queue's sources.
+    rand_ids = {r["session_id"] for r in rand}
+    rs = json.loads((tmp_path / "random_sources.json").read_text())
+    ts = json.loads((tmp_path / "record_sources.json").read_text())
+    assert {i for s in rs for i in s["session_ids"]} == rand_ids
+    assert not rand_ids & {i for s in ts for i in s["session_ids"]}
+    assert (tmp_path / "random_sources.create.json").exists()
+    assert "Random stream (measurement): 10 records" in (tmp_path / "plan.md").read_text()
+
+
+def test_random_units_are_not_picked_again_by_the_targeted_stream(monkeypatch, tmp_path):
+    p = run(monkeypatch, tmp_path, FakeAx(plentiful(per_label=6)), "--random", "12")
+    sessions = [r["session_id"] for r in p["records"]]
+    assert len(sessions) == len(set(sessions))
+
+
+def test_random_frame_leaves_out_queued_units(monkeypatch, tmp_path):
+    spans = plentiful()
+    fake = FakeAx(spans, queues={"old": [s["attributes"]["session.id"] for s in spans[:30]]})
+    p = run(monkeypatch, tmp_path, fake, "--random", "5", "--exclude-queue", "old")
+    st = next(s for s in p["strata"] if s["stratum"] == "random")
+    assert st["population"] == 80 and st["frame"] == 50 and st["selection_rate"] == 5 / 50
+
+
+def test_discovery_mode_draws_30_random_records_by_default(monkeypatch, tmp_path):
+    monkeypatch.setattr(plan, "run_ax", FakeAx(plentiful()))
+    monkeypatch.setattr("sys.argv", ["plan_queue.py", "--space", "S", "--project", "prod", "--evaluator", "My Eval",
+                                     "--out-dir", str(tmp_path), "--start-time", START.isoformat(),
+                                     "--end-time", END.isoformat()])
+    plan.main()
+    p = json.loads((tmp_path / "plan.json").read_text())
+    assert sum(r["stream"] == "random" for r in p["records"]) == 30
+
+
+def test_no_random_stream_is_called_out(monkeypatch, tmp_path):
+    run(monkeypatch, tmp_path, FakeAx(plentiful()))
+    assert "No random stream" in (tmp_path / "plan.md").read_text()
+    assert not (tmp_path / "random_sources.json").exists()
+
+
+def test_every_targeted_record_has_a_routing_reason(monkeypatch, tmp_path):
+    spans = plentiful()
+    for s in spans[:3]:  # good, disagreeing with the provider copy
+        s["evaluations"].append({"name": "my_eval_anthropic", "label": "bad"})
+    for s in (x for x in spans if x["evaluations"][0]["label"] == "not_applicable"):
+        s["evaluations"].append({"name": "v1_eval", "label": "wrong"})
+    p = run(monkeypatch, tmp_path, FakeAx(spans), "--compare-eval", "my_eval_anthropic",
+            "--na-probe-eval", "v1_eval", "--na-probe-count", "2")
+    reasons = Counter(r["routing_reason"] for r in p["records"])
+    assert reasons["provider_disagreement"] == 2 and reasons["na_check"] == 2 and reasons["scope_probe"] == 2
+    assert reasons["label_stratum"] == 13
+    assert all(r["stream"] == "targeted" for r in p["records"])
+
+
+def test_signals_pick_by_a_judge_independent_filter_and_are_not_weighted(monkeypatch, tmp_path):
+    spans = plentiful()
+    for s in spans[::7]:
+        s["attributes"]["feedback"] = "down"
+    fake = FakeAx(spans)
+    p = run(monkeypatch, tmp_path, fake, "--signal", "thumbs_down=attributes.feedback = 'down'", "--signal-count", "3")
+    sig = [r for r in p["records"] if r["routing_reason"] == "signal:thumbs_down"]
+    assert len(sig) == 3 and all(r["stratum"] == "signal:thumbs_down" for r in sig)
+    st = next(s for s in p["strata"] if s["stratum"] == "signal:thumbs_down")
+    assert st["population"] is None and st["selection_rate"] is None and st["picked"] == 3
+    assert any("(attributes.feedback = 'down') AND session_eval.my_eval.label IS NOT NULL" in f for f in fake.filters)
+
+
+def test_bad_signal_spec_is_rejected(monkeypatch, tmp_path):
+    with pytest.raises(SystemExit):
+        run(monkeypatch, tmp_path, FakeAx(plentiful()), "--signal", "no-filter-here")
+
+
+def test_instructions_version_and_critique_config_are_recorded(monkeypatch, tmp_path):
+    p = run(monkeypatch, tmp_path, FakeAx(plentiful()), "--instructions-version", "v2 2026-10-14")
+    assert {r["instructions_version"] for r in p["records"]} == {"v2 2026-10-14"}
+    assert p["critique_config_name"] == "my_eval-critique"
+    md = (tmp_path / "plan.md").read_text()
+    assert "`my_eval-critique` (free text)" in md and "No `--instructions-version`" not in md
+    run(monkeypatch, tmp_path, FakeAx(plentiful()))
+    assert "No `--instructions-version`" in (tmp_path / "plan.md").read_text()
+
+
+def test_intake_adds_the_random_stream_to_the_calibration_queue(monkeypatch, tmp_path):
+    fake, first = first_plan(monkeypatch, tmp_path, plentiful() + later(), "--random", "5")
+    fake.queues["CAL"] = [r["session_id"] for r in first["records"] if r["stream"] == "random"]
+    add = FakeAdd()
+    p = intake(monkeypatch, tmp_path, fake, "--random-queue", "CAL", "--random", "4", "--per-label", "1",
+               "--execute", add=add)
+    new = p["records"][len(first["records"]):]
+    assert sum(r["stream"] == "random" for r in new) == 4
+    assert {c[3] for c in add.calls} == {"Q", "CAL"}
+    st = next(s for s in p["strata"] if s["stratum"] == "random@intake-1")
+    assert st["picked"] == 4 and st["selection_rate"] == 4 / st["frame"]
+    assert p["intakes"][0]["random_queue"] == "CAL"
+
+
+def test_intake_random_needs_its_queue(monkeypatch, tmp_path):
+    fake, _ = first_plan(monkeypatch, tmp_path, plentiful() + later())
+    with pytest.raises(SystemExit):
+        intake(monkeypatch, tmp_path, fake, "--random", "4")
+    with pytest.raises(SystemExit):
+        intake(monkeypatch, tmp_path, fake, "--random-queue", "CAL")
+
+
+def test_random_enumeration_supplies_label_counts_without_more_exports(monkeypatch, tmp_path):
+    spans = plentiful()
+    for s in spans[:4]:  # good, disagreeing with the provider copy
+        s["evaluations"].append({"name": "my_eval_anthropic", "label": "bad"})
+    fake = FakeAx(spans)
+    p = run(monkeypatch, tmp_path, fake, "--random", "10", "--compare-eval", "my_eval_anthropic")
+    st = {s["stratum"]: s for s in p["strata"]}
+    assert st["random"]["label_counts"] == {"good": 20, "bad": 20, "wrong": 20, "not_applicable": 20}
+    assert st["good|disagree"]["population"] == 4 and st["good|agree"]["population"] == 16
+    assert st["bad|agree"]["population"] == 20 and st["bad|disagree"]["population"] == 0
+    # Only the random enumeration ran at full page size; no per-label or disagreement counts.
+    full = [f for f, l in zip(fake.filters, fake.limits) if l == plan.PAGE and not is_turn_count(f)]
+    assert full and all(f.endswith("session_eval.my_eval.label IS NOT NULL") for f in full)
+
+
+# ---------------------------------------------------------------------------
+# turn cap
+# ---------------------------------------------------------------------------
+
+def with_turns(spans, session, n):
+    """Give a session n turns: its labeled span plus n - 1 unlabeled root spans after it."""
+    first = next(s for s in spans if s["attributes"]["session.id"] == session)
+    t = datetime.fromisoformat(first["start_time"])
+    return spans + [{"name": "ROUTER-CHAT", "start_time": (t + timedelta(minutes=i + 1)).isoformat(),
+                     "attributes": {"session.id": session}, "context": {"trace_id": f"{session}-t{i}",
+                     "span_id": f"{session}-sp{i}"}, "evaluations": []} for i in range(n - 1)]
+
+
+def long_bad_sessions(n_long=15, turns=41):
+    spans = plentiful()
+    for i in range(n_long):
+        spans = with_turns(spans, f"s-bad-{i}", turns)
+    return spans
+
+
+def test_sessions_over_the_turn_cap_are_skipped_by_default(monkeypatch, tmp_path):
+    p = run(monkeypatch, tmp_path, FakeAx(long_bad_sessions()))
+    assert p["max_turns"] == plan.DEFAULT_MAX_TURNS and p["settings"]["max_turns"] == plan.DEFAULT_MAX_TURNS
+    bad = [r for r in p["records"] if r["sampled_as"] == "bad"]
+    assert len(bad) == 5 and all(int(r["session_id"].rsplit("-", 1)[1]) >= 15 for r in bad)
+    assert all(r["turns"] == 1 for r in p["records"])
+    assert next(s for s in p["summary"] if s["label"] == "bad")["skipped_over_max_turns"] == 15
+    assert "cover sessions of up to 40 turns only" in (tmp_path / "plan.md").read_text()
+
+
+def test_a_session_at_the_cap_is_kept(monkeypatch, tmp_path):
+    spans = with_turns(plentiful(per_label=5), "s-bad-0", 40)
+    p = run(monkeypatch, tmp_path, FakeAx(spans), "--per-label", "5")
+    assert next(r for r in p["records"] if r["session_id"] == "s-bad-0")["turns"] == 40
+
+
+def test_turn_cap_off_counts_no_turns(monkeypatch, tmp_path):
+    fake = FakeAx(long_bad_sessions())
+    p = run(monkeypatch, tmp_path, fake, "--max-turns", "0")
+    assert p["max_turns"] is None and not any(is_turn_count(f) for f in fake.filters)
+    assert "No turn cap" in (tmp_path / "plan.md").read_text()
+
+
+def test_random_frame_and_label_counts_leave_out_long_sessions(monkeypatch, tmp_path):
+    p = run(monkeypatch, tmp_path, FakeAx(long_bad_sessions()), "--random", "10")
+    st = {s["stratum"]: s for s in p["strata"]}
+    assert st["random"]["population"] == 80 - 15 and st["random"]["max_turns"] == plan.DEFAULT_MAX_TURNS
+    assert st["random"]["label_counts"]["bad"] == 5 and st["bad"]["population"] == 5
+    assert p["random_stream"]["skipped_over_max_turns"] == 15
+    assert "15 of 80 scored sessions" in (tmp_path / "plan.md").read_text()
+
+
+def test_populations_without_a_random_stream_leave_out_long_sessions(monkeypatch, tmp_path):
+    p = run(monkeypatch, tmp_path, FakeAx(long_bad_sessions()))
+    st = {s["stratum"]: s for s in p["strata"]}
+    assert st["bad"]["population"] == 5 and st["good"]["population"] == 20
+
+
+def test_turn_counts_split_batches_that_fill_a_page(monkeypatch):
+    spans = []
+    for i in range(3):
+        spans += [span(i, "good", START + timedelta(minutes=j), session=f"s{i}") for j in range(300)]
+    fake = FakeAx(spans)
+    monkeypatch.setattr(plan, "run_ax", fake)
+    turns = plan.count_turns("ax", "proj-1", "S", ROOT_FILTER, {f"s{i}": START.isoformat() for i in range(3)})
+    assert turns == {"s0": 300, "s1": 300, "s2": 300}
+
+
+# ---------------------------------------------------------------------------
+# definition check
+# ---------------------------------------------------------------------------
+
+TEMPLATE = """Grade {conversation}. LAST_TURN_CHECK: Turn N
+- good: the answer is right and reached the user; validate_filter probes alone do not count.
+- bad: the answer is wrong.
+- wrong: the answer answers a different question.
+Evidence: the final turn."""
+
+
+def instructions(tmp_path, good):
+    path = tmp_path / "instructions.txt"
+    path.write_text("Instructions v3, 2026-10-19\n\nLabels:\n"
+                    f"- good: {good}\n- bad: the answer is wrong.\n- wrong: the answer answers a different question.\n"
+                    "Evidence: a filter block or a validate_filter call.\n")
+    return str(path)
+
+
+def test_definition_check_flags_a_label_the_instructions_define_differently(monkeypatch, tmp_path):
+    out = tmp_path / "plan"
+    f = instructions(tmp_path, "a filter reached the user, or Alyx called finalize_filter.")
+    p = run(monkeypatch, out, FakeAx(plentiful(), template=TEMPLATE), "--instructions-file", f, "--keep-stale")
+    check = p["definition_check"]
+    assert check["flagged"] == ["good"]
+    good = next(r for r in check["rows"] if r["label"] == "good")
+    assert good["template"].startswith("the answer is right") and "finalize_filter" in good["only_one_side"]
+    assert "validate_filter" in check["shared_terms"]
+    assert {r["instructions_version"] for r in p["records"]} == {"Instructions v3, 2026-10-19"}
+    md = (out / "plan.md").read_text()
+    assert "Flagged: `good`" in md and "candidate criterion question" in md
+
+
+def test_definition_check_passes_matching_definitions_and_notes_a_version_mismatch(monkeypatch, tmp_path):
+    out = tmp_path / "plan"
+    f = instructions(tmp_path, "the answer is right and reached the user; validate_filter probes alone do not count.")
+    p = run(monkeypatch, out, FakeAx(plentiful(), template=TEMPLATE), "--instructions-file", f, "--keep-stale",
+            "--instructions-version", "Instructions v2")
+    assert p["definition_check"]["flagged"] == []
+    assert "not the `--instructions-version` `Instructions v2`" in p["definition_check"]["notes"][0]
+    assert "No label flagged" in (out / "plan.md").read_text()
+
+
+def test_without_instructions_the_definition_check_is_reported_as_not_run(monkeypatch, tmp_path):
+    p = run(monkeypatch, tmp_path, FakeAx(plentiful()))
+    assert p["definition_check"] is None
+    assert "Definition check: not run" in (tmp_path / "plan.md").read_text()
+
+
+# ---------------------------------------------------------------------------
+# stale results
+# ---------------------------------------------------------------------------
+
+def stale_bad_sessions(n_stale=10, turns=3):
+    """plentiful() with n_stale bad sessions of `turns` turns whose stored result saw only turn 1."""
+    spans = plentiful()
+    for s in spans:
+        s["evaluations"][0]["explanation"] = "... LAST_TURN_CHECK: Turn 1"
+    for i in range(n_stale):
+        spans = with_turns(spans, f"s-bad-{i}", turns)
+    return spans
+
+
+def test_sessions_with_a_stale_stored_result_are_skipped(monkeypatch, tmp_path):
+    p = run(monkeypatch, tmp_path, FakeAx(stale_bad_sessions(), template=TEMPLATE), "--random", "10")
+    bad = [r for r in p["records"] if r["sampled_as"] == "bad"]
+    assert len(bad) == 5 and all(int(r["session_id"].rsplit("-", 1)[1]) >= 10 for r in bad)
+    assert not {r["session_id"] for r in p["records"]} & {f"s-bad-{i}" for i in range(10)}
+    assert p["stale_skipped"]["checked"] and p["stale_skipped"]["count"] == 10
+    assert p["stale_skipped"]["sessions"][0] == {"session_id": "s-bad-0", "last_turn_seen": 1, "turns": 3}
+    st = {s["stratum"]: s for s in p["strata"]}
+    assert st["random"]["population"] == 80 - 10 and st["bad"]["population"] == 10
+    md = (tmp_path / "plan.md").read_text()
+    assert "10 session(s) with a stale stored result were left out" in md and "`s-bad-0`" in md
+
+
+def test_keep_stale_keeps_them(monkeypatch, tmp_path):
+    p = run(monkeypatch, tmp_path, FakeAx(stale_bad_sessions(), template=TEMPLATE), "--keep-stale",
+            "--per-label", "20")
+    assert len([r for r in p["records"] if r["sampled_as"] == "bad"]) == 20
+    assert p["stale_skipped"] == {"checked": False, "count": 0, "sessions": []}
+    assert p["settings"]["keep_stale"] is True
+
+
+def test_no_marker_means_no_stale_check_and_no_turn_counts_when_uncapped(monkeypatch, tmp_path):
+    fake = FakeAx(stale_bad_sessions())
+    p = run(monkeypatch, tmp_path, fake, "--max-turns", "0")
+    assert not p["stale_skipped"]["checked"] and not any(is_turn_count(f) for f in fake.filters)
+    assert "the template doesn't report `LAST_TURN_CHECK`" in (tmp_path / "plan.md").read_text()
+
+
+def test_stale_check_counts_turns_even_with_the_cap_off(monkeypatch, tmp_path):
+    fake = FakeAx(stale_bad_sessions(), template=TEMPLATE)
+    p = run(monkeypatch, tmp_path, fake, "--max-turns", "0")
+    assert p["stale_skipped"]["count"] == 10 and any(is_turn_count(f) for f in fake.filters)
