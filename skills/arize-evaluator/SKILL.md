@@ -438,6 +438,7 @@ For cancelled runs (~1s or ~3min), wrong span kind, and column-mapping mismatche
 - **arize-dataset**: Export dataset examples to find input fields when runs omit them
 - **arize-prompts**: Manage prompt templates in the Prompt Hub; use with evaluators to score versioned prompts
 - **arize-link**: Deep links to evaluators and tasks in the Arize UI
+- **arize-align-evaluator**: Measure and improve an evaluator's agreement with human labels (annotation queues, span annotations, dataset label columns)
 
 ---
 
