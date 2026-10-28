@@ -62,10 +62,10 @@ The other evaluator only chooses records. Humans label blind, and its labels are
 | Mode | target_gold | min_per_class | Random | Use when |
 |---|---:|---:|---:|---|
 | `discovery` (default; `directional` is accepted as an alias) | 10 | 3 | 30 | A complete alignment: error analysis, criterion decisions and template fixes. It normally ends there, not in an agreement number |
-| `validation` | 142 | 71 | 100 | Optional: a measured agreement number or a ship gate |
+| `validation` | 72 | 36 | 100 | Optional: a measured agreement number or a ship gate |
 
 - **Discovery.** Each label gets about 3.5–5.6 gold records, which is a smoke test: 5/5 agreement still has a 95% interval of about 57–100%. The 30 random records are for an expert to read and open-code: note the first failure in each, group the notes into failure modes, and check the rubric against them before scaling up.
-- **Validation.** The evaluator report splits gold records 15% train, 42.5% dev and 42.5% test within each human label, and tests once. 30 per label in each of dev and test needs 30 / 0.425 ≈ 71 gold records per label. Below about 60 records, intervals are too wide to separate a good judge from a mediocre one.
+- **Validation.** The evaluator report splits a tuning batch 15% train and 85% dev within each human label, and tests only on a separate batch labeled after the template change. 30 per label in dev needs 30 / 0.85 ≈ 36 gold records per label, and the later test batch needs 30. A measured run uses this size twice: once for the tuning batch, and once, built from the switch time with the earlier queues excluded, for the test batch. Below about 60 records, intervals are too wide to separate a good judge from a mediocre one.
 
 ```
 per_label = ceil( max(min_per_class, target_gold / k) / (1 - expected_exclusion) )
@@ -74,7 +74,7 @@ per_label = ceil( max(min_per_class, target_gold / k) / (1 - expected_exclusion)
 - `k` is the number of decisive labels: the evaluator's choices minus not-applicable.
 - `expected_exclusion` (default 0.30, an Arize heuristic) is the share humans will mark not applicable or cannot judge. Use the real rate from an earlier queue when one exists. A previous queue that lost 70% of its records to exclusions should not be planned at 30%.
 
-Example: 3 decisive labels gives `ceil(max(3, 3.33) / 0.7)` = 5 per label in discovery mode. With 2 not-applicable checks and 30 random records, that is 47 records. In validation mode it is `ceil(max(71, 47.3) / 0.7)` = 102 per label, plus the 100 random records.
+Example: 3 decisive labels gives `ceil(max(3, 3.33) / 0.7)` = 5 per label in discovery mode. With 2 not-applicable checks and 30 random records, that is 47 records. In validation mode it is `ceil(max(36, 24) / 0.7)` = 52 per label, plus the 100 random records.
 
 ## Strata and weights
 

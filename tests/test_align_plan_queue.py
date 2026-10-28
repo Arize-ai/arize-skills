@@ -354,12 +354,12 @@ def test_population_count_splits_periods_that_fill_a_page(monkeypatch, tmp_path)
     assert fake.limits.count(plan.PAGE) > 4  # the count bisected at least once
 
 
-def test_validation_mode_sizes_for_dev_and_test_splits(monkeypatch, tmp_path):
+def test_validation_mode_sizes_for_thirty_in_dev(monkeypatch, tmp_path):
     p = run(monkeypatch, tmp_path, FakeAx(plentiful(per_label=120, hours=5)), "--mode", "validation", "--pool", "800")
-    # 30 per label in each of dev and test after a 42.5% split is 71 gold; ceil(71 / 0.7) = 102 per label
-    assert p["per_label_quota"] == 102 and p["mode"] == "validation"
-    assert len(by_label(p)["good"]) == 102
-    assert "about 71.4 gold records per label" in (tmp_path / "plan.md").read_text()
+    # 30 per label in an 85% dev split is 36 gold; ceil(36 / 0.7) = 52 per label
+    assert p["per_label_quota"] == 52 and p["mode"] == "validation"
+    assert len(by_label(p)["good"]) == 52
+    assert "about 36.4 gold records per label" in (tmp_path / "plan.md").read_text()
 
 
 def test_directional_is_an_alias_for_discovery(monkeypatch, tmp_path):

@@ -62,12 +62,14 @@ from datetime import datetime, timedelta, timezone
 GRANULARITY_PREFIX = {"SPAN": "eval", "TRACE": "trace_eval", "SESSION": "session_eval"}
 UNSCORABLE = ["cannot_judge"]
 
-# Sizing modes. "discovery" is enough to start: error analysis on the random stream (30+ traces read by a
-# human) and a first alignment pass. It is not a measurement. "validation" puts 30 gold records per label in
-# each of dev and test after the evaluator report's 15/42.5/42.5 split (30 / 0.425 ≈ 71 per label), and a
-# 100-record random stream for agreement, human-human agreement and the alternative annotator test.
+# Sizing modes. "discovery" is enough for a complete alignment: error analysis on the random stream (30+
+# traces read by a human), criterion decisions and template fixes. It is not a measurement. "validation" is
+# for the optional measured run: 30 scored gold records per label in its role, and a 100-record random stream
+# for agreement, human-human agreement and corrected production rates. The evaluator report splits a tuning
+# batch 15% train / 85% dev and tests only on a separate batch labeled after the change, so 30 in dev needs
+# 30 / 0.85 ≈ 36 per label. The same size covers the later test batch, which needs 30.
 SIZING = {"discovery": {"target_gold": 10, "min_per_class": 3, "random": 30},
-          "validation": {"target_gold": 142, "min_per_class": 71, "random": 100}}
+          "validation": {"target_gold": 72, "min_per_class": 36, "random": 100}}
 MODE_ALIASES = {"directional": "discovery"}  # the old name for discovery
 EXPECTED_EXCLUSION = 0.30
 DEFAULT_MAX_TURNS = 40  # longer sessions take far longer to label (about 15 seconds a turn)

@@ -93,7 +93,7 @@ python3 SKILL_ROOT/scripts/plan_queue.py \
 
 - `--mode` sets the size ([Sizing](references/sampling.md#sizing)). Ask the user which they need; validation is several times larger.
   - `discovery` (default): about 10 gold targeted records and 30 random ones. Enough for a complete alignment: error analysis, criterion decisions and a batch of template fixes. It can't produce a measured agreement number.
-  - `validation`: only for the optional measured run, when the user needs to quote agreement or gate a release. 30 gold per label in each of dev and test (102 per label at the default exclusion rate) and 100 random records.
+  - `validation`: only for the optional measured run, when the user needs to quote agreement or gate a release. About 36 scored gold records per label (52 queued at the default exclusion rate), enough for 30 in dev, and 100 random records. Build it once for the tuning batch and again, after the change, for the test batch.
 - `--random N` overrides the random stream's size; `--random 0` turns it off, and then nothing in the plan can measure agreement. Size it from the interval needed, not a share of traffic.
 - `--root-filter` makes each candidate a single entry-point span, for example `attributes.is_copilot_root_span = 'true'`, or `parent_id` being null. Ask the user, or derive it from the task's filters. Without it, child spans of one session compete with each other as candidates.
 - `--compare-eval` is the `template_config.name` of another copy of the evaluator. Disagreements between the copies are picked first, up to 40% of each label's quota, and counted in full as their own stratum.
