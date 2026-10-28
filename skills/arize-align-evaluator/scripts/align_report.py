@@ -944,7 +944,9 @@ def render(r):
           "criterion" in b["source"] for b in r["blockers"]) else "") + "\n")
 
     if r["discovery"]:
-        w("A discovery round normally ends in a criterion decision and template edits, not a measured number.\n")
+        w("A discovery round normally ends in a criterion decision and template edits, not a measured number. "
+          "Provisional describes the number, not the alignment: it is complete once the disagreements are read, "
+          "criterion questions decided and approved fixes written.\n")
 
     if r["warnings"]:
         w("## Warnings\n")

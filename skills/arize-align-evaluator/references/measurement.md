@@ -19,7 +19,7 @@ There are no verdict tiers. A judge is **measured** only when every condition be
 - **Provisional:** report every number with its interval and don't claim a target. Fix criterion, scope and queue problems first, then make at most one batch of template fixes. Don't tune prompt by prompt: on small sets that overfits (Dwork; SPEAR).
 - **Measured:** the revise loop and the ship gate apply. See [revision.md](revision.md).
 
-Most judges stay provisional at discovery scale (about 30 random records). That's expected: a discovery round normally ends in a criterion decision and template edits, not a measured number. The numbers are still worth reading, with their intervals.
+Most judges stay provisional at discovery scale (about 30 random records). That's expected, and it doesn't mean the alignment failed: a discovery-size pass is complete once its disagreements are read, its criterion questions decided and its fixes written. It normally ends in a criterion decision and template edits, not a measured number. The numbers are still worth reading, with their intervals.
 
 ## Warnings
 

@@ -878,6 +878,7 @@ def test_discovery_round_collapses_the_size_blocker(tmp_path):
     size = next(b for b in r["blockers"] if b["condition"].startswith("Size"))
     assert size["value"] == "discovery round: provisional by design"
     assert "normally ends in a criterion decision and template edits" in align.render(r)
+    assert "Provisional describes the number, not the alignment" in align.render(r)
     assert "dev" in next(b for b in build(tmp_path, usable_records())["blockers"]
                          if b["condition"].startswith("Size"))["value"]
 

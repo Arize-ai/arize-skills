@@ -6,7 +6,7 @@ Use this structure when presenting to the user at the stop point. Keep it short;
 
 - **Judge version:** the evaluator version, prompt hash, model, rubric version (from the commit message) and admission filter.
 - **Status: provisional or measured.** For each blocker, give one plain sentence: what it is, its value and its source. For example, "10 of 29 calibration sessions were scored before they ended (SOP rule 3); re-score them with the current version."
-- **What the status allows,** in one line. For a discovery round, say it normally ends in a criterion decision and template edits, not a measured number.
+- **What the status allows,** in one line. For a discovery-size pass, say the alignment can still be completed: it normally ends in a criterion decision and template edits, not a measured number, and a measured number is an optional later run.
 
 ## 2. Human labels
 

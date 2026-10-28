@@ -46,9 +46,9 @@ Tell the user before writing the version:
 
 Make a copy with its own `template_config.name` only when the user wants old and new scored side by side on the same records before live traffic changes. Delete it after the ship gate, so it doesn't clutter the space.
 
-## Validation stage: test batch and ship gate
+## Optional: a measured number and the ship gate
 
-This applies once a judge is past discovery: several batches of edits, and a batch that can be labeled after freezing.
+The alignment is complete without this. Use it only when the user needs a measured agreement number or a gate before a release, and a batch can be labeled after freezing. The user starts that batch; it's a separate labeling run.
 
 1. **Batch, and look at dev once per batch.** Combine several edits into one version, then score dev once. Add `--ledger looks.json` to each `compare`: it counts the looks and warns past `--look-budget` (default 5, an Arize heuristic; Dwork).
 2. **Reproduce check.** Summarize the change in 2–3 sentences. Give a fresh agent only the baseline template and that summary, never the dev records, and have it write its own version. Score it on dev. If it doesn't reproduce most of the gain, the gain came from fitting the records (Bertran, Roth, Wu).

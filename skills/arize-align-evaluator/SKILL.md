@@ -29,7 +29,9 @@ Every rule cites a source in [references/sources.md](references/sources.md), or 
 
 It also gives heuristic **warnings** with their basis, and the numbers with intervals, test batch first.
 
-**A discovery round normally ends in a criterion decision and template edits, not a measured number.** Its queues are sized for error analysis (about 30 random and 10 targeted records), so the status stays provisional by design. Expect the round to settle what each label means and produce one batch of template fixes; measurement comes from a later batch labeled after the template is frozen.
+**An alignment succeeds at any queue size.** It's complete when every disagreement has been read, every criterion question is decided, and the approved fixes are written as a new evaluator version, or no change was needed. A discovery-size pass (about 30 random and 10 targeted records) normally ends exactly this way, in a criterion decision and one batch of template fixes.
+
+The status (`provisional` or `measured`) says how far the agreement number can be trusted, not whether the alignment worked. A discovery-size pass stays provisional by design: it improves the judge but can't prove the improvement with a number, because the fix was written from the same sessions. A measured number, and the ship gate, are optional. They need a batch labeled after the change, which the user starts only when they need to quote agreement or gate a release (Phase 5, step 5).
 
 For creating evaluators, tasks and runs in general, use **arize-evaluator**. For building the queues this skill measures, use **arize-align-queue-builder**.
 
@@ -191,7 +193,7 @@ Approval must name the change. Then, editing the evaluator in place:
    It saves the current version for rollback, changes only the template, reads the version back and compares every field, and prints the **switch time** (the new version's `created_at`). It warns when the current version sets a model setting such as temperature: the API drops those on every write, so set them again in the Arize UI afterwards. The commit message is the changelog ([Changelog](references/changing-evaluators.md#changelog)). Run `--execute` with the Python that runs `ax`; the script says how.
 3. **Re-score the gold sessions** with a one-off, non-continuous task, filtered to those session IDs. Then re-run the report with `--rescored-at RUN_START`, and once more unchanged to see the noise floor. After a criterion change, this only shows the rule took effect.
 4. **The tuning batch is dev.** Check each edit with `lint`, and look at dev once per batch.
-5. **Freeze, then test on a later batch** labeled after the switch, and run the ship gate. That's the validation stage; its gate, look ledger, second judge model and reproduce check are in [references/revision.md](references/revision.md#validation-stage-test-batch-and-ship-gate).
+5. **Optional: a measured number.** The alignment is complete after step 4. Only when the user needs to quote agreement or gate a release: freeze, label a later batch after the switch, and run the ship gate. Its gate, look ledger, second judge model and reproduce check are in [references/revision.md](references/revision.md#optional-a-measured-number-and-the-ship-gate). Don't start that batch yourself.
 
 Every step and the meta-prompt for drafting revisions are in [references/revision.md](references/revision.md). Read [references/changing-evaluators.md](references/changing-evaluators.md) before writing any version.
 
