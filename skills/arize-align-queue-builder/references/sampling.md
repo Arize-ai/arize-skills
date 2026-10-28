@@ -61,8 +61,8 @@ The other evaluator only chooses records. Humans label blind, and its labels are
 
 | Mode | target_gold | min_per_class | Random | Use when |
 |---|---:|---:|---:|---|
-| `discovery` (default; `directional` is accepted as an alias) | 10 | 3 | 30 | Error analysis and a first alignment pass; it normally ends in a criterion decision and template edits, not an agreement number |
-| `validation` | 142 | 71 | 100 | Supporting an agreement claim (a measured status) |
+| `discovery` (default; `directional` is accepted as an alias) | 10 | 3 | 30 | A complete alignment: error analysis, criterion decisions and template fixes. It normally ends there, not in an agreement number |
+| `validation` | 142 | 71 | 100 | Optional: a measured agreement number or a ship gate |
 
 - **Discovery.** Each label gets about 3.5–5.6 gold records, which is a smoke test: 5/5 agreement still has a 95% interval of about 57–100%. The 30 random records are for an expert to read and open-code: note the first failure in each, group the notes into failure modes, and check the rubric against them before scaling up.
 - **Validation.** The evaluator report splits gold records 15% train, 42.5% dev and 42.5% test within each human label, and tests once. 30 per label in each of dev and test needs 30 / 0.425 ≈ 71 gold records per label. Below about 60 records, intervals are too wide to separate a good judge from a mediocre one.

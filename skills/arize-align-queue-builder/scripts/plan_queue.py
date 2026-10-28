@@ -836,7 +836,7 @@ def main():
          else None),
         f"- Sizing mode `{a.mode}`: per-label quota {per} = max({a.min_per_class}, {a.target_gold}/{k}) / "
         f"(1 − {a.expected_exclusion:.0%} expected exclusions), about {per * (1 - a.expected_exclusion):.1f} gold "
-        "records per label" + (" (enough to start aligning, not to validate; use `--mode validation` for that). "
+        "records per label" + (" (enough for a complete alignment; a measured agreement number needs `--mode validation`). "
                                 "A discovery round normally ends in a criterion decision and template edits, not an "
                                 "agreement number" if a.mode == "discovery" else "") + "\n",
     ]

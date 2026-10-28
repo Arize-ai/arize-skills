@@ -92,8 +92,8 @@ python3 SKILL_ROOT/scripts/plan_queue.py \
 ```
 
 - `--mode` sets the size ([Sizing](references/sampling.md#sizing)). Ask the user which they need; validation is several times larger.
-  - `discovery` (default): about 10 gold targeted records and 30 random ones. Enough for error analysis and a first alignment pass, not to validate.
-  - `validation`: 30 gold per label in each of dev and test (102 per label at the default exclusion rate) and 100 random records.
+  - `discovery` (default): about 10 gold targeted records and 30 random ones. Enough for a complete alignment: error analysis, criterion decisions and a batch of template fixes. It can't produce a measured agreement number.
+  - `validation`: only for the optional measured run, when the user needs to quote agreement or gate a release. 30 gold per label in each of dev and test (102 per label at the default exclusion rate) and 100 random records.
 - `--random N` overrides the random stream's size; `--random 0` turns it off, and then nothing in the plan can measure agreement. Size it from the interval needed, not a share of traffic.
 - `--root-filter` makes each candidate a single entry-point span, for example `attributes.is_copilot_root_span = 'true'`, or `parent_id` being null. Ask the user, or derive it from the task's filters. Without it, child spans of one session compete with each other as candidates.
 - `--compare-eval` is the `template_config.name` of another copy of the evaluator. Disagreements between the copies are picked first, up to 40% of each label's quota, and counted in full as their own stratum.
@@ -124,7 +124,7 @@ Show the user:
   - In `discovery` mode one domain expert labels the random records.
 - the queue names, for example `<evaluator> calibration (YYYY-MM-DD)` and `<evaluator> gold (YYYY-MM-DD)`, and the config names from `plan.md` (Arize caps them at 40 characters)
 - when the records came from a backfill, the column **arize-align-evaluator** will compare against: the backfill copy's `*_backfill` column, not the live one, because the live task never scored these sessions
-- the sizing mode and the expected gold per label; in discovery mode, say that the queues can start an alignment but not validate one, and that a discovery round normally ends in a criterion decision and template edits, not an agreement number
+- the sizing mode and the expected gold per label; in discovery mode, say that the queues support a complete alignment, which normally ends in a criterion decision and template edits, and that a measured agreement number needs the optional validation-size run
 - the caveats:
   - Agreement comes from the calibration queue. Targeted records cover every label, and agreement within a stored label is only that label's precision. Without disagreements or signals, they barely test errors hidden inside a common label.
   - Labelers must stay blind; the Annotator Columns step is manual.
