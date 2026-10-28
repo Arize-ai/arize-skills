@@ -1,7 +1,7 @@
 {
   "name": "arize-skills",
   "displayName": "Arize AX",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "Query Arize AX projects, traces, datasets, and experiments from Antigravity, with skills for tracing, evals, and prompt optimization.",
   "logo": "assets/logo.svg",
   "suggestedPrompts": [
