@@ -1,12 +1,5 @@
 # Changelog
 
-## [1.2.1](https://github.com/Arize-ai/arize-skills/compare/v1.2.0...v1.2.1) (2026-10-28)
-
-
-### Bug Fixes
-
-* **antigravity:** declare MCP variables per server so ARIZE_API_KEY is prompted ([#167](https://github.com/Arize-ai/arize-skills/issues/167))
-
 ## [1.2.0](https://github.com/Arize-ai/arize-skills/compare/v1.1.0...v1.2.0) (2026-07-29)
 
 
