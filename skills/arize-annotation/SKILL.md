@@ -350,6 +350,7 @@ See the linked skills for file format details.
 - **arize-experiment**: Experiments tied to datasets and evaluation workflows; batch annotate runs via `ax experiments annotate-runs`
 - **arize-prompts**: Manage prompt templates; annotate prompt outputs for quality tracking
 - **arize-link**: Deep links to annotation configs and queues in the Arize UI
+- **arize-align-queue-builder**: Design and create a queue sampled and sized for aligning a specific evaluator
 
 ---
 
