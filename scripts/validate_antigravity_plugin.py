@@ -154,7 +154,8 @@ def main(root):
     servers = cfg.get("mcpServers", {})
     if not servers:
         err("mcp config has no mcpServers")
-    declared = {v.get("name") for v in cfg.get("variables", [])}
+    if cfg.get("variables"):
+        err("top-level 'variables' is ignored by Antigravity; declare them inside each mcpServers entry")
     for key, s in servers.items():
         if not NAME_RE.match(key):
             warn(f"server key '{key}' is not kebab-case")
@@ -163,16 +164,18 @@ def main(root):
                 err(f"{key}: serverUrl must be https")
         elif "command" not in s:
             err(f"{key}: needs serverUrl or command")
-        used = set(VAR_RE.findall(json.dumps(s))) - RUNTIME_VARS
+        server_vars = s.get("variables", [])
+        declared = {v.get("name") for v in server_vars}
+        used = set(VAR_RE.findall(json.dumps({k: val for k, val in s.items() if k != "variables"}))) - RUNTIME_VARS
         for v in used - declared:
-            err(f"{key}: ${{{v}}} used but not declared in variables")
+            err(f"{key}: ${{{v}}} used but not declared in this server's variables")
+        for v in server_vars:
+            if not v.get("title"):
+                warn(f"{key}: variable {v.get('name')} has no title")
+            if "KEY" in v.get("name", "") or "TOKEN" in v.get("name", ""):
+                if not v.get("secret"):
+                    err(f"{key}: variable {v.get('name')} looks like a secret but secret is not true")
         print(f"MCP server: {name}-{key}")
-    for v in cfg.get("variables", []):
-        if not v.get("title"):
-            warn(f"variable {v.get('name')} has no title")
-        if "KEY" in v.get("name", "") or "TOKEN" in v.get("name", ""):
-            if not v.get("secret"):
-                err(f"variable {v.get('name')} looks like a secret but secret is not true")
 
 
 if __name__ == "__main__":
