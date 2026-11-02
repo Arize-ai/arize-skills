@@ -1,6 +1,6 @@
 ---
 name: arize-ai-provider-integration
-description: Creates, reads, updates, and deletes Arize AI integrations that store LLM provider credentials used by evaluators and other Arize features. Supports any LLM provider (e.g. OpenAI, Anthropic, Azure OpenAI, AWS Bedrock, Vertex AI, Gemini, NVIDIA NIM, Fireworks AI, Together AI). Use when the user mentions AI integration, LLM provider credentials, create integration, list integrations, update credentials, delete integration, or connecting an LLM provider to Arize.
+description: Creates, reads, updates, and deletes Arize AI integrations that store LLM provider credentials used by evaluators and other Arize features. Supports the LLM providers in the `--provider` enum (e.g. OpenAI, Anthropic, Azure OpenAI, AWS Bedrock, Vertex AI, Gemini, NVIDIA NIM, Fireworks AI, Together AI). Use when the user mentions AI integration, LLM provider credentials, create integration, list integrations, update credentials, delete integration, or connecting an LLM provider to Arize.
 metadata:
   author: arize
   version: "1.0"
@@ -114,6 +114,8 @@ For a provider's full example and notes (Bedrock/Vertex metadata, base URLs, fla
 
 ### Supported Providers
 
+The table covers providers with provider-specific flags or notes. Run `ax ai-integrations create --help` for the full `--provider` enum.
+
 | Provider | Required extra flags ("model source" = `--enable-default-models` or `--model-name`) | Key env var | Details |
 |----------|---------------------|-------------|---------|
 | `OPEN_AI` | `--api-key <key>`, model source | `$OPENAI_API_KEY` | [provider-openai.md](references/provider-openai.md) |
@@ -159,7 +161,7 @@ ax ai-integrations update NAME_OR_ID --base-url "https://new-endpoint.example.co
 
 # Restrict visibility to specific spaces (full replace — lists all spaces that should have access)
 ax ai-integrations update NAME_OR_ID \
-  --scopings '[{"space_id": "SPACE_GLOBAL_ID", "scoping_type": "include"}]'
+  --scopings '[{"space_id": "SPACE_GLOBAL_ID"}]'
 ```
 
 Add `--space SPACE` when using a name instead of ID. Any flag accepted by `create` can be passed to `update`.
@@ -189,7 +191,7 @@ Omit `--force` to get a confirmation prompt instead of deleting immediately.
 - **`create llm` provider flags differ** from `ax ai-integrations create`: Bedrock and Vertex AI take dedicated flags instead of `--provider-metadata`. Run `ax integrations create llm --help` for the per-provider list.
 - **Agent endpoints:** use `ax integrations create agent` to register an agent endpoint; run its `--help` for flags.
 - **Provider is immutable** in `ax integrations update llm`; delete and recreate to change it.
-- **`--type`:** `list` returns every type merged; filter with `--type LLM` or `--type AGENT`. `get` and `delete` by name need `--type` because names are unique only per type; IDs work without it.
+- **`--type`:** `list` returns every type merged; filter with `--type LLM`, `--type AGENT`, or `--type EVALUATOR`. `get` and `delete` by name need `--type` because names are unique only per type; IDs work without it.
 
 ---
 

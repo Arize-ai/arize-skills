@@ -82,17 +82,17 @@ Confirm the API key and region are correct, then retry the original command.
 
 ## Space
 
-There is no profile flag for space. Save it as an environment variable — accepts a space **name** (e.g., `my-workspace`) or a base64 space **ID** (e.g., `U3BhY2U6...`). Find yours with `ax spaces list -o json`.
+Profiles store the API key, region, and endpoints; the space is supplied separately. Pass it per command with `--space` (accepts a space name or base64 space ID). The bundled importer script reads the space from the `ARIZE_SPACE_ID` environment variable; set it to the base64 space **ID** (e.g., `U3BhY2U6...`). Resolve a known name to its ID with `ax spaces get NAME -o json` (`ax spaces list -o json` is for human browsing).
 
 **macOS/Linux** — add to `~/.zshrc` or `~/.bashrc`:
 ```bash
-export ARIZE_SPACE="my-workspace"    # name or base64 ID
+export ARIZE_SPACE_ID="U3BhY2U6..."    # base64 space ID
 ```
 Then `source ~/.zshrc` (or restart terminal).
 
 **Windows (PowerShell):**
 ```powershell
-[System.Environment]::SetEnvironmentVariable('ARIZE_SPACE', 'my-workspace', 'User')
+[System.Environment]::SetEnvironmentVariable('ARIZE_SPACE_ID', 'U3BhY2U6...', 'User')
 ```
 Restart terminal for it to take effect.
 
@@ -102,7 +102,7 @@ At the **end of the session**, if the user manually provided any credentials dur
 
 **Skip this entirely if:**
 - The API key was already loaded from an existing profile or `ARIZE_API_KEY` env var
-- The space was already set via `ARIZE_SPACE` env var
+- The space was already set via `ARIZE_SPACE_ID` env var
 - The user only used base64 project IDs (no space was needed)
 
 **How to offer:** Use **AskQuestion**: *"Would you like to save your Arize credentials so you don't have to enter them next time?"* with options `"Yes, save them"` / `"No thanks"`.

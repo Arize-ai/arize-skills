@@ -69,7 +69,7 @@ For all flags, run `ax datasets get --help`.
 
 ## Export Dataset: `ax datasets export`
 
-Download examples to a file. By default, export returns one page of examples (`--limit` sets the page size, `--cursor` selects a later page). Pass `--all` to export the full dataset. Use `--filter` for server-side narrowing with a SQL-like expression over example columns, `id`, and `annotation.<name>.*`; `--filter` is not supported with `--all`.
+Download examples to a file. By default, export returns one page of examples (`--limit` caps how many examples are exported and defaults to the SDK's page size; `--cursor` selects a later page; both are ignored with `--all`). Pass `--all` to export the full dataset. Use `--filter` for server-side narrowing with a SQL-like expression over example columns, `id`, and `annotation.<name>.*`; `--filter` is not supported with `--all`.
 
 ```bash
 ax datasets export NAME_OR_ID
@@ -210,7 +210,7 @@ Fields are free-form: extra fields in new examples are added, and missing fields
 
 ## Update Examples: `ax datasets update-examples`
 
-`ax datasets update-examples` patches rows by example `id`; `ax datasets delete-examples` removes rows from one version and requires `--version-id` plus `--example-ids` as a JSON array of example IDs. Uncommon — run `ax datasets update-examples --help` or `ax datasets delete-examples --help` for flags and input formats.
+`ax datasets update-examples` patches rows by example `id`, updating the selected version in place by default; pass `--new-version NAME` to capture the update as a new dataset version instead. `ax datasets delete-examples` removes rows from one version and requires `--version-id` plus `--example-ids` as a JSON array of example IDs. Uncommon — run `ax datasets update-examples --help` or `ax datasets delete-examples --help` for flags and input formats.
 
 ## Delete Dataset: `ax datasets delete`
 

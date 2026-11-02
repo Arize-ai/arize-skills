@@ -16,7 +16,7 @@ Copy the returned integration ID — it is required for `ax evaluators create-ev
 ax evaluators get NAME_OR_ID --space SPACE -o json
 # Browse (for humans; --name is a substring filter)
 ax evaluators list --space SPACE --name "Hallucination"
-ax evaluators list-versions NAME_OR_ID
+ax evaluators list-versions NAME_OR_ID --space SPACE
 ax evaluators get-version VERSION_ID
 
 # Update metadata only (name, description — not prompt/code)
@@ -92,15 +92,7 @@ ax evaluators create-evaluator code \
   --static-params '[{"name": "keywords", "type": "STRING_ARRAY", "default_value": ["unsafe", "harmful", "illegal"]}]'
 ```
 
-**Managed evaluator types** (pass the value exactly — the flag is case-sensitive):
-
-| Value | What it checks |
-|-------|---------------|
-| `MATCHES_REGEX` | Output matches a regular expression |
-| `JSON_PARSEABLE` | Output is valid JSON |
-| `CONTAINS_ANY_KEYWORD` | Output contains at least one keyword from a list |
-| `CONTAINS_ALL_KEYWORDS` | Output contains all keywords from a list |
-| `EXACT_MATCH` | Output exactly equals a target string |
+Run `ax evaluators create-evaluator code --help` for the accepted `--managed-evaluator` values; pass the value exactly as listed (uppercase).
 
 **Custom Python code evaluators:**
 
@@ -281,7 +273,7 @@ Run `ax evaluators create-evaluator code --help` for the full flag list.
 ax tasks list --space SPACE
 ax tasks list --project PROJECT_NAME --space SPACE
 ax tasks list --dataset DATASET_NAME --space SPACE
-ax tasks list --task-type TEMPLATE_EVALUATION   # filter by type: TEMPLATE_EVALUATION, CODE_EVALUATION, RUN_EXPERIMENT
+ax tasks list --task-type TEMPLATE_EVALUATION   # accepted types: see `ax tasks list --help`
 ax tasks get TASK_ID
 
 # Create evaluation task (project — continuous)

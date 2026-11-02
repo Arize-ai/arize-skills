@@ -82,17 +82,22 @@ Confirm the API key and region are correct, then retry the original command.
 
 ## Space
 
-There is no profile flag for space. Save it as an environment variable — accepts a space **name** (e.g., `my-workspace`) or a base64 space **ID** (e.g., `U3BhY2U6...`). Find yours with `ax spaces list -o json`.
+Profiles store the API key and region, not the space. Supply the space per command:
+
+- **`ax` commands** — pass `--space` with a space **name** (e.g., `my-workspace`) or base64 space **ID** (e.g., `U3BhY2U6...`).
+- **Bundled importer (`scripts/migrate_vendor_traces.py`)** — reads `ARIZE_SPACE_ID`, which must be the base64 space **ID** (it is sent as the OTLP space header). Resolve a known name to its ID with `ax spaces get NAME -o json`.
+
+To persist `ARIZE_SPACE_ID` across sessions:
 
 **macOS/Linux** — add to `~/.zshrc` or `~/.bashrc`:
 ```bash
-export ARIZE_SPACE="my-workspace"    # name or base64 ID
+export ARIZE_SPACE_ID="U3BhY2U6..."    # base64 space ID
 ```
 Then `source ~/.zshrc` (or restart terminal).
 
 **Windows (PowerShell):**
 ```powershell
-[System.Environment]::SetEnvironmentVariable('ARIZE_SPACE', 'my-workspace', 'User')
+[System.Environment]::SetEnvironmentVariable('ARIZE_SPACE_ID', 'U3BhY2U6...', 'User')
 ```
 Restart terminal for it to take effect.
 
@@ -102,7 +107,7 @@ At the **end of the session**, if the user manually provided any credentials dur
 
 **Skip this entirely if:**
 - The API key was already loaded from an existing profile or `ARIZE_API_KEY` env var
-- The space was already set via `ARIZE_SPACE` env var
+- The space ID was already set via the `ARIZE_SPACE_ID` env var
 - The user only used base64 project IDs (no space was needed)
 
 **How to offer:** Use **AskQuestion**: *"Would you like to save your Arize credentials so you don't have to enter them next time?"* with options `"Yes, save them"` / `"No thanks"`.
@@ -111,4 +116,4 @@ At the **end of the session**, if the user manually provided any credentials dur
 
 1. **API key** — Run `ax profiles show` to check the current state. Then run `ax profiles create --api-key $ARIZE_API_KEY` or `ax profiles update --api-key $ARIZE_API_KEY` (the key must already be exported as an env var — never pass a raw key value).
 
-2. **Space** — See the Space section above to persist it as an environment variable.
+2. **Space** — See the Space section above to persist `ARIZE_SPACE_ID`.
