@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.4.0](https://github.com/Arize-ai/arize-skills/compare/v1.3.0...v1.4.0) (2026-11-03)
+
+
+### Features
+
+* **ai-provider-integration:** add DeepSeek provider ([#169](https://github.com/Arize-ai/arize-skills/issues/169)) ([46ce60f](https://github.com/Arize-ai/arize-skills/commit/46ce60f092a28fb0b6e4b2c97b2cbf41d45006d6))
+
 ## [1.3.0](https://github.com/Arize-ai/arize-skills/compare/v1.2.0...v1.3.0) (2026-10-30)
 
 
