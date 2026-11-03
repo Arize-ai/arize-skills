@@ -241,6 +241,11 @@ SPECIFIC_PROMPTS = [
         ["arize-ai-provider-integration"],
         ["specific", "ai-provider-integration"],
     ),
+    (
+        "Add my DeepSeek API key to Arize so I can use it in the playground",
+        ["arize-ai-provider-integration"],
+        ["specific", "ai-provider-integration"],
+    ),
     # arize-compliance-audit
     (
         "Audit my AI app for EU AI Act compliance",
