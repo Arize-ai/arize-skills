@@ -1,0 +1,28 @@
+name: Lint agent instructions
+
+on:
+  pull_request:
+    paths:
+      - 'AGENTS.md'
+      - 'skills/**'
+  push:
+    branches: [main]
+    paths:
+      - 'AGENTS.md'
+      - 'skills/**'
+
+permissions:
+  contents: read
+
+jobs:
+  lintlang:
+    name: lintlang
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+      - uses: hermes-labs-ai/lintlang@6115fb5b86611b81e18144a9d9ec7111b68978f5 # v0.8.2
+        with:
+          path: .
+          fail-on: fail
