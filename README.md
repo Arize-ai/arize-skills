@@ -174,6 +174,7 @@ For interactive setup, `ax profiles create` also offers **Advanced → Single en
 | [arize-prompt-optimization](skills/arize-prompt-optimization/SKILL.md) | Optimize prompts using trace data, experiments, and meta-prompting. |
 | [arize-prompts](skills/arize-prompts/SKILL.md) | Manage Prompt Hub templates and versions with `ax prompts` (create, versions, labels). |
 | [arize-link](skills/arize-link/SKILL.md) | Generate deep links to traces, spans, and sessions in the Arize UI. |
+| [arize-incident-investigation](skills/arize-incident-investigation/SKILL.md) | Investigate production incidents in LLM apps and agents with the Arize AX MCP server (monitors, traces, spans, eval runs, prompt versions). Built for incident agents such as AWS DevOps Agent. |
 | [arize-compliance-audit](skills/arize-compliance-audit/SKILL.md) | Audit an AI agent for regulatory compliance (EU AI Act, NIST AI RMF, GDPR, HIPAA). Produces a tailored remediation checklist. |
 | [arize-admin](skills/arize-admin/SKILL.md) | Manage organizations, spaces, roles, role bindings, resource restrictions, and API keys. Enterprise admin workflows: team onboarding, SAML/SSO role mapping, service key management, and access control. |
 | [arize-migrate-langfuse](skills/arize-migrate-langfuse/SKILL.md) | Migrate from Langfuse to Arize AX: historical trace import (OTLP), dataset import, prompt/evaluator recreate, optional live cutover. |

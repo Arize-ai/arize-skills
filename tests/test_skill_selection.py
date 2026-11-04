@@ -167,6 +167,17 @@ SPECIFIC_PROMPTS = [
         ["arize-prompts"],
         ["specific", "prompts"],
     ),
+    # arize-incident-investigation
+    (
+        "AWS DevOps Agent is investigating a latency spike in our support bot. Use the Arize AX MCP tools to find the root cause",
+        ["arize-incident-investigation"],
+        ["specific", "incident-investigation"],
+    ),
+    (
+        "An Arize monitor fired on token count for the checkout-agent project. Investigate the incident through the Arize MCP server",
+        ["arize-incident-investigation"],
+        ["specific", "incident-investigation"],
+    ),
     # arize-link
     (
         "Give me a link to trace abc123 in the Arize UI",
