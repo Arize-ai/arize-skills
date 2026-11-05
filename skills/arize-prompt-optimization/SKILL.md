@@ -92,8 +92,8 @@ ax spans export PROJECT --space SPACE --filter "name = 'ChatCompletion'" -l 10 -
 ### Export a trace to inspect prompt structure
 
 ```bash
-# Export all spans in a trace
-ax spans export PROJECT --space SPACE --trace-id TRACE_ID --stdout > spans.json
+# Export all spans in a trace (-l raises the 100-span default for large traces)
+ax spans export PROJECT --space SPACE --trace-id TRACE_ID -l 1000 --stdout > spans.json
 
 # Export a single span
 ax spans export PROJECT --space SPACE --span-id SPAN_ID
@@ -152,13 +152,13 @@ ax spans export PROJECT --space SPACE \
   -l 20 --stdout
 
 # Export error traces for detailed inspection
-ax spans export PROJECT --space SPACE --trace-id TRACE_ID
+ax spans export PROJECT --space SPACE --trace-id TRACE_ID -l 1000
 ```
 
 ### From datasets and experiments
 
 ```bash
-# Export a dataset (ground truth examples)
+# Export a dataset (ground truth examples); returns one page by default, add --all only if you need every example
 ax datasets export DATASET_NAME --space SPACE
 # -> dataset_*/examples.json
 
@@ -206,7 +206,7 @@ Look for patterns across failures:
 
 ### The Optimization Meta-Prompt
 
-Fill in the three placeholders in [references/optimization-meta-prompt.md](references/optimization-meta-prompt.md) and send it to your LLM (GPT-4o, Claude, etc.) to generate an improved version of the prompt.
+Fill in the two placeholders in [references/optimization-meta-prompt.md](references/optimization-meta-prompt.md) and send it to your LLM (GPT-4o, Claude, etc.) to generate an improved version of the prompt.
 
 ### Preparing the performance data
 
@@ -253,7 +253,8 @@ After the LLM returns the revised messages array:
 
 ```
 1. Extract prompt    -> Phase 1 (once)
-2. Run experiment    -> ax experiments create ...
+2. Run experiment    -> ax experiments create --name EXPERIMENT_NAME --dataset DATASET_NAME --space SPACE --file runs.json
+                        (runs.json needs example_id and output columns)
 3. Export results    -> ax experiments export EXPERIMENT_NAME --dataset DATASET_NAME --space SPACE
 4. Analyze failures  -> jq to find low scores
 5. Run meta-prompt   -> Phase 3 with new failure data
@@ -367,7 +368,7 @@ When optimizing prompts that use template variables:
    ```
 2. Export and inspect the retriever + LLM spans together:
    ```bash
-   ax spans export PROJECT --space SPACE --trace-id TRACE_ID --stdout > spans.json
+   ax spans export PROJECT --space SPACE --trace-id TRACE_ID -l 1000 --stdout > spans.json
    jq '[.[] | {kind: .attributes.openinference.span.kind, name, input: .attributes.input.value, output: .attributes.output.value}]' spans.json
    ```
 3. Check if the retrieved context actually contained the answer
