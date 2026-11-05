@@ -158,8 +158,8 @@ ax spans export PROJECT --space SPACE --trace-id TRACE_ID -l 1000
 ### From datasets and experiments
 
 ```bash
-# Export a dataset (ground truth examples); --all exports every example instead of one page
-ax datasets export DATASET_NAME --space SPACE --all
+# Export a dataset (ground truth examples); returns one page by default, add --all only if you need every example
+ax datasets export DATASET_NAME --space SPACE
 # -> dataset_*/examples.json
 
 # Export experiment results (what the LLM produced)
@@ -339,7 +339,7 @@ When optimizing prompts that use template variables:
 
 1. Export the dataset and experiment (`ax experiments list --dataset DATASET_NAME --space SPACE` finds unknown names):
    ```bash
-   ax datasets export DATASET_NAME --space SPACE --all
+   ax datasets export DATASET_NAME --space SPACE
    ax experiments export EXPERIMENT_NAME --dataset DATASET_NAME --space SPACE
    ```
 2. Prepare the joined data for the meta-prompt
