@@ -264,17 +264,17 @@ Each run corresponds to one dataset example. **On `create`, only `example_id` an
 1. Find or create a dataset:
    ```bash
    ax datasets list --space SPACE
-   ax datasets export DATASET_NAME --space SPACE --all --stdout | jq 'length'
+   ax datasets export DATASET_NAME --space SPACE --stdout | jq 'length'
    ```
 2. Export the dataset examples:
    ```bash
-   ax datasets export DATASET_NAME --space SPACE --all
+   ax datasets export DATASET_NAME --space SPACE
    ```
-   Without `--all`, `ax datasets export` returns only one page of examples, so counts and runs silently cover part of the dataset.
-3. Call the real model API for each example and collect outputs. Use `ax datasets export --all --stdout` to pipe examples directly into an inference script:
+   `ax datasets export` returns one page of examples by default. Add `--all` only when the dataset is larger than one page and the experiment must cover every example.
+3. Call the real model API for each example and collect outputs. Use `ax datasets export --stdout` to pipe examples directly into an inference script:
 
    ```bash
-   ax datasets export DATASET_NAME --space SPACE --all --stdout | python3 infer.py > runs.json
+   ax datasets export DATASET_NAME --space SPACE --stdout | python3 infer.py > runs.json
    ```
 
    Write `infer.py` to read examples from stdin, call the target model, and write runs JSON to stdout. Start from the template at `references/inference-template.py` — copy it, inspect the exported dataset JSON to confirm the input field name, then uncomment the provider block the user wants.

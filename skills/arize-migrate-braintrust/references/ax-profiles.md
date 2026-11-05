@@ -82,11 +82,16 @@ Confirm the API key and region are correct, then retry the original command.
 
 ## Space
 
-Profiles hold the API key, auth method, and region. Pass the space to `ax` commands with `--space`, and export it as `ARIZE_SPACE_ID` for the bundled trace importer, which sends it as the OTLP space header. Use the base64 space **ID** (e.g., `U3BhY2U6...`) from `ax spaces get NAME -o json` when the name is known (`ax spaces list -o json` is for human browsing).
+Profiles store the API key and region, not the space. Supply the space per command:
+
+- **`ax` commands** — pass `--space` with a space **name** (e.g., `my-workspace`) or base64 space **ID** (e.g., `U3BhY2U6...`).
+- **Bundled importer (`scripts/migrate_vendor_traces.py`)** — reads `ARIZE_SPACE_ID`, which must be the base64 space **ID** because it is sent as the OTLP space header. If you only know the name, resolve it with `ax spaces get NAME -o json`.
+
+To persist `ARIZE_SPACE_ID` across sessions:
 
 **macOS/Linux** — add to `~/.zshrc` or `~/.bashrc`:
 ```bash
-export ARIZE_SPACE_ID="U3BhY2U6..."
+export ARIZE_SPACE_ID="U3BhY2U6..."    # base64 space ID
 ```
 Then `source ~/.zshrc` (or restart terminal).
 

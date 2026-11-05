@@ -85,7 +85,7 @@ Confirm the API key and region are correct, then retry the original command.
 Profiles store the API key and region, not the space. Supply the space per command:
 
 - **`ax` commands** — pass `--space` with a space **name** (e.g., `my-workspace`) or base64 space **ID** (e.g., `U3BhY2U6...`).
-- **Bundled importer (`scripts/migrate_vendor_traces.py`)** — reads `ARIZE_SPACE_ID`, which must be the base64 space **ID** (it is sent as the OTLP space header). Resolve a known name to its ID with `ax spaces get NAME -o json`.
+- **Bundled importer (`scripts/migrate_vendor_traces.py`)** — reads `ARIZE_SPACE_ID`, which must be the base64 space **ID** because it is sent as the OTLP space header. If you only know the name, resolve it with `ax spaces get NAME -o json`.
 
 To persist `ARIZE_SPACE_ID` across sessions:
 

@@ -1,6 +1,6 @@
 """Template for scoring a dataset export against a real model API.
 
-Usage: ax datasets export DATASET_NAME --space SPACE --all --stdout | python3 infer.py > runs.json
+Usage: ax datasets export DATASET_NAME --space SPACE --stdout | python3 infer.py > runs.json
 
 Before running: inspect the exported dataset JSON to find the correct input
 field name (replace "input"/"question"/"prompt" below if needed), install the
