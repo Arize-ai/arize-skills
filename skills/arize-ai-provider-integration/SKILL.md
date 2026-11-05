@@ -1,6 +1,6 @@
 ---
 name: arize-ai-provider-integration
-description: Creates, reads, updates, and deletes Arize AI integrations that store LLM provider credentials used by evaluators and other Arize features. Supports the LLM providers in the `--provider` enum (e.g. OpenAI, Anthropic, Azure OpenAI, AWS Bedrock, Vertex AI, Gemini, NVIDIA NIM, Fireworks AI, Together AI). Use when the user mentions AI integration, LLM provider credentials, create integration, list integrations, update credentials, delete integration, or connecting an LLM provider to Arize.
+description: Creates, reads, updates, and deletes Arize AI integrations that store LLM provider credentials used by evaluators and other Arize features. Supports the LLM providers in the `--provider` enum (e.g. OpenAI, Anthropic, Azure OpenAI, AWS Bedrock, Vertex AI, Gemini, NVIDIA NIM, Fireworks AI, Together AI, DeepSeek). Use when the user mentions AI integration, LLM provider credentials, create integration, list integrations, update credentials, delete integration, or connecting an LLM provider to Arize.
 metadata:
   author: arize
   version: "1.0"
@@ -108,7 +108,7 @@ ax ai-integrations create \
   --enable-default-models
 ```
 
-Every integration except LiteLLM, Fireworks AI and Together AI needs a model source: pass `--enable-default-models` (Arize's default model list for the provider) and/or one or more `--model-name` flags. Without either, the server rejects the create with `400: An integration must have at least one model available`.
+Every integration except LiteLLM, Fireworks AI, Together AI and DeepSeek needs a model source: pass `--enable-default-models` (Arize's default model list for the provider) and/or one or more `--model-name` flags. Without either, the server rejects the create with `400: An integration must have at least one model available`.
 
 For a provider's full example and notes (Bedrock/Vertex metadata, base URLs, flags to avoid), open only that provider's file from the **Details** column below.
 
@@ -129,6 +129,7 @@ The table covers providers with provider-specific flags or notes. Run `ax ai-int
 | `LITELLM` | `--base-url <endpoint>`, `--api-key <key>` | `$LITELLM_API_KEY` | [provider-litellm.md](references/provider-litellm.md) |
 | `FIREWORKS` | `--api-key <key>` only — no `--base-url` or `--headers` | `$FIREWORKS_API_KEY` | [provider-fireworks.md](references/provider-fireworks.md) |
 | `TOGETHER_AI` | `--api-key <key>` only — no `--base-url` or `--headers` | `$TOGETHER_API_KEY` | [provider-together-ai.md](references/provider-together-ai.md) |
+| `DEEP_SEEK` | `--api-key <key>` only — no `--base-url` or `--headers` | `$DEEPSEEK_API_KEY` | [provider-deepseek.md](references/provider-deepseek.md) |
 
 Run `ax ai-integrations create --help` for optional flags. Pair `--headers` with `--auth-type PROXY_WITH_HEADERS` when the provider sits behind a proxy.
 
@@ -205,8 +206,8 @@ Omit `--force` to get a confirmation prompt instead of deleting immediately.
 | `Integration not found` | Check the name or ID with `ax ai-integrations get NAME_OR_ID --space SPACE`; use `ax ai-integrations list --space SPACE --name TEXT` only to browse for the right name |
 | `has_api_key: false` after create | Credentials were not saved — re-run `update` with the correct `--api-key` or `--provider-metadata` |
 | Evaluator runs fail with LLM errors | Check integration credentials with `ax ai-integrations get INT_ID`; rotate the API key if needed |
-| `Invalid value for '--provider'` with `FIREWORKS` or `TOGETHER_AI` | The installed ax CLI predates these providers — upgrade the ax CLI (see [references/ax-setup.md](references/ax-setup.md)) |
-| `An integration must have at least one model available` | Add `--enable-default-models` or at least one `--model-name` (required for every provider except LiteLLM, Fireworks AI and Together AI) |
+| `Invalid value for '--provider'` with `FIREWORKS`, `TOGETHER_AI` or `DEEP_SEEK` | The installed ax CLI predates these providers — upgrade the ax CLI (see [references/ax-setup.md](references/ax-setup.md)) |
+| `An integration must have at least one model available` | Add `--enable-default-models` or at least one `--model-name` (required for every provider except LiteLLM, Fireworks AI, Together AI and DeepSeek) |
 | Integration has the wrong `provider` | `ax ai-integrations update NAME_OR_ID --provider NEW_PROVIDER` changes it, but other fields are kept as-is — pass the new provider's required flags (API key, base URL, model source) in the same call. When the two providers need very different settings, deleting and recreating is cleaner |
 
 ---
