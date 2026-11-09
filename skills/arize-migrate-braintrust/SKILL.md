@@ -85,11 +85,11 @@ Target AX space + destination project name. Confirm Braintrust source project na
 
 ### Step 2 — Import historical traces
 
-Locate this installed skill's root and run its bundled commands by absolute path, so they work from any workspace. Check the chosen interpreter is Python 3.10 or later. Create an isolated environment if needed; see [helper dependencies](scripts/requirements.txt) (Braintrust uses the public REST API, so extra packages are optional).
+Run this skill's bundled commands by absolute path from its install root (`<SKILL_DIR>`). Check the chosen interpreter is Python 3.10 or later. Create an isolated environment if needed; see [helper dependencies](scripts/requirements.txt) (Braintrust uses the public REST API, so extra packages are optional).
 
 ```bash
 export ARIZE_API_KEY=... ARIZE_SPACE_ID=... BRAINTRUST_API_KEY=...
-python scripts/migrate_vendor_traces.py \
+python <SKILL_DIR>/scripts/migrate_vendor_traces.py \
   --vendor braintrust \
   --source-project SOURCE_PROJECT \
   --arize-project DEST_PROJECT \
@@ -118,7 +118,7 @@ Ask **latest only** vs versions / environments. Then:
 1. For each prompt, fetch by id; use `version` / `environment` query params when importing history
 1. Map `prompt_data.prompt` messages → AX roles; flatten text blocks to `content` strings
 1. Infer `F_STRING` vs `MUSTACHE` from template syntax; ask if unclear
-1. `ax prompts create` then `ax prompts create-version` oldest→newest; map Braintrust environments to AX labels with `ax prompts set-version-labels VERSION_ID --label NAME` when the user wants them (version ID from the `create` or `create-version` output; repeat `--label`, since it replaces existing labels)
+1. `ax prompts create` then `ax prompts create-version` oldest→newest (required flags: `--help`); map Braintrust environments to AX labels with `ax prompts set-version-labels VERSION_ID --label NAME` when the user wants them (version ID from the `create` or `create-version` output; repeat `--label`, since it replaces existing labels)
 1. Copy model/provider from prompt options when present; otherwise ask
 
 Skip non-prompt functions (tools/scorers) unless the user explicitly wants those recreated separately.

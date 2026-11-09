@@ -4,7 +4,7 @@ description: Creates, reads, updates, and deletes Arize AI integrations that sto
 metadata:
   author: arize
   version: "1.0"
-compatibility: Requires the ax CLI and a configured Arize profile.
+compatibility: Requires the ax CLI (≥ 0.39.0) and a configured Arize profile.
 ---
 
 # Arize AI Integration Skill
@@ -108,7 +108,7 @@ ax ai-integrations create \
   --enable-default-models
 ```
 
-Every integration except LiteLLM, Fireworks AI, Together AI and DeepSeek needs a model source: pass `--enable-default-models` (Arize's default model list for the provider) and/or one or more `--model-name` flags. Without either, the server rejects the create with `400: An integration must have at least one model available`.
+With `ax ai-integrations create`, every integration except LiteLLM, Fireworks AI, Together AI and DeepSeek needs a model source: pass `--enable-default-models` (Arize's default model list for the provider) and/or one or more `--model-name` flags. Without either, the server rejects the create with `400: An integration must have at least one model available`.
 
 For a provider's full example and notes (Bedrock/Vertex metadata, base URLs, flags to avoid), open only that provider's file from the **Details** column below.
 
@@ -129,7 +129,7 @@ For a provider's full example and notes (Bedrock/Vertex metadata, base URLs, fla
 | `TOGETHER_AI` | `--api-key <key>` only — no `--base-url` or `--headers` | `$TOGETHER_API_KEY` | [provider-together-ai.md](references/provider-together-ai.md) |
 | `DEEP_SEEK` | `--api-key <key>` only — no `--base-url` or `--headers` | `$DEEPSEEK_API_KEY` | [provider-deepseek.md](references/provider-deepseek.md) |
 
-Run `ax ai-integrations create --help` for optional flags. Pair `--headers` with `--auth-type PROXY_WITH_HEADERS` when the provider sits behind a proxy.
+Run `ax ai-integrations create --help` for optional flags and the full `--provider` list. Pair `--headers` with `--auth-type PROXY_WITH_HEADERS` when the provider sits behind a proxy.
 
 ### After creation
 
@@ -187,10 +187,10 @@ Omit `--force` to get a confirmation prompt instead of deleting immediately.
 `ax integrations` manages LLM and agent integrations in one group (`list`, `get`, `delete`, `create llm|agent`, `update llm|agent`). Run `ax integrations <sub> --help` for flags.
 
 - **Choosing a create command:** use `ax ai-integrations create` (the examples above) for `AZURE_OPEN_AI` or when `--auth-type` is needed; `ax integrations create llm` accepts neither. Use `ax integrations create llm` when scopings must be set at create time (`--scopings`).
-- **`create llm` provider flags differ** from `ax ai-integrations create`: Bedrock and Vertex AI take dedicated flags instead of `--provider-metadata`. Run `ax integrations create llm --help` for the per-provider list.
+- **`create llm` provider flags differ** from `ax ai-integrations create`: Bedrock and Vertex AI take dedicated flags instead of `--provider-metadata`, and `--model-name` / `--enable-default-models` apply only to some providers (the model-source rule above does not carry over). Run `ax integrations create llm --help` for which provider takes which flag.
 - **Agent endpoints:** use `ax integrations create agent` to register an agent endpoint; run its `--help` for flags.
-- **Provider is immutable** in `ax integrations update llm`; delete and recreate to change it.
-- **`--type`:** `list` returns every type merged; filter with `--type LLM` or `--type AGENT`. `get` and `delete` by name need `--type` because names are unique only per type; IDs work without it.
+- **Provider is immutable** in `ax integrations update llm`; to change it, use `ax ai-integrations update --provider` (see Troubleshooting) or delete and recreate.
+- **`--type`:** `list` returns every type merged; filter with `--type LLM`, `AGENT`, or `EVALUATOR`. `get` and `delete` by name need `--type` because names are unique only per type; IDs work without it.
 
 ---
 

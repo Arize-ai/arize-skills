@@ -11,7 +11,7 @@ compatibility: Requires ax CLI, Arize OTLP credentials (ARIZE_API_KEY + ARIZE_SP
 
 Move LangSmith data into Arize AX. **Historical traces are in scope** — export LangSmith runs and ingest them into AX via OTLP with explicit attribute mapping. Also migrate datasets and optionally cut over live traffic.
 
-> **`SPACE`** — `--space` / `ARIZE_SPACE` accept a space **name** or base64 ID. Prefer the user-provided name; do not paginate `ax spaces list` just to look it up.
+> **`SPACE`** — `--space` accepts a space **name** or base64 ID. The importer reads the base64 ID from `ARIZE_SPACE_ID`; resolve a name with `ax spaces get NAME -o json`. Prefer the user-provided name; do not paginate `ax spaces list` just to look it up.
 
 ## When to use
 
@@ -101,10 +101,10 @@ python scripts/migrate_vendor_traces.py \
 
 Optional: `--dry-run` to preview mapping without ingest.
 
-Then verify:
+Then verify. Imported spans keep their LangSmith timestamps and `--days` counts back from now, so set the window to cover the imported runs:
 
 ```bash
-ax spans export DEST_PROJECT --space SPACE -l 50 --days 7 --stdout
+ax spans export DEST_PROJECT --space SPACE -l 50 --start-time OLDEST_RUN_START --end-time NEWEST_RUN_END --stdout
 ```
 
 Confirm:

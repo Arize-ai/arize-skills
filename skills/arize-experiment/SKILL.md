@@ -34,7 +34,7 @@ If an `ax` command fails, troubleshoot based on the error:
 
 ## List Experiments: `ax experiments list`
 
-Browse experiments, optionally filtered by dataset. Output goes to stdout.
+Use `ax experiments get NAME_OR_ID` when the name or ID is known; `list` is for human browsing.
 
 ```bash
 ax experiments list
@@ -262,16 +262,16 @@ Each run corresponds to one dataset example. **On `create`, only `example_id` an
 1. Find or create a dataset:
    ```bash
    ax datasets list --space SPACE
-   ax datasets export DATASET_NAME --space SPACE --stdout | jq 'length'
+   ax datasets export DATASET_NAME --space SPACE --all --stdout | jq 'length'
    ```
 2. Export the dataset examples:
    ```bash
-   ax datasets export DATASET_NAME --space SPACE
+   ax datasets export DATASET_NAME --space SPACE --all
    ```
-3. Call the real model API for each example and collect outputs. Use `ax datasets export --stdout` to pipe examples directly into an inference script:
+3. Call the real model API for each example and collect outputs. Use `ax datasets export --all --stdout` to pipe every example into an inference script:
 
    ```bash
-   ax datasets export DATASET_NAME --space SPACE --stdout | python3 infer.py > runs.json
+   ax datasets export DATASET_NAME --space SPACE --all --stdout | python3 infer.py > runs.json
    ```
 
    Write `infer.py` to read examples from stdin, call the target model, and write runs JSON to stdout. Start from the template at `references/inference-template.py` — copy it, inspect the exported dataset JSON to confirm the input field name, then uncomment the provider block the user wants.
@@ -292,7 +292,7 @@ Each run corresponds to one dataset example. **On `create`, only `example_id` an
    **Attach evaluation scores (required for scores to show in the UI).** Evaluations do **not** come from the create file — you attach them with `annotate-runs`, which keys on each run's `id` (assigned at create time), so you must export first to learn those IDs.
 
 7. Export the experiment to structured data so you can read each run's `id` alongside its `example_id`. Confirm that the exported run records include both fields.
-8. Build the annotation file with structured JSON handling, keyed by `record_id` (the run `id`). Score/label each run via an LLM-as-judge, a code check, or human review; never fabricate scores. Create the annotation config first (here, categorical `correctness` with values `correct`/`incorrect`). Emit the shape in [Annotation file schema](#annotation-file-schema).
+8. Build the annotation file with structured JSON handling, keyed by `record_id` (the run `id`). Score/label each run via an LLM-as-judge, a code check, or human review; never fabricate scores. Create the annotation config first (`ax annotation-configs create --help`; here, categorical `correctness` with values `correct`/`incorrect`). Emit the shape in [Annotation file schema](#annotation-file-schema).
 9. Attach the scores with `ax experiments annotate-runs ... --file annotations.json`, then export or inspect the experiment to confirm the evaluations are attached.
 
 ### Compare two experiments

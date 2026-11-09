@@ -70,7 +70,7 @@ If an `ax` command fails, troubleshoot based on the error:
 
 Still prefer `ax` lookups over open-ended questions: confirm a known name with `ax projects get NAME --space SPACE` or `ax datasets get NAME --space SPACE` (`list` is for human browsing). If you still cannot proceed (e.g. multiple projects match the name the user gave, unclear trace vs experiment path, or destructive scope), **do not** jump straight into questions — use the same explicit framing as **arize-instrumentation** when it stops for scope or confirmation:
 
-1. Acknowledge the skill, e.g.: **I found the arize-prompt-optimization skill in this repo** (you may add `skills/arize-prompt-optimization/SKILL.md` if helpful).
+1. Acknowledge the skill, e.g.: **I found the arize-prompt-optimization skill.**
 2. Then a clear pause line, e.g.: **A few clarifying questions before I invoke it:**
 3. Ask **minimal** numbered or short bullet questions — only what blocks the next `ax` step in this skill.
 
@@ -158,8 +158,8 @@ ax spans export PROJECT --space SPACE --trace-id TRACE_ID
 ### From datasets and experiments
 
 ```bash
-# Export a dataset (ground truth examples)
-ax datasets export DATASET_NAME --space SPACE
+# Export every example (ground truth); without --all only one page is returned. --all rejects --filter.
+ax datasets export DATASET_NAME --space SPACE --all
 # -> dataset_*/examples.json
 
 # Export experiment results (what the LLM produced)
@@ -253,7 +253,10 @@ After the LLM returns the revised messages array:
 
 ```
 1. Extract prompt    -> Phase 1 (once)
-2. Run experiment    -> ax experiments create ...
+2. Run experiment    -> ax experiments run --name NAME --dataset DATASET_NAME --space SPACE --task task.py
+                        (task.py defines task(dataset_row); use this when the prompt runs per example)
+                        Use ax experiments create --name NAME --dataset DATASET_NAME --space SPACE --file runs.jsonl
+                        when outputs are already computed (file has example_id and output columns)
 3. Export results    -> ax experiments export EXPERIMENT_NAME --dataset DATASET_NAME --space SPACE
 4. Analyze failures  -> jq to find low scores
 5. Run meta-prompt   -> Phase 3 with new failure data
@@ -338,7 +341,7 @@ When optimizing prompts that use template variables:
 
 1. Export the dataset and experiment (`ax experiments list --dataset DATASET_NAME --space SPACE` finds unknown names):
    ```bash
-   ax datasets export DATASET_NAME --space SPACE
+   ax datasets export DATASET_NAME --space SPACE --all
    ax experiments export EXPERIMENT_NAME --dataset DATASET_NAME --space SPACE
    ```
 2. Prepare the joined data for the meta-prompt
