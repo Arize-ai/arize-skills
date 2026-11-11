@@ -65,7 +65,7 @@ ax skills install --global --agent cursor --yes     # globally for Cursor
 ax skills clear --yes                               # remove Arize skills
 ```
 
-Use `--agent` (repeatable) to target specific agents: claude-code, cursor, codex, windsurf. Pass `--global` to install globally in `~/.<agents>/skills/` instead of your project, or `--yes` to skip confirmations.
+Use `--agent` (repeatable) to target specific agents: claude-code, codex, cursor, windsurf, github-copilot, antigravity-cli. Pass `--global` to install globally in `~/.<agents>/skills/` instead of your project, or `--yes` to skip confirmations.
 
 ### Option 4: Claude Code plugin
 
@@ -165,11 +165,13 @@ For interactive setup, `ax profiles create` also offers **Advanced → Single en
 | [arize-trace](skills/arize-trace/SKILL.md) | Export traces and spans by trace ID, span ID, or session ID. Debug LLM application issues. |
 | [arize-phoenix-migration](skills/arize-phoenix-migration/SKILL.md) | Migrate Phoenix project traces into Arize AX, preserve historical IDs and timestamps, and verify imported spans. |
 | [arize-instrumentation](skills/arize-instrumentation/SKILL.md) | Add Arize AX tracing to an app. Two-phase flow: analyze codebase, then implement instrumentation (uses [Agent-Assisted Tracing](https://arize.com/docs/ax/set-up-with-ai-assistants)). |
+| [arize-instrumentation-health](skills/arize-instrumentation-health/SKILL.md) | Audit instrumentation health of existing traces: orphaned, duplicate, or flat spans, blank root I/O, missing token counts. Returns a ranked report. |
 | [arize-span-routing](skills/arize-span-routing/SKILL.md) | Send each agent's or tenant's Python spans to its correct Arize space and project using application metadata. |
 | [arize-dataset](skills/arize-dataset/SKILL.md) | Create, manage, and download datasets and examples. |
 | [arize-experiment](skills/arize-experiment/SKILL.md) | Run and analyze experiments against datasets. |
 | [arize-evaluator](skills/arize-evaluator/SKILL.md) | Create LLM-as-judge evaluators, run evaluation tasks, and set up continuous monitoring. |
 | [arize-ai-provider-integration](skills/arize-ai-provider-integration/SKILL.md) | Create and manage LLM provider credentials (OpenAI, Anthropic, Azure, Bedrock, Vertex, and more). |
+| [arize-integrations](skills/arize-integrations/SKILL.md) | Manage LLM and agent integrations with `ax integrations`: list, get, create, update, and delete. |
 | [arize-annotation](skills/arize-annotation/SKILL.md) | Create and manage annotation configs (categorical, continuous, freeform); bulk-annotate project spans via the Python SDK. |
 | [arize-prompt-optimization](skills/arize-prompt-optimization/SKILL.md) | Optimize prompts using trace data, experiments, and meta-prompting. |
 | [arize-prompts](skills/arize-prompts/SKILL.md) | Manage Prompt Hub templates and versions with `ax prompts` (create, versions, labels). |
@@ -236,7 +238,7 @@ export TEST_MODEL="claude-sonnet-4-6"     # optional: Claude model override
 Then run the harness:
 
 ```bash
-python tests/run_skill.py --skill arize-trace --prompt "Export trace abc123"
+python tests/run_skill.py arize-trace "Export trace abc123"
 ```
 
 > [!WARNING]

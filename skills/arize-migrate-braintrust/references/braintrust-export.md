@@ -38,8 +38,8 @@ Paginate with cursors when the response includes a `cursor` field. Raise limits 
 
 ### Historical logs → Arize AX
 
-Preferred path for AX UI history: from this installed skill's root run
-`python scripts/migrate_vendor_traces.py --vendor braintrust --source-project PROJECT --arize-project DEST`.
+Preferred path for AX UI history: run the bundled importer by absolute path from the installed skill root (`<SKILL_DIR>`):
+`python <SKILL_DIR>/scripts/migrate_vendor_traces.py --vendor braintrust --source-project PROJECT --arize-project DEST`.
 The script uses BTQL (`span_parents`, `metadata`, etc.), maps `output` → `output.value`,
 splits conversations into **one AX trace per turn**, and sets `session.id` from Braintrust metadata.
 
@@ -70,7 +70,7 @@ Braintrust REST (https://www.braintrust.dev/docs/api-reference/prompts/list-prom
 - List: `GET /v1/prompt` (filter with `project_name`, `slug`, …)
 - Get: `GET /v1/prompt/{prompt_id}` with optional `version` / `environment`
 
-Map `prompt_data` messages into AX Prompt Hub via `ax prompts create` / `ax prompts create-version`, and map environments to AX labels with `ax prompts set-version-labels` when the user wants them. Skip tool/scorer functions unless explicitly requested.
+Map `prompt_data` messages into AX Prompt Hub via `ax prompts create` / `ax prompts create-version` (run each with `--help` for required flags), and map environments to AX labels with `ax prompts set-version-labels` when the user wants them. Skip tool/scorer functions unless explicitly requested.
 
 ## Transform checklist
 

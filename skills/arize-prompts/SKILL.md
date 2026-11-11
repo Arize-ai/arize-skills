@@ -102,7 +102,7 @@ Format-only example (not a default to paste — see Eliciting the prompt templat
 ]
 ```
 
-**Providers** (`--provider`): `OPEN_AI`, `ANTHROPIC`, `AZURE_OPEN_AI`, `AWS_BEDROCK`, `VERTEX_AI`, `CUSTOM`. (No `GEMINI` option for prompts, unlike `ax ai-integrations`.) Required on every `create` and `create-version`.
+**Provider** (`--provider`): required on every `create` and `create-version`. Take the value from the enum in `ax prompts create --help`; it differs from the `ax ai-integrations` provider list.
 
 **Model** (`--model`): Always pass an explicit model. If unknown, propose a provider-appropriate default and confirm before running.
 
@@ -128,16 +128,7 @@ Follow the Eliciting the prompt template section above. Ask for exact system and
 
 ### Step 2: Propose metadata and confirm
 
-Once you have their template, propose the following in one block:
-
-| Hub field | CLI flag | Notes |
-|-----------|----------|-------|
-| Prompt name | `--name` | Infer from context or ask |
-| Description | `--description` | Optional, one sentence |
-| Version description | `--commit-message` | Default: "Initial version" |
-| Tags | Hub UI | Suggest tags in prose; the user adds them in Hub after create |
-| Provider | `--provider` | Infer from their stack or ask |
-| Model | `--model` | Propose a sensible default e.g. `gpt-4o` |
+Once you have their template, propose in one block: prompt name (infer from context or ask), an optional one-sentence description, the version description (`--commit-message`), provider (infer from their stack or ask), model (e.g. `gpt-4o`), and suggested tags, which the user adds in the Hub UI after `create`. For the flag behind each field, run `ax prompts create --help`.
 
 Then: **Use these as-is, or tell me what to change.**
 
@@ -203,36 +194,11 @@ Once you have candidate message text from Step 1, pause and ask (do not run `cre
 > 1. **Save as a new prompt** — create a new entry in Hub with a name
 > 2. **Save as a new version** of an existing prompt — add to one you already have in Hub"
 
-If option 2, list existing prompts to find the right one:
-```bash
-ax prompts list --space SPACE
-```
+If option 2 and the prompt name is known, confirm it exists with `ax prompts get NAME --space SPACE`. Use `ax prompts list --space SPACE --name SUBSTRING` only when the name is unknown.
 
 ### Step 3: Save to Hub
 
-**New prompt:**
-```bash
-ax prompts create \
-  --name "your-prompt-name" \
-  --space SPACE \
-  --provider OPEN_AI \
-  --model gpt-4o \
-  --input-variable-format F_STRING \
-  --messages '[{"role":"SYSTEM","content":"Your system text."},{"role":"USER","content":"{question}"}]' \
-  --description "What this prompt does" \
-  --commit-message "Initial version"
-```
-
-**New version on existing prompt** (include `--space` when `PROMPT_NAME_OR_ID` is a **name**, not only an ID):
-```bash
-ax prompts create-version PROMPT_NAME_OR_ID \
-  --space SPACE \
-  --provider OPEN_AI \
-  --model gpt-4o \
-  --input-variable-format F_STRING \
-  --messages '[{"role":"SYSTEM","content":"Updated system text."},{"role":"USER","content":"{question}"}]' \
-  --commit-message "Describe what changed"
-```
+Run the `ax prompts create` command from **Workflow A** Step 3 for a new prompt, or the `create-version` command from **Workflow A** Step 4 for a new version. `--messages` accepts a file path or inline JSON such as `'[{"role":"SYSTEM","content":"Your system text."},{"role":"USER","content":"{question}"}]'`. Include `--space` on `create-version` when `PROMPT_NAME_OR_ID` is a **name**.
 
 Note the returned prompt ID (`pr_...`) and version ID (`prv_...`) for future commands.
 
@@ -272,12 +238,12 @@ ax prompts get PROMPT_NAME_OR_ID --label production --space SPACE
 
 Use when the user wants to **find**, **inspect**, **change metadata**, **change message bodies or model/provider** (via a new version), **delete** a prompt, or **duplicate** — without going through full authoring (**Workflow A**) or import-from-span (**Workflow B**). Prefer the Hub UI for one-click duplicate or rename when available; use the CLI for automation and scripts.
 
-### Step 1: Discover prompts (when the target is unclear)
+### Step 1: Locate the prompt
+
+When the name or `pr_...` ID is known, go straight to Step 2 (`ax prompts get`). When the name is unknown, search by substring; `list` is for human browsing:
 
 ```bash
-ax prompts list --space SPACE
 ax prompts list --space SPACE --name support --limit 50
-ax prompts list --space SPACE --output prompts.json
 ```
 
 ### Step 2: Fetch a prompt (inspect or before edit / delete / duplicate)
@@ -312,23 +278,13 @@ ax prompts update NAME_OR_ID --description "Updated description" --space SPACE
 
 ### Step 4b: Change messages, model, or provider
 
-Use a **new version** (immutable history). Propose `--commit-message` (version description) and confirm **`--provider`** + **`--model`** + `--messages` before running.
-
-```bash
-ax prompts create-version PROMPT_NAME_OR_ID \
-  --space SPACE \
-  --provider OPEN_AI \
-  --model gpt-4o \
-  --input-variable-format F_STRING \
-  --messages ./updated_messages.json \
-  --commit-message "What changed and why"
-```
+Use a **new version** (immutable history). Propose `--commit-message` (version description) and confirm **`--provider`** + **`--model`** + `--messages`, then run the `create-version` command from **Workflow A** Step 4.
 
 ### Step 4c: Delete prompt (all versions)
 
 Irreversible. Confirm **space** and **name or `pr_...` ID** with the user.
 
-1. Optional: `ax prompts list --space SPACE` or `ax prompts get NAME_OR_ID --space SPACE` to verify.
+1. Optional: `ax prompts get NAME_OR_ID --space SPACE` to verify.
 2. Run delete when they explicitly confirm removal:
 
 ```bash
@@ -349,19 +305,7 @@ ax prompts get "source-prompt" --space SPACE -o json
 
 2. From the JSON, take **messages**, **provider**, **model**, and **input variable format** (`F_STRING` / `MUSTACHE` / `NONE`).
 
-3. **Create** a new prompt with a new `--name` and the copied payload:
-
-```bash
-ax prompts create \
-  --name "source-prompt-copy" \
-  --space SPACE \
-  --provider PROVIDER_FROM_SOURCE \
-  --model MODEL_FROM_SOURCE \
-  --input-variable-format F_STRING \
-  --messages ./messages_extracted.json \
-  --description "Copy of source-prompt" \
-  --commit-message "Initial version (duplicated)"
-```
+3. **Create** a new prompt with the `ax prompts create` command from **Workflow A** Step 3, using a new `--name`, the copied provider, model, and input variable format, and the extracted messages file (e.g. `--commit-message "Initial version (duplicated)"`).
 
 Confirm the new name and space before `create`. Labels are **not** copied — use **Workflow C** on the new prompt if needed.
 
@@ -379,9 +323,7 @@ Run `ax prompts --help` for the command list and `ax prompts <sub> --help` for f
 |---------|-----|
 | `Unknown command prompts` | Upgrade `ax` — see [references/ax-setup.md](references/ax-setup.md) |
 | `401 Unauthorized` | Check API key at https://app.arize.com/admin > API Keys |
-| Name not found | Pass `--space` when using a name instead of an ID |
 | Variables not interpolating | Confirm each placeholder is `{name}` (single `{` / `}` around the identifier) and `--input-variable-format F_STRING` |
 | Label pointing to wrong version | `get-version-by-label` to check, then `set-version-labels` on the correct `prv_...` ID |
-| Hub shows no default model | You omitted `--model` — always pass it explicitly |
-| CLI rejects missing `--provider` | Required on `create` and `create-version` — set one of `OPEN_AI`, `AZURE_OPEN_AI`, `AWS_BEDROCK`, `VERTEX_AI`, `ANTHROPIC`, `CUSTOM` |
+| Name not found, or Hub shows no default model | See the gotchas in [references/cli-prompts.md](references/cli-prompts.md) |
 | Need to change system text | Use `create-version` with updated `--messages` — `update` only changes metadata |

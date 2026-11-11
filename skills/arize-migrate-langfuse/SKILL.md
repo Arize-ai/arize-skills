@@ -104,8 +104,11 @@ Optional filters:
 Verify:
 
 ```bash
-ax spans export DEST_PROJECT --space SPACE -l 50 --days 7 --stdout
+ax spans export DEST_PROJECT --space SPACE -l 50 \
+  --start-time OLDEST_IMPORTED_TS --end-time NEWEST_IMPORTED_TS --stdout
 ```
+
+Set the window to the imported spans' original timestamps, since `--days` looks back from now and misses older history.
 
 Confirm string `output.value`, `parent_id` links, and `session.id` when Langfuse traces had `sessionId`.
 
