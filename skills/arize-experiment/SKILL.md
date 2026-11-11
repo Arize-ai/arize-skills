@@ -113,6 +113,8 @@ Output is a JSON array of run objects:
 ]
 ```
 
+Failed runs (the task raised an exception) are still exported, with `output: null` and an `error` field holding the exception message. Filter them out (`select(.output != null)`) before scoring or averaging.
+
 Where results appear in each run:
 
 - `annotations`: values written by `annotate-runs` (`null` when there are none)
@@ -128,7 +130,7 @@ ax experiments create --name "gpt-4o-baseline" --dataset DATASET_NAME --space SP
 ax experiments create --name "claude-test" --dataset DATASET_NAME --space SPACE --file runs.csv
 ```
 
-Flags: `ax experiments create --help`. `--dataset` is optional — omit it to create a standalone experiment with no linked dataset (then `--space` is required instead).
+Flags, including standalone experiments without `--dataset`: `ax experiments create --help`.
 
 ### Passing data via stdin
 
@@ -191,7 +193,7 @@ ax experiments list-runs EXPERIMENT_NAME --dataset DATASET_NAME --space SPACE --
 ax experiments list-runs EXPERIMENT_ID
 ```
 
-Flags: `ax experiments list-runs --help`.
+`--filter` narrows runs server-side (e.g. by `eval.<name>.label`); syntax: `ax experiments list-runs --help`. To process every run, use `export` instead; `list-runs` is for human browsing.
 
 ## Delete Experiment: `ax experiments delete`
 
@@ -268,6 +270,7 @@ Each run corresponds to one dataset example. **On `create`, only `example_id` an
    ```bash
    ax datasets export DATASET_NAME --space SPACE
    ```
+   `ax datasets export` returns one page of examples by default. Add `--all` only when the dataset is larger than one page and the experiment must cover every example.
 3. Call the real model API for each example and collect outputs. Use `ax datasets export --stdout` to pipe examples directly into an inference script:
 
    ```bash

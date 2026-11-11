@@ -111,7 +111,7 @@ Confirm string `output.value`, `parent_id` links, and `session.id` when Langfuse
 
 ### Step 3 — Datasets
 
-See [Langfuse export recipes](references/langfuse-export.md) → flatten → `ax datasets create`.
+See [Langfuse export recipes](references/langfuse-export.md) → flatten → `ax datasets create`. Run `ax datasets create --help` for the required flags.
 
 ### Step 4 — Prompts (recommended when the user manages prompts in Langfuse)
 
@@ -134,7 +134,7 @@ Summarize spans imported, sample `output.value`, session coverage, prompts/versi
 
 ## Working directory
 
-`.arize-tmp-migrate/langfuse/` for raw exports (gitignored at repo root).
+`.arize-tmp-migrate/langfuse/` for raw exports. Add `.arize-tmp-migrate/` to the user project's `.gitignore` before writing exports, so raw exports stay out of version control.
 
 ## Related skills
 

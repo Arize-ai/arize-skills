@@ -49,7 +49,7 @@ Evaluators are **versioned** — every prompt or model change creates a new immu
 
 **Code evaluators** are the deterministic alternative — no AI integration or model, just Python. They run as a class subclassing `CodeEvaluator`, not a bare function, and have their own strict import-path and `evaluate()`-signature contract. Getting either wrong makes a run cancel silently at `0/0/0`. See "Custom Python code evaluators" in [references/cli-reference.md](references/cli-reference.md) before writing one.
 
-**Remote evaluators** call a customer-hosted HTTP endpoint and are created with `ax evaluators create-evaluator remote`, which takes an evaluator integration ID; run `ax evaluators create-evaluator remote --help` for its flags.
+**Remote evaluators** call a customer-hosted HTTP endpoint and are created with `ax evaluators create-evaluator remote --integration-id INT_ID`, where `INT_ID` is an existing `EVALUATOR` integration; find one with `ax integrations list --type EVALUATOR`. Run `ax evaluators create-evaluator remote --help` and `ax integrations create --help` to check the current flags and which integration types the CLI can create.
 
 ### What is a Task?
 
@@ -414,7 +414,7 @@ Single quotes prevent the shell from interpolating `{variable}` placeholders. Do
 | `sampling-rate only valid for project tasks` | Remove `--sampling-rate` from dataset tasks |
 | `project '...' not found` or validation error on `ax spans export` | Add `--space SPACE`; if it persists, look up the base64 project ID via `ax projects get PROJECT --space SPACE -o json` and use the `id` field instead |
 | Template validation errors | Use single-quoted `--template '...'` in bash; single braces `{var}`, not `{{var}}` |
-| Run stuck in `pending` | `ax tasks get-run RUN_ID`; then `ax tasks cancel-run RUN_ID` |
+| Run stuck in `pending` | `ax tasks get-run RUN_ID`; then `ax tasks cancel-run RUN_ID --force` |
 | Run `completed`, 0 spans | Widen time window; eval index may not cover older data |
 | Scores look wrong | Add `--include-explanations` and inspect judge reasoning on a few samples |
 | Time format error on `trigger-run` | Use `2026-03-21T09:00:00` — no trailing `Z` |
