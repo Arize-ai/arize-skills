@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.4.0](https://github.com/Arize-ai/arize-skills/compare/v1.3.0...v1.4.0) (2026-11-09)
+
+
+### Features
+
+* **ai-provider-integration:** add DeepSeek provider ([#169](https://github.com/Arize-ai/arize-skills/issues/169)) ([46ce60f](https://github.com/Arize-ai/arize-skills/commit/46ce60f092a28fb0b6e4b2c97b2cbf41d45006d6))
+
+
+### Bug Fixes
+
+* **antigravity:** tell users where to find their Arize API key ([#173](https://github.com/Arize-ai/arize-skills/issues/173)) ([4f4925d](https://github.com/Arize-ai/arize-skills/commit/4f4925d47b438088271e8aad645e02037a70465b))
+
 ## [1.3.0](https://github.com/Arize-ai/arize-skills/compare/v1.2.0...v1.3.0) (2026-10-30)
 
 
