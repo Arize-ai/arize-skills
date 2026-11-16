@@ -195,7 +195,7 @@ echo "======================"
 echo ""
 echo "Detected agents: ${AGENTS[*]}"
 if [[ "$GLOBAL" == true ]]; then
-  echo "Scope: global (~/$HOME)"
+  echo "Scope: global ($HOME)"
 else
   echo "Scope: project ($BASE)"
 fi

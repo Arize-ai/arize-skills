@@ -102,7 +102,7 @@ Format-only example (not a default to paste — see Eliciting the prompt templat
 ]
 ```
 
-**Providers** (`--provider`): `OPEN_AI`, `ANTHROPIC`, `AZURE_OPEN_AI`, `AWS_BEDROCK`, `VERTEX_AI`, `CUSTOM`. (No `GEMINI` option for prompts, unlike `ax ai-integrations`.) Required on every `create` and `create-version`.
+**Provider** (`--provider`): Required on `create` and `create-version`; values from `ax prompts create --help` (a narrower set than `ax ai-integrations`).
 
 **Model** (`--model`): Always pass an explicit model. If unknown, propose a provider-appropriate default and confirm before running.
 
@@ -383,5 +383,5 @@ Run `ax prompts --help` for the command list and `ax prompts <sub> --help` for f
 | Variables not interpolating | Confirm each placeholder is `{name}` (single `{` / `}` around the identifier) and `--input-variable-format F_STRING` |
 | Label pointing to wrong version | `get-version-by-label` to check, then `set-version-labels` on the correct `prv_...` ID |
 | Hub shows no default model | You omitted `--model` — always pass it explicitly |
-| CLI rejects missing `--provider` | Required on `create` and `create-version` — set one of `OPEN_AI`, `AZURE_OPEN_AI`, `AWS_BEDROCK`, `VERTEX_AI`, `ANTHROPIC`, `CUSTOM` |
+| CLI rejects missing `--provider` | Required on `create` and `create-version` — pass a value listed by `ax prompts create --help` |
 | Need to change system text | Use `create-version` with updated `--messages` — `update` only changes metadata |

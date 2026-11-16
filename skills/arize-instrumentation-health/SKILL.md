@@ -19,7 +19,7 @@ Use this skill for an **on-demand instrumentation health audit** over a project'
 ## Workflow
 
 1. **Resolve scope** — get the project (and space, if needed). If ambiguous, ask; do not guess.
-2. **Export a bounded span sample** using the **`arize-trace`** skill — do not hand-roll `ax` flags here. Follow its export guidance: start with a small sample scoped by `--start-time` to a recent window, into `--output-dir .arize-tmp-traces`. Pull ~20 traces' worth of spans for a full audit (see minimum-data rules below).
+2. **Export a bounded span sample** using the **`arize-trace`** skill — do not hand-roll `ax` flags here. Follow its export guidance: start with a small sample scoped by `--start-time` to a recent window, into `--output-dir .arize-tmp-traces`. Use `ax traces export` so `--limit` counts traces; `ax spans export --limit` counts spans. For a full audit, export at least 20 traces (see minimum-data rules below).
 3. **Group spans by trace** (`context.trace_id`); within each trace identify the root (`parent_id`/`parent_span_id` is null).
 4. **Run the deterministic checks** in [references/checks.md](references/checks.md) against the sample.
 5. **Report findings** ranked by severity then confidence, using the **Output format** in [references/checks.md](references/checks.md).

@@ -10,4 +10,4 @@ ax ai-integrations create \
   --enable-default-models
 ```
 
-`--base-url` and `--api-key` are both optional: omit `--base-url` to use NVIDIA's hosted endpoint, or set it to a self-hosted NIM endpoint (e.g. `--base-url "https://my-nim.example.com/v1"`). `--enable-default-models` is required unless you pass `--model-name` instead: the server rejects an integration with no model source.
+`--base-url` and `--api-key` are both optional: omit `--base-url` to use NVIDIA's hosted endpoint, or set it to a self-hosted NIM endpoint (e.g. `--base-url "https://my-nim.example.com/v1"`).

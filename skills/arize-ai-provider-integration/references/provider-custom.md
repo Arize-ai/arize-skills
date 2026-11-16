@@ -11,4 +11,4 @@ ax ai-integrations create \
   --model-name my-model
 ```
 
-`--base-url` is required and must implement the OpenAI API shape; the server validates it and requires a public address. Pass the endpoint's model names with `--model-name` (repeat for several), or `--enable-default-models`: the server rejects an integration with no model source. `--api-key` is optional if the endpoint needs no key.
+`--base-url` is required and must implement the OpenAI API shape; the server validates it and requires a public address. Pass the endpoint's model names with `--model-name` (repeat for several), or `--enable-default-models`. `--api-key` is optional if the endpoint needs no key.

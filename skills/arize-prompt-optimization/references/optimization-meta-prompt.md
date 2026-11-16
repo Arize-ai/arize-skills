@@ -1,6 +1,6 @@
 # Optimization Meta-Prompt
 
-Use this template to generate an improved version of the prompt. Fill in the three placeholders and send it to your LLM (GPT-4o, Claude, etc.). See [SKILL.md](../SKILL.md) for when to use this template in the optimization workflow.
+Use this template to generate an improved version of the prompt. Fill in the two placeholders and send it to your LLM (GPT-4o, Claude, etc.). See [SKILL.md](../SKILL.md) for when to use this template in the optimization workflow.
 
 ````
 You are an expert in prompt optimization. Given the original baseline prompt

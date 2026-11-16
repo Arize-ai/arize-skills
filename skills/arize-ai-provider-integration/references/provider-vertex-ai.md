@@ -12,4 +12,4 @@ ax ai-integrations create \
   --enable-default-models
 ```
 
-All three metadata fields are required. `--enable-default-models` is required unless you pass `--model-name` instead: the server rejects an integration with no model source. No `--api-key` is used.
+All three metadata fields are required. No `--api-key` is used.

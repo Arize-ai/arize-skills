@@ -118,7 +118,7 @@ Ask **latest only** vs versions / environments. Then:
 1. For each prompt, fetch by id; use `version` / `environment` query params when importing history
 1. Map `prompt_data.prompt` messages → AX roles; flatten text blocks to `content` strings
 1. Infer `F_STRING` vs `MUSTACHE` from template syntax; ask if unclear
-1. `ax prompts create` then `ax prompts create-version` oldest→newest; map Braintrust environments to AX labels with `ax prompts set-version-labels VERSION_ID --label NAME` when the user wants them (version ID from the `create` or `create-version` output; repeat `--label`, since it replaces existing labels)
+1. `ax prompts create` then `ax prompts create-version` oldest→newest (required flags: `--help` of each); map Braintrust environments to AX labels with `ax prompts set-version-labels VERSION_ID --label NAME` when the user wants them (version ID from the `create` or `create-version` output; repeat `--label`, since it replaces existing labels)
 1. Copy model/provider from prompt options when present; otherwise ask
 
 Skip non-prompt functions (tools/scorers) unless the user explicitly wants those recreated separately.
@@ -133,7 +133,7 @@ Summarize spans imported, trace/session counts, sample `output.value`, prompts/v
 
 ## Working directory
 
-`.arize-tmp-migrate/braintrust/` for raw exports (gitignored at repo root).
+`.arize-tmp-migrate/braintrust/` for raw exports. Add `.arize-tmp-migrate/` to the user project's `.gitignore` before writing exports.
 
 ## Related skills
 

@@ -11,7 +11,7 @@ compatibility: Requires ax CLI, Arize OTLP credentials (ARIZE_API_KEY + ARIZE_SP
 
 Move LangSmith data into Arize AX. **Historical traces are in scope** — export LangSmith runs and ingest them into AX via OTLP with explicit attribute mapping. Also migrate datasets and optionally cut over live traffic.
 
-> **`SPACE`** — `--space` / `ARIZE_SPACE` accept a space **name** or base64 ID. Prefer the user-provided name; do not paginate `ax spaces list` just to look it up.
+> **`SPACE`** — `ax` commands take `--space` with a space **name** or ID; pass the user-provided name directly. The bundled importer reads `ARIZE_SPACE_ID`, which must be the base64 space ID — resolve a known name with `ax spaces get NAME -o json` rather than paging `ax spaces list`.
 
 ## When to use
 
@@ -115,7 +115,7 @@ Confirm:
 
 ### Step 3 — Datasets
 
-Export examples → flatten → `ax datasets create`. See [LangSmith export recipes](references/langsmith-export.md).
+Export examples → flatten → `ax datasets create`. Run `ax datasets create --help` for the required flags and accepted input formats. See [LangSmith export recipes](references/langsmith-export.md).
 
 ### Step 4 — Prompts (recommended when the user has Prompt Hub content)
 
@@ -141,7 +141,7 @@ Summarize: spans imported, sample `output.value`, session coverage, datasets, pr
 
 ## Working directory
 
-Use `.arize-tmp-migrate/langsmith/` for raw exports and verify dumps (gitignored at repo root).
+Use `.arize-tmp-migrate/langsmith/` for raw exports and verify dumps. These files hold exported user data: add `.arize-tmp-migrate/` to the user project's `.gitignore` before writing to it.
 
 ## Related skills
 
