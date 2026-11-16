@@ -4,7 +4,7 @@ description: Audits instrumentation health of existing Arize traces. Runs determ
 metadata:
   author: arize
   version: "1.0"
-compatibility: Requires the ax CLI and a configured Arize profile. Analyzes exported OpenInference/OTel spans; language-agnostic.
+compatibility: Requires the ax CLI (≥ 0.39.0) and a configured Arize profile. Analyzes exported OpenInference/OTel spans; language-agnostic.
 ---
 
 # Arize Instrumentation Health Skill
@@ -19,7 +19,7 @@ Use this skill for an **on-demand instrumentation health audit** over a project'
 ## Workflow
 
 1. **Resolve scope** — get the project (and space, if needed). If ambiguous, ask; do not guess.
-2. **Export a bounded span sample** using the **`arize-trace`** skill — do not hand-roll `ax` flags here. Follow its export guidance: start with a small sample scoped by `--start-time` to a recent window, into `--output-dir .arize-tmp-traces`. Pull ~20 traces' worth of spans for a full audit (see minimum-data rules below).
+2. **Export a bounded trace sample** per the **`arize-trace`** skill's export guidance: `ax traces export` with `--start-time` scoped to a recent window and `--output-dir .arize-tmp-traces`. Pass `--limit 20` for a full audit (see minimum-data rules below); on `ax traces export`, `--limit` counts traces, while on `ax spans export` it counts spans.
 3. **Group spans by trace** (`context.trace_id`); within each trace identify the root (`parent_id`/`parent_span_id` is null).
 4. **Run the deterministic checks** in [references/checks.md](references/checks.md) against the sample.
 5. **Report findings** ranked by severity then confidence, using the **Output format** in [references/checks.md](references/checks.md).

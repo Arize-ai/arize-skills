@@ -58,6 +58,8 @@ Always ensure the relevant **annotation config** exists in the space before expe
 
 ### List
 
+When the config name or ID is known, use `ax annotation-configs get` directly (see Get); `list` is for human browsing.
+
 ```bash
 ax annotation-configs list --space SPACE
 ax annotation-configs list --space SPACE -o json
@@ -159,6 +161,8 @@ ax annotation-configs delete NAME_OR_ID --force   # skip confirmation
 Annotation queues route records (spans, dataset examples, experiment runs) to human reviewers. Each queue is linked to one or more annotation configs that define what labels reviewers can apply.
 
 ### List / Get
+
+When the queue name or ID is known, use `get` directly; `list` is for human browsing.
 
 ```bash
 ax annotation-queues list --space SPACE
@@ -315,9 +319,9 @@ response = client.spans.update_annotations(
 |---------|----------|
 | `ax: command not found` | See [references/ax-setup.md](references/ax-setup.md) |
 | `401 Unauthorized` | API key may not have access to this space. Verify at https://app.arize.com/admin > API Keys |
-| `Annotation config not found` | `ax annotation-configs list --space SPACE` (or use `ax annotation-configs get NAME_OR_ID --space SPACE`) |
+| `Annotation config not found` | `ax annotation-configs get NAME_OR_ID --space SPACE`; use `ax annotation-configs list --space SPACE` only to browse for the right name |
 | `409 Conflict on create` | Name already exists in the space. Use a different name or get the existing config ID. |
-| Queue not found | `ax annotation-queues list --space SPACE`; verify the queue name or ID |
+| Queue not found | `ax annotation-queues get NAME_OR_ID --space SPACE`; use `ax annotation-queues list --space SPACE` only to browse for the right name |
 | Record not appearing in queue | Ensure the annotation config linked to the queue exists; check `ax annotation-configs list --space SPACE` |
 | Span SDK errors or missing spans | Confirm `project_name`, `space_id`, and span IDs; use arize-trace to export spans |
 

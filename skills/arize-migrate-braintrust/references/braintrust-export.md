@@ -61,7 +61,7 @@ bulk history without pagination. After import, cut over live tracing for new tra
 ## CLI helpers
 
 - `bt sql` — run SQL against Braintrust
-- `bt sync` — Braintrust NDJSON sync between Braintrust orgs/projects; **not** an AX importer. If the user already has NDJSON from `bt sync pull`, transform records into AX example JSON before `ax datasets create`.
+- `bt sync` — Braintrust NDJSON sync between Braintrust orgs/projects; **not** an AX importer. If the user already has NDJSON from `bt sync pull`, transform records into AX example JSON before `ax datasets create` (run `ax datasets create --help` for required flags).
 
 ## Prompts → Arize AX Prompt Hub
 
@@ -70,7 +70,7 @@ Braintrust REST (https://www.braintrust.dev/docs/api-reference/prompts/list-prom
 - List: `GET /v1/prompt` (filter with `project_name`, `slug`, …)
 - Get: `GET /v1/prompt/{prompt_id}` with optional `version` / `environment`
 
-Map `prompt_data` messages into AX Prompt Hub via `ax prompts create` / `ax prompts create-version`, and map environments to AX labels with `ax prompts set-version-labels` when the user wants them. Skip tool/scorer functions unless explicitly requested.
+Map `prompt_data` messages into AX Prompt Hub via `ax prompts create` / `ax prompts create-version` (run each command's `--help` for required flags), and map environments to AX labels with `ax prompts set-version-labels` when the user wants them. Skip tool/scorer functions unless explicitly requested.
 
 ## Transform checklist
 

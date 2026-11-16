@@ -1,2 +1,1 @@
-# Braintrust export uses the public REST API; no extra Python packages.
-# Keep this file so the skill install path matches arize-phoenix-migration.
+# migrate_vendor_traces.py with --vendor braintrust uses only the Python standard library; nothing to install.
