@@ -199,6 +199,22 @@ SPECIFIC_PROMPTS = [
         ["arize-evaluator"],
         ["specific", "evaluator"],
     ),
+    # arize-align-evaluator
+    (
+        "Compare my LLM judge's labels against the human labels in my annotation queue",
+        ["arize-align-evaluator"],
+        ["specific", "align-evaluator"],
+    ),
+    (
+        "Align my hallucination evaluator with our human ground truth and measure agreement",
+        ["arize-align-evaluator"],
+        ["specific", "align-evaluator"],
+    ),
+    (
+        "Check inter-annotator agreement on my labeling queue before calibrating the evaluator",
+        ["arize-align-evaluator"],
+        ["specific", "align-evaluator"],
+    ),
     # arize-annotation
     (
         "Create an annotation config for correctness labels",
@@ -214,6 +230,17 @@ SPECIFIC_PROMPTS = [
         "Set up a categorical annotation config with pass/fail labels",
         ["arize-annotation"],
         ["specific", "annotation"],
+    ),
+    # arize-align-evaluator: collecting labels
+    (
+        "Build a labeling queue so I can get enough human labels to align my dashboard_metric_formula evaluator",
+        ["arize-align-evaluator"],
+        ["specific", "align-evaluator"],
+    ),
+    (
+        "Sample balanced sessions across my evaluator's labels into a new annotation queue for a gold set",
+        ["arize-align-evaluator"],
+        ["specific", "align-evaluator"],
     ),
     # arize-ai-provider-integration
     (
@@ -464,6 +491,17 @@ VAGUE_PROMPTS = [
         ["arize-evaluator"],
         ["vague", "evaluator"],
     ),
+    # Should route to align-evaluator
+    (
+        "My eval keeps disagreeing with what our reviewers said",
+        ["arize-align-evaluator"],
+        ["vague", "align-evaluator"],
+    ),
+    (
+        "Is my judge actually trustworthy compared to human labels?",
+        ["arize-align-evaluator"],
+        ["vague", "align-evaluator"],
+    ),
     # Should route to annotation
     (
         "I need human reviewers to label my model outputs",
@@ -474,6 +512,12 @@ VAGUE_PROMPTS = [
         "Set up a labeling schema so my team can rate responses",
         ["arize-annotation"],
         ["vague", "annotation"],
+    ),
+    # Should route to align-evaluator (collecting labels)
+    (
+        "My last labeling queue was mostly not-applicable records, help me build a better one for my eval",
+        ["arize-align-evaluator"],
+        ["vague", "align-evaluator"],
     ),
     # Should route to ai-provider-integration
     (

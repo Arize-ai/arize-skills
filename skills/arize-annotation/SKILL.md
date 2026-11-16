@@ -347,6 +347,7 @@ See the linked skills for file format details.
 - **arize-trace**: Export spans to find span IDs and time ranges; batch annotate spans via `ax spans annotate`
 - **arize-dataset**: Find dataset IDs and example IDs; batch annotate examples via `ax datasets annotate-examples`
 - **arize-evaluator**: Automated LLM-as-judge alongside human annotation
+- **arize-align-evaluator**: Design and create queues sampled and sized for aligning a specific evaluator, then use them as ground truth to align it
 - **arize-experiment**: Experiments tied to datasets and evaluation workflows; batch annotate runs via `ax experiments annotate-runs`
 - **arize-prompts**: Manage prompt templates; annotate prompt outputs for quality tracking
 - **arize-link**: Deep links to annotation configs and queues in the Arize UI
