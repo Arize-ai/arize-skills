@@ -1,6 +1,6 @@
 ---
 name: arize-align-queue-builder
-description: Builds Arize annotation queues that yield enough human labels to align one LLM-as-judge evaluator, with a random calibration queue that measures it and a targeted queue that covers every label it gives. Derives the label config from the evaluator, sizes for exclusions, writes blind annotator instructions, and stops for approval before creating anything. Use when the user needs human labels for evaluator alignment, a queue had too few usable labels, or a queue should keep taking in new records.
+description: Builds Arize annotation queues that yield enough human labels to align one LLM-as-judge evaluator, with a random calibration queue that measures it and a targeted queue that covers every label it gives. Derives the label config from the evaluator (also for labeling traces directly), sizes for exclusions, writes blind instructions, and stops for approval. Use when the user needs human labels for evaluator alignment, a queue had too few usable labels, or a queue should keep taking in new records.
 metadata:
   author: arize
   version: "1.2"
@@ -30,7 +30,7 @@ For plain queue mechanics (create, update, assign, delete), use **arize-annotati
 
 ## Hard rules
 
-- **Do not create anything before approval.** Phases 1–3 are read-only. Do not create the annotation configs, the queues or their records until the user approves the plan in Phase 4. For continuous intake, the user approves the intake settings and schedule once (Phase 7); scheduled runs then add records without asking each time.
+- **Do not create anything before approval.** Phases 1–3 are read-only. Do not create the annotation configs (direct-labeling ones included), the queues or their records until the user approves the plan in Phase 4. For continuous intake, the user approves the intake settings and schedule once (Phase 7); scheduled runs then add records without asking each time.
 - **Never label records yourself.** Never present model output or stored evaluator labels as human labels.
 - **Measure only on the random stream.** Targeted records were chosen by the evaluator's labels or other signals. Never quote their agreement as the evaluator's accuracy.
 - **Keep labeling blind.** Stored evaluator labels are used to *choose* records. Set each queue's Annotator Columns so evaluator output is hidden, and check it ([Keeping labelers blind](references/rubric-and-instructions.md#keeping-labelers-blind)). Never share the plan with annotators.
@@ -68,6 +68,7 @@ If an `ax` command fails, troubleshoot based on the error:
 4. **Find the existing queues for this evaluator** with `ax annotation-queues list --space SPACE --name "KEYWORD"`. Their records will be excluded. If they exist, ask whether this is a **new round** or a **top-up** (see Phase 6).
 5. **Ask whether anyone has done error analysis** on this evaluator's traffic: a domain expert reading 30 or more real traces and noting how they fail. If not, start in `discovery` mode. Its 30 random records are for that expert to open-code before the rubric is trusted. Rubric definitions often change once people see real outputs, so settle them before a validation round.
 6. **Ask for judge-independent signals.** User thumbs-down or feedback annotations, escalations, or high-severity topics that can be written as a span filter become `--signal` strata. They find failures the evaluator is confidently wrong about.
+7. **Ask whether they also want to label straight from production traces,** without a queue. If so, also propose a direct-labeling config: its own config with the same label values as the queue config, so the labels can be pooled when aligning. Direct labels aren't blind and have no known selection rate, so they serve error analysis and dev, never measurement. Follow [references/direct-labeling.md](references/direct-labeling.md). It's created after approval in Phase 5, like the queue configs. If the user wants only direct labeling, do Phase 2's label values and instructions, present the config and instructions, and stop for approval; skip the plan and the queues.
 
 ## Phase 2: Design the label configs and instructions
 
@@ -141,6 +142,8 @@ Then ask the user to approve or adjust. **Do not create anything in the same tur
      --value LABEL_1 --value LABEL_2 ... --optimization-direction NONE -o json
    ax annotation-configs create freeform --name "CRITIQUE_CONFIG_NAME" --space SPACE -o json
    ```
+
+   If the user approved direct labeling, create its config the same way, with the same `--value` list and its own name ([references/direct-labeling.md](references/direct-labeling.md)). Then check where the first direct label lands before anyone labels more.
 3. **Create each queue with its first record sources, then add the rest.** The calibration queue takes `random_sources.*`, and the gold queue takes `record_sources.*`:
 
    ```bash
@@ -225,6 +228,7 @@ python3 SKILL_ROOT/scripts/plan_queue.py --space SPACE \
 | Annotators can see evaluator labels or scores | Edit the queue's Annotator Columns in the Arize UI to leave out the eval columns; ax can't set them. Labels made while evals were visible aren't blind. |
 | `--random` draws fewer than asked | The window has fewer scored units than requested. Widen `--days`, or accept a wider interval and say so. |
 | Labels land on spans instead of the session | The queue holds span records. Rebuild it from a current plan, which writes `SESSION` records for session evaluators. Labels made on a span record judged one turn, not the session. |
+| A direct label isn't where the instructions say | Labeling without a queue puts the value wherever the labeler clicked. Export the span (`ax spans export PROJECT --space SPACE --span-id ID --stdout`), find the annotation, and fix the instructions before labeling continues ([Where the label goes](references/direct-labeling.md#where-the-label-goes)). |
 | `record_type` `SESSION` is rejected | The `ax` install or its arize SDK predates session records (SDK 8.56 works). Upgrade, and check `which -a ax`. |
 
 ---
