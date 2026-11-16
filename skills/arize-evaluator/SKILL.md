@@ -4,7 +4,7 @@ description: Handles LLM-as-judge and code evaluator workflows on Arize includin
 metadata:
   author: arize
   version: "1.0"
-compatibility: Requires the ax CLI and a configured Arize profile with an AI integration.
+compatibility: Requires the ax CLI (≥ 0.39.0) and a configured Arize profile with an AI integration.
 ---
 
 # Arize Evaluator Skill
@@ -49,7 +49,7 @@ Evaluators are **versioned** — every prompt or model change creates a new immu
 
 **Code evaluators** are the deterministic alternative — no AI integration or model, just Python. They run as a class subclassing `CodeEvaluator`, not a bare function, and have their own strict import-path and `evaluate()`-signature contract. Getting either wrong makes a run cancel silently at `0/0/0`. See "Custom Python code evaluators" in [references/cli-reference.md](references/cli-reference.md) before writing one.
 
-**Remote evaluators** call a customer-hosted HTTP endpoint and are created with `ax evaluators create-evaluator remote`, which takes an evaluator integration ID; run `ax evaluators create-evaluator remote --help` for its flags.
+**Remote evaluators** call a customer-hosted HTTP endpoint. Create one with `ax evaluators create-evaluator remote` and add versions with `ax evaluators create-evaluator-version remote`; run each with `--help` for flags. Both require the `enableRemoteEvalTasks` feature flag on the account and an `EVALUATOR` integration ID: find one with `ax integrations list --type EVALUATOR`. Disregard the `ax integrations create --type EVALUATOR` hint in their `--help`; `ax integrations create` offers only `llm` and `agent`. When none is listed, ask the user for an existing `EVALUATOR` integration ID.
 
 ### What is a Task?
 
@@ -169,7 +169,7 @@ Respond with exactly one of these labels: hallucinated, factual'
 
 ### Step 5: Ask — backfill, continuous, or both?
 
-**Recommended approach:** Always start with a small backfill (~100 historical spans) to validate the evaluator before turning on continuous monitoring. This lets you catch column mapping errors, wrong span kinds, and template issues on known data before scoring all future production spans. Only enable continuous after a backfill confirms correct scoring.
+**Recommended approach:** Start with a small backfill (~100 historical spans) to catch column mapping errors, wrong span kinds, and template issues on known data. Enable continuous only after the backfill confirms correct scoring.
 
 Before creating the task, ask:
 
@@ -229,17 +229,7 @@ ax tasks create-evaluation \
   --no-continuous
 ```
 
-**Continuous only (b):**
-```bash
-ax tasks create-evaluation \
-  --name "Hallucination Monitor" \
-  --task-type TEMPLATE_EVALUATION \
-  --project PROJECT --space SPACE \
-  --evaluators '[{"evaluator_id": "EVAL_ID", "column_mappings": {"input": "attributes.input.value", "output": "attributes.output.value"}}]' \
-  --query-filter "attributes.openinference.span.kind = 'LLM'" \
-  --is-continuous \
-  --sampling-rate 0.1
-```
+**Continuous only (b):** Same command with `--is-continuous --sampling-rate 0.1` in place of `--no-continuous`, and a distinct `--name` (task names are unique within a space).
 
 **Both (c):** Use `--is-continuous` on create, then also trigger a backfill run in Step 8.
 
@@ -357,12 +347,7 @@ Use `{input}`, `{output}`, and `{context}` — not names tied to a specific proj
 
 ### 2. Default to binary labels
 
-Use exactly two clear string labels (e.g. `hallucinated` / `factual`, `correct` / `incorrect`, `pass` / `fail`). Binary labels are:
-- Easiest for the judge model to produce consistently
-- Most common in the industry
-- Simplest to interpret in dashboards
-
-If the user insists on more than two choices, that's fine — but recommend binary first and explain the tradeoff (more labels → more ambiguity → lower inter-rater reliability).
+Use exactly two clear string labels (e.g. `hallucinated` / `factual`, `pass` / `fail`): the judge produces them most consistently and dashboards read them most simply. When the user asks for more choices, recommend binary first and explain the tradeoff (more labels → more ambiguity → lower inter-rater reliability).
 
 ### 3. Be explicit about what the model must return
 
@@ -409,7 +394,7 @@ Single quotes prevent the shell from interpolating `{variable}` placeholders. Do
 | `Evaluator not found` | `ax evaluators get NAME_OR_ID --space SPACE` (`ax evaluators list --space SPACE` is for human browsing) |
 | `Integration not found` | `ax ai-integrations get NAME_OR_ID --space SPACE` (`list` is for human browsing) |
 | `Task not found` | `ax tasks get TASK_ID` (`ax tasks list --space SPACE` is for human browsing) |
-| `project and dataset-id are mutually exclusive` | Use only one when creating a task |
+| `project and dataset-id are mutually exclusive` | A task targets a project or a dataset, not both; see `ax tasks create-evaluation --help` |
 | `experiment-ids required for dataset tasks` | Add `--experiment-ids` to `create` and `trigger-run` |
 | `sampling-rate only valid for project tasks` | Remove `--sampling-rate` from dataset tasks |
 | `project '...' not found` or validation error on `ax spans export` | Add `--space SPACE`; if it persists, look up the base64 project ID via `ax projects get PROJECT --space SPACE -o json` and use the `id` field instead |

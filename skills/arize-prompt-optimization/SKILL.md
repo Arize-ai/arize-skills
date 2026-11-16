@@ -4,7 +4,7 @@ description: Optimizes, improves, and debugs LLM prompts using production trace 
 metadata:
   author: arize
   version: "1.0"
-compatibility: Requires the ax CLI and a configured Arize profile.
+compatibility: Requires the ax CLI (≥ 0.39.0) and a configured Arize profile.
 ---
 
 # Arize Prompt Optimization Skill
@@ -206,7 +206,7 @@ Look for patterns across failures:
 
 ### The Optimization Meta-Prompt
 
-Fill in the three placeholders in [references/optimization-meta-prompt.md](references/optimization-meta-prompt.md) and send it to your LLM (GPT-4o, Claude, etc.) to generate an improved version of the prompt.
+Fill in the two placeholders (`{PASTE_ORIGINAL_PROMPT_HERE}`, `{PASTE_RECORDS_HERE}`) in [references/optimization-meta-prompt.md](references/optimization-meta-prompt.md) and send it to an LLM (GPT-4o, Claude, etc.) to generate an improved version of the prompt.
 
 ### Preparing the performance data
 

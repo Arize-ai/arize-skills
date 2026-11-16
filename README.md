@@ -65,7 +65,7 @@ ax skills install --global --agent cursor --yes     # globally for Cursor
 ax skills clear --yes                               # remove Arize skills
 ```
 
-Use `--agent` (repeatable) to target specific agents: claude-code, cursor, codex, windsurf. Pass `--global` to install globally in `~/.<agents>/skills/` instead of your project, or `--yes` to skip confirmations.
+Use `--agent` (repeatable) to target specific agents: claude-code, cursor, codex, windsurf, github-copilot, antigravity-cli. Pass `--global` to install globally in `~/.<agents>/skills/` instead of your project, or `--yes` to skip confirmations.
 
 ### Option 4: Claude Code plugin
 
@@ -170,6 +170,7 @@ For interactive setup, `ax profiles create` also offers **Advanced → Single en
 | [arize-experiment](skills/arize-experiment/SKILL.md) | Run and analyze experiments against datasets. |
 | [arize-evaluator](skills/arize-evaluator/SKILL.md) | Create LLM-as-judge evaluators, run evaluation tasks, and set up continuous monitoring. |
 | [arize-ai-provider-integration](skills/arize-ai-provider-integration/SKILL.md) | Create and manage LLM provider credentials (OpenAI, Anthropic, Azure, Bedrock, Vertex, and more). |
+| [arize-integrations](skills/arize-integrations/SKILL.md) | Create and manage LLM and agent integrations with `ax integrations` (list, get, create, update, delete). |
 | [arize-annotation](skills/arize-annotation/SKILL.md) | Create and manage annotation configs (categorical, continuous, freeform); bulk-annotate project spans via the Python SDK. |
 | [arize-prompt-optimization](skills/arize-prompt-optimization/SKILL.md) | Optimize prompts using trace data, experiments, and meta-prompting. |
 | [arize-prompts](skills/arize-prompts/SKILL.md) | Manage Prompt Hub templates and versions with `ax prompts` (create, versions, labels). |
@@ -236,7 +237,7 @@ export TEST_MODEL="claude-sonnet-4-6"     # optional: Claude model override
 Then run the harness:
 
 ```bash
-python tests/run_skill.py --skill arize-trace --prompt "Export trace abc123"
+python tests/run_skill.py arize-trace "Export trace abc123"
 ```
 
 > [!WARNING]

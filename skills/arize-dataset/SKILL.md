@@ -9,7 +9,7 @@ compatibility: Requires the ax CLI (≥ 0.39.0) and a configured Arize profile.
 
 # Arize Dataset Skill
 
-> **`SPACE`** — `--space` flags accept a space **name** (e.g., `my-workspace`) or a base64 space **ID** (e.g., `U3BhY2U6...`). Find yours with `ax spaces list`.
+> **`SPACE`** — `--space` flags accept a space **name** (e.g., `my-workspace`) or a base64 space **ID** (e.g., `U3BhY2U6...`). Resolve a known name with `ax spaces get NAME`; `ax spaces list` is for human browsing.
 
 ## Concepts
 
@@ -235,7 +235,7 @@ For all flags, run `ax datasets update --help`.
 
 ## Annotate Examples: `ax datasets annotate-examples`
 
-Write annotations onto dataset examples in bulk from a file. Upsert semantics — existing annotations with the same key are updated, new ones are created. Up to 1000 examples per request. Each record needs a `record_id` (the dataset example ID) and `values`; unmatched record IDs are silently ignored, so confirm IDs against an export first.
+Write annotations onto dataset examples in bulk from a file. Upsert semantics — existing annotations with the same key are updated, new ones are created. Up to 1000 examples per request. Each record needs a `record_id` (the dataset example ID) and `values`; see `ax datasets annotate-examples --help` for the value shape. Unmatched record IDs are silently ignored, so confirm IDs against an export first.
 
 ```bash
 ax datasets annotate-examples NAME_OR_ID --file annotations.json

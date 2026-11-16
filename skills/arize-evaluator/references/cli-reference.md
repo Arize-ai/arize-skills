@@ -92,15 +92,7 @@ ax evaluators create-evaluator code \
   --static-params '[{"name": "keywords", "type": "STRING_ARRAY", "default_value": ["unsafe", "harmful", "illegal"]}]'
 ```
 
-**Managed evaluator types** (pass the value exactly — the flag is case-sensitive):
-
-| Value | What it checks |
-|-------|---------------|
-| `MATCHES_REGEX` | Output matches a regular expression |
-| `JSON_PARSEABLE` | Output is valid JSON |
-| `CONTAINS_ANY_KEYWORD` | Output contains at least one keyword from a list |
-| `CONTAINS_ALL_KEYWORDS` | Output contains all keywords from a list |
-| `EXACT_MATCH` | Output exactly equals a target string |
+`--managed-evaluator` values are case-sensitive uppercase; run `ax evaluators create-evaluator code --help` for the allowed values.
 
 **Custom Python code evaluators:**
 
@@ -281,10 +273,10 @@ Run `ax evaluators create-evaluator code --help` for the full flag list.
 ax tasks list --space SPACE
 ax tasks list --project PROJECT_NAME --space SPACE
 ax tasks list --dataset DATASET_NAME --space SPACE
-ax tasks list --task-type TEMPLATE_EVALUATION   # filter by type: TEMPLATE_EVALUATION, CODE_EVALUATION, RUN_EXPERIMENT
+ax tasks list --task-type TEMPLATE_EVALUATION   # allowed types: ax tasks list --help
 ax tasks get TASK_ID
 
-# Create evaluation task (project — continuous)
+# Create evaluation task (project — continuous; for a one-time backfill use --no-continuous and drop --sampling-rate)
 ax tasks create-evaluation \
   --name "Correctness Monitor" \
   --task-type TEMPLATE_EVALUATION \
@@ -292,14 +284,6 @@ ax tasks create-evaluation \
   --evaluators '[{"evaluator_id": "EVAL_ID", "column_mappings": {"input": "attributes.input.value", "output": "attributes.output.value"}}]' \
   --is-continuous \
   --sampling-rate 0.1
-
-# Create evaluation task (project — one-time / backfill)
-ax tasks create-evaluation \
-  --name "Correctness Backfill" \
-  --task-type TEMPLATE_EVALUATION \
-  --project PROJECT_NAME --space SPACE \
-  --evaluators '[{"evaluator_id": "EVAL_ID", "column_mappings": {"input": "attributes.input.value", "output": "attributes.output.value"}}]' \
-  --no-continuous
 
 # Create evaluation task (experiment / dataset)
 # --experiment-ids takes base64 IDs from `ax experiments list --space SPACE -o json`

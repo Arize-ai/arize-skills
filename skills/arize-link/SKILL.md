@@ -40,13 +40,13 @@ ax organizations list --output json
 
 Use `.organizations[].id` for the organization ID. If more than one organization is returned, match the user-provided organization name or ask them to choose.
 
-To discover a project ID, list projects in the relevant space:
+When the project name or ID is known, fetch it directly (`--space` is required with a project name):
 
 ```bash
-ax projects list --space "{space_name_or_id}" --limit 100 --output json
+ax projects get "{project_name_or_id}" --space "{space_name_or_id}" --output json
 ```
 
-Use the matching project's `id`; its `space_id` supplies the space ID required in the URL. The command accepts a space name or ID; if no space is known, run `ax projects list --limit 100 --output json` and select the matching project.
+Use its `id` and `space_id` in the URL. When the project name is not exact, narrow with `ax projects list --space "{space_name_or_id}" --name "{substring}" --limit 100 --output json` and select the matching project from its output.
 
 To discover experiment IDs, list the experiments on the dataset; each has an `id` and a `dataset_id`:
 
@@ -123,7 +123,7 @@ Prefer tight windows; 90-day windows load slowly.
 
 ## Instructions
 
-1. Gather IDs from user, exported data, URL context, or the CLI. Use `ax organizations list --output json` to obtain `org_id`; use `ax projects list` to obtain `project_id` when needed.
+1. Gather IDs from user, exported data, URL context, or the CLI. Use `ax organizations list --output json` to obtain `org_id`; use `ax projects get` to obtain `project_id` when needed.
 2. Verify all path IDs are base64-encoded.
 3. Determine `startA`/`endA` using the priority order above for trace, span, and session links.
 4. Substitute into the appropriate template and present as a clickable markdown link.
@@ -133,7 +133,7 @@ Prefer tight windows; 90-day windows load slowly.
 | Problem | Solution |
 |---|---|
 | "No data" / empty view | Trace outside time window — widen `startA`/`endA` (±1h → ±1d → 90d). |
-| 404 | ID wrong or not base64. Re-check `org_id` with `ax organizations list --output json`, `project_id` with `ax projects list`, and `space_id` from the browser URL. |
+| 404 | ID wrong or not base64. Re-check `org_id` with `ax organizations list --output json`, `project_id` with `ax projects get`, and `space_id` from the browser URL. |
 | Span not highlighted | `span_id` may belong to a different trace. Verify against exported span data. |
 | `org_id` unknown | Run `ax organizations list --output json` and use `.organizations[].id`. If the CLI cannot access the organization, ask the user to copy it from their Arize browser URL. |
 

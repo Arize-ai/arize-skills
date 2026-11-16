@@ -4,7 +4,7 @@ description: Creates, reads, updates, and deletes Arize AI integrations that sto
 metadata:
   author: arize
   version: "1.0"
-compatibility: Requires the ax CLI and a configured Arize profile.
+compatibility: Requires the ax CLI (≥ 0.39.0) and a configured Arize profile.
 ---
 
 # Arize AI Integration Skill
@@ -29,7 +29,7 @@ If an `ax` command fails, troubleshoot based on the error:
 - `401 Unauthorized` / missing API key → run `ax profiles show` to inspect the current profile. If the profile is missing or the API key is wrong, follow [references/ax-profiles.md](references/ax-profiles.md) to create/update it. If the user doesn't have their key, direct them to https://app.arize.com/admin > API Keys
 - Space unknown → see [Space](references/ax-profiles.md#space)
 - LLM provider call fails (missing provider credentials) → run `ax ai-integrations list --space SPACE` to check for platform-managed credentials. If none exist:
-  - **Preferred:** Give the user the exact `ax ai-integrations create` command from Supported Providers below (reference env var names like `$OPENAI_API_KEY`, never raw values). Ask them to export the provider key in **their own terminal** and run the command there — never paste the key into chat. Do not run the create command yourself unless the var is already exported in **this** terminal session.
+  - **Preferred:** Give the user the exact `ax ai-integrations create` command (flags from `ax ai-integrations create --help`; provider details in the Details file listed in Supported Providers below) (reference env var names like `$OPENAI_API_KEY`, never raw values). Ask them to export the provider key in **their own terminal** and run the command there — never paste the key into chat. Do not run the create command yourself unless the var is already exported in **this** terminal session.
   - **Bedrock/Vertex:** use `--provider-metadata` instead of `--api-key` (see Supported Providers below).
 - **Security:** Never read `.env` files or search the filesystem for credentials. Exception: the non-secret `ARIZE_SPACE_ID` line (see [Space](references/ax-profiles.md#space)). Use `ax profiles` for Arize credentials and `ax ai-integrations` for LLM provider keys. Never ask the user to paste secrets into chat. For missing credentials, see [references/ax-profiles.md](references/ax-profiles.md).
 
@@ -37,7 +37,7 @@ If an `ax` command fails, troubleshoot based on the error:
 
 ## List AI Integrations
 
-List all integrations accessible in a space:
+When the integration name or ID is known, use `ax ai-integrations get` ([below](#get-a-specific-integration)) directly; `list` is for human browsing or for finding a name that is unknown.
 
 ```bash
 ax ai-integrations list --space SPACE
@@ -49,17 +49,13 @@ Filter by name (case-insensitive substring match):
 ax ai-integrations list --space SPACE --name "openai"
 ```
 
-Paginate large result sets:
+Paginate with `--cursor` from the previous response:
 
 ```bash
-# Get first page
-ax ai-integrations list --space SPACE --limit 20 -o json
-
-# Get next page using cursor from previous response
 ax ai-integrations list --space SPACE --limit 20 --cursor CURSOR_TOKEN -o json
 ```
 
-Run `ax ai-integrations list --help` for flags. When the integration name or ID is known, use `ax ai-integrations get` (below) instead of paging the list; `list` is for browsing.
+Run `ax ai-integrations list --help` for flags.
 
 **Response fields:**
 
@@ -72,7 +68,7 @@ Run `ax ai-integrations list --help` for flags. When the integration name or ID 
 | `model_names` | Allowed model list, or `null` if all models are enabled |
 | `enable_default_models` | Whether default models for this provider are allowed |
 | `function_calling_enabled` | Whether tool/function calling is enabled |
-| `auth_type` | Authentication method: `DEFAULT`, `PROXY_WITH_HEADERS`, `BEARER_TOKEN`, or `OAUTH2_CLIENT_CREDENTIALS` |
+| `auth_type` | Authentication method (see Concepts) |
 
 ---
 
@@ -98,7 +94,7 @@ ax ai-integrations list --space SPACE
 
 If no suitable integration exists, create one. The required flags depend on the provider.
 
-Every create command follows this shape; the provider-specific flags come from the table below:
+Every create command follows this shape; the provider-specific flags come from `ax ai-integrations create --help` and the provider's Details file:
 
 ```bash
 ax ai-integrations create \
@@ -110,26 +106,27 @@ ax ai-integrations create \
 
 Every integration except LiteLLM, Fireworks AI, Together AI and DeepSeek needs a model source: pass `--enable-default-models` (Arize's default model list for the provider) and/or one or more `--model-name` flags. Without either, the server rejects the create with `400: An integration must have at least one model available`.
 
-For a provider's full example and notes (Bedrock/Vertex metadata, base URLs, flags to avoid), open only that provider's file from the **Details** column below.
-
 ### Supported Providers
 
-| Provider | Required extra flags ("model source" = `--enable-default-models` or `--model-name`) | Key env var | Details |
-|----------|---------------------|-------------|---------|
-| `OPEN_AI` | `--api-key <key>`, model source | `$OPENAI_API_KEY` | [provider-openai.md](references/provider-openai.md) |
-| `ANTHROPIC` | `--api-key <key>`, model source | `$ANTHROPIC_API_KEY` | [provider-anthropic.md](references/provider-anthropic.md) |
-| `AZURE_OPEN_AI` | `--api-key <key>`, `--base-url <azure-endpoint>`, `--model-name <deployment>` | `$AZURE_OPENAI_API_KEY` | [provider-azure-openai.md](references/provider-azure-openai.md) |
-| `AWS_BEDROCK` | `--provider-metadata '{"role_arn": "<arn>"}'` (no API key), model source | — | [provider-aws-bedrock.md](references/provider-aws-bedrock.md) |
-| `VERTEX_AI` | `--provider-metadata '{"project_id": "<gcp-project>", "location": "<region>", "project_access_label": "<label>"}'` (no API key), model source | — | [provider-vertex-ai.md](references/provider-vertex-ai.md) |
-| `GEMINI` | `--api-key <key>`, model source | `$GEMINI_API_KEY` | [provider-gemini.md](references/provider-gemini.md) |
-| `NVIDIA_NIM` | model source; `--api-key` and `--base-url` optional (default: NVIDIA hosted) | `$NVIDIA_API_KEY` | [provider-nvidia-nim.md](references/provider-nvidia-nim.md) |
-| `CUSTOM` | `--base-url <endpoint>`, model source | `$CUSTOM_LLM_API_KEY` | [provider-custom.md](references/provider-custom.md) |
-| `LITELLM` | `--base-url <endpoint>`, `--api-key <key>` | `$LITELLM_API_KEY` | [provider-litellm.md](references/provider-litellm.md) |
-| `FIREWORKS` | `--api-key <key>` only — no `--base-url` or `--headers` | `$FIREWORKS_API_KEY` | [provider-fireworks.md](references/provider-fireworks.md) |
-| `TOGETHER_AI` | `--api-key <key>` only — no `--base-url` or `--headers` | `$TOGETHER_API_KEY` | [provider-together-ai.md](references/provider-together-ai.md) |
-| `DEEP_SEEK` | `--api-key <key>` only — no `--base-url` or `--headers` | `$DEEPSEEK_API_KEY` | [provider-deepseek.md](references/provider-deepseek.md) |
+Run `ax ai-integrations create --help` for flags and accepted `--provider` values; the table lists only gotchas. For a full example, open only the chosen provider's **Details** file.
 
-Run `ax ai-integrations create --help` for optional flags. Pair `--headers` with `--auth-type PROXY_WITH_HEADERS` when the provider sits behind a proxy.
+| Provider | Gotchas | Key env var | Details |
+|----------|---------|-------------|---------|
+| `OPEN_AI` | — | `$OPENAI_API_KEY` | [provider-openai.md](references/provider-openai.md) |
+| `ANTHROPIC` | — | `$ANTHROPIC_API_KEY` | [provider-anthropic.md](references/provider-anthropic.md) |
+| `AZURE_OPEN_AI` | `--base-url` must be a real Azure resource URL (DNS-checked); `--model-name` takes deployment names | `$AZURE_OPENAI_API_KEY` | [provider-azure-openai.md](references/provider-azure-openai.md) |
+| `AWS_BEDROCK` | Credentials go in `--provider-metadata`; omit `--api-key` | — | [provider-aws-bedrock.md](references/provider-aws-bedrock.md) |
+| `VERTEX_AI` | All three `--provider-metadata` fields are required; omit `--api-key` | — | [provider-vertex-ai.md](references/provider-vertex-ai.md) |
+| `GEMINI` | — | `$GEMINI_API_KEY` | [provider-gemini.md](references/provider-gemini.md) |
+| `NVIDIA_NIM` | Omit `--base-url` to use NVIDIA's hosted endpoint | `$NVIDIA_API_KEY` | [provider-nvidia-nim.md](references/provider-nvidia-nim.md) |
+| `CUSTOM` | `--base-url` is required: a public, OpenAI-compatible endpoint | `$CUSTOM_LLM_API_KEY` | [provider-custom.md](references/provider-custom.md) |
+| `LITELLM` | Both `--base-url` and `--api-key` are required; no model source | `$LITELLM_API_KEY` | [provider-litellm.md](references/provider-litellm.md) |
+| `FIREWORKS` | API key only; `--base-url`/`--headers` are stored unvalidated and unused | `$FIREWORKS_API_KEY` | [provider-fireworks.md](references/provider-fireworks.md) |
+| `TOGETHER_AI` | API key only; `--base-url`/`--headers` are stored unvalidated and unused | `$TOGETHER_API_KEY` | [provider-together-ai.md](references/provider-together-ai.md) |
+| `DEEP_SEEK` | API key only; `--base-url`/`--headers` are stored unvalidated and unused; data is processed in the PRC | `$DEEPSEEK_API_KEY` | [provider-deepseek.md](references/provider-deepseek.md) |
+| `TYPE_SAFE_AI`, `PERPLEXITY`, `CLOUDFLARE` | No bundled notes; follow the create shape above and `--help` | — | — |
+
+Pair `--headers` with `--auth-type PROXY_WITH_HEADERS` when the provider sits behind a proxy.
 
 ### After creation
 
@@ -182,15 +179,13 @@ Omit `--force` to get a confirmation prompt instead of deleting immediately.
 
 ---
 
-## `ax integrations` (LLM and agent integrations)
+## `ax integrations`
 
-`ax integrations` manages LLM and agent integrations in one group (`list`, `get`, `delete`, `create llm|agent`, `update llm|agent`). Run `ax integrations <sub> --help` for flags.
+`ax integrations` is a separate command group for LLM, agent, and `EVALUATOR` integrations; use the **arize-integrations** skill for it. Choose between the two groups by these criteria:
 
-- **Choosing a create command:** use `ax ai-integrations create` (the examples above) for `AZURE_OPEN_AI` or when `--auth-type` is needed; `ax integrations create llm` accepts neither. Use `ax integrations create llm` when scopings must be set at create time (`--scopings`).
-- **`create llm` provider flags differ** from `ax ai-integrations create`: Bedrock and Vertex AI take dedicated flags instead of `--provider-metadata`. Run `ax integrations create llm --help` for the per-provider list.
-- **Agent endpoints:** use `ax integrations create agent` to register an agent endpoint; run its `--help` for flags.
-- **Provider is immutable** in `ax integrations update llm`; delete and recreate to change it.
-- **`--type`:** `list` returns every type merged; filter with `--type LLM` or `--type AGENT`. `get` and `delete` by name need `--type` because names are unique only per type; IDs work without it.
+- Use `ax ai-integrations create` for `AZURE_OPEN_AI` or when `--auth-type` is needed; `ax integrations create llm` accepts neither.
+- Use `ax integrations create llm` when scopings must be set at create time, and `ax integrations create agent` for agent endpoints.
+- **Changing provider:** `ax integrations update llm` treats the provider as immutable (delete and recreate on that surface); `ax ai-integrations update --provider` changes it in place (see Troubleshooting).
 
 ---
 
@@ -204,9 +199,9 @@ Omit `--force` to get a confirmation prompt instead of deleting immediately.
 | `Integration not found` | Check the name or ID with `ax ai-integrations get NAME_OR_ID --space SPACE`; use `ax ai-integrations list --space SPACE --name TEXT` only to browse for the right name |
 | `has_api_key: false` after create | Credentials were not saved — re-run `update` with the correct `--api-key` or `--provider-metadata` |
 | Evaluator runs fail with LLM errors | Check integration credentials with `ax ai-integrations get INT_ID`; rotate the API key if needed |
-| `Invalid value for '--provider'` with `FIREWORKS`, `TOGETHER_AI` or `DEEP_SEEK` | The installed ax CLI predates these providers — upgrade the ax CLI (see [references/ax-setup.md](references/ax-setup.md)) |
-| `An integration must have at least one model available` | Add `--enable-default-models` or at least one `--model-name` (required for every provider except LiteLLM, Fireworks AI, Together AI and DeepSeek) |
-| Integration has the wrong `provider` | `ax ai-integrations update NAME_OR_ID --provider NEW_PROVIDER` changes it, but other fields are kept as-is — pass the new provider's required flags (API key, base URL, model source) in the same call. When the two providers need very different settings, deleting and recreating is cleaner |
+| `Invalid value for '--provider'` for a provider in the table above | The installed ax CLI predates that provider — upgrade the ax CLI (see [references/ax-setup.md](references/ax-setup.md)) |
+| `An integration must have at least one model available` | Add `--enable-default-models` or at least one `--model-name` (see Create for the exempt providers) |
+| Integration has the wrong `provider` | On the `ax ai-integrations` surface, `ax ai-integrations update NAME_OR_ID --provider NEW_PROVIDER` changes it, but other fields are kept as-is — pass the new provider's required flags (API key, base URL, model source) in the same call. When the two providers need very different settings, deleting and recreating is cleaner |
 
 ---
 
@@ -214,6 +209,7 @@ Omit `--force` to get a confirmation prompt instead of deleting immediately.
 
 - **arize-evaluator**: Create LLM-as-judge evaluators that use an AI integration → use `arize-evaluator`
 - **arize-experiment**: Run experiments that use evaluators backed by an AI integration → use `arize-experiment`
+- **arize-integrations**: Manage `ax integrations` (LLM, agent, and evaluator integrations) → use `arize-integrations`
 
 ---
 

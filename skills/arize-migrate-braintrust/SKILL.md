@@ -85,7 +85,7 @@ Target AX space + destination project name. Confirm Braintrust source project na
 
 ### Step 2 — Import historical traces
 
-Locate this installed skill's root and run its bundled commands by absolute path, so they work from any workspace. Check the chosen interpreter is Python 3.10 or later. Create an isolated environment if needed; see [helper dependencies](scripts/requirements.txt) (Braintrust uses the public REST API, so extra packages are optional).
+Locate this installed skill's root and run its bundled commands by absolute path, so they work from any workspace. Check the chosen interpreter is Python 3.10 or later. With `--vendor braintrust` the script uses only the Python standard library, so no packages need installing ([requirements](scripts/requirements.txt)).
 
 ```bash
 export ARIZE_API_KEY=... ARIZE_SPACE_ID=... BRAINTRUST_API_KEY=...
@@ -98,6 +98,8 @@ python scripts/migrate_vendor_traces.py \
 
 Optional: `--dry-run` to preview mapping without ingest.
 
+The script posts to the US OTLP endpoint by default. When the Arize account is in another region, also export `ARIZE_OTLP_ENDPOINT` set to that region's OTLP HTTP `/v1/traces` endpoint from [regions and endpoints](../arize-instrumentation/references/regions-and-endpoints.md).
+
 Verify:
 
 ```bash
@@ -108,7 +110,7 @@ Confirm string `output.value`, parent links via `parent_id`, multiple traces per
 
 ### Step 3 — Datasets
 
-See [Braintrust export recipes](references/braintrust-export.md) → flatten → `ax datasets create`.
+See [Braintrust export recipes](references/braintrust-export.md) → flatten → `ax datasets create`. Run `ax datasets create --help` for its required flags.
 
 ### Step 4 — Prompts (recommended when the user has Braintrust prompts)
 
@@ -118,7 +120,7 @@ Ask **latest only** vs versions / environments. Then:
 1. For each prompt, fetch by id; use `version` / `environment` query params when importing history
 1. Map `prompt_data.prompt` messages → AX roles; flatten text blocks to `content` strings
 1. Infer `F_STRING` vs `MUSTACHE` from template syntax; ask if unclear
-1. `ax prompts create` then `ax prompts create-version` oldest→newest; map Braintrust environments to AX labels with `ax prompts set-version-labels VERSION_ID --label NAME` when the user wants them (version ID from the `create` or `create-version` output; repeat `--label`, since it replaces existing labels)
+1. `ax prompts create` then `ax prompts create-version` oldest→newest (run `ax prompts create --help` and `ax prompts create-version --help` for required flags); map Braintrust environments to AX labels with `ax prompts set-version-labels VERSION_ID --label NAME` when the user wants them (version ID from the `create` or `create-version` output; repeat `--label`, since it replaces existing labels)
 1. Copy model/provider from prompt options when present; otherwise ask
 
 Skip non-prompt functions (tools/scorers) unless the user explicitly wants those recreated separately.

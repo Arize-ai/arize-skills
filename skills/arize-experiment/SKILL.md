@@ -34,7 +34,7 @@ If an `ax` command fails, troubleshoot based on the error:
 
 ## List Experiments: `ax experiments list`
 
-Browse experiments, optionally filtered by dataset. Output goes to stdout.
+Paginated listing for human browsing, optionally filtered by dataset. When the experiment name or ID is known, go straight to `ax experiments get` or `ax experiments export`.
 
 ```bash
 ax experiments list
@@ -52,7 +52,7 @@ Quick metadata lookup -- returns experiment name, linked dataset/version, and ti
 ```bash
 ax experiments get NAME_OR_ID
 ax experiments get NAME_OR_ID -o json
-ax experiments get NAME_OR_ID --dataset DATASET_NAME --space SPACE   # required when using experiment name instead of ID
+ax experiments get NAME_OR_ID --dataset DATASET_NAME --space SPACE   # --dataset resolves by name; for a standalone experiment omit it and pass --space
 ```
 
 Flags: `ax experiments get --help`.
@@ -71,7 +71,7 @@ Flags: `ax experiments get --help`.
 
 ## Export Experiment: `ax experiments export`
 
-Download all runs to a file. By default uses the REST API; pass `--all` to use Arrow Flight for bulk transfer.
+Download runs to a file. By default uses the REST API; pass `--all` to stream every run over Arrow Flight.
 
 ```bash
 # EXPERIMENT_NAME, DATASET_NAME: name or ID (name preferred)
@@ -88,10 +88,10 @@ Flags: `ax experiments export --help`.
 
 ### REST vs Flight (`--all`)
 
-- **REST** (default): Lower friction -- no Arrow/Flight dependency, standard HTTPS ports, works through any corporate proxy or firewall. Limited to 500 runs per page.
-- **Flight** (`--all`): Required for experiments with more than 500 runs. Uses gRPC+TLS on a separate host/port which some corporate networks may block. The active `ax` profile supplies the regional endpoint; see [profile setup](references/ax-profiles.md).
+- **REST** (default): no Arrow/Flight dependency, standard HTTPS ports, works through corporate proxies and firewalls. Paged; the observed page size is 500 runs.
+- **Flight** (`--all`): streams all runs; recommended for large experiments. Uses gRPC+TLS on a separate host/port which some corporate networks may block. The active `ax` profile supplies the regional endpoint; see [profile setup](references/ax-profiles.md).
 
-**Agent auto-escalation rule:** If a REST export returns exactly 500 runs, the result is likely truncated. Re-run with `--all` to get the full dataset.
+**Agent auto-escalation rule:** If a REST export returns exactly 500 runs, the result is likely truncated. Re-run with `--all`.
 
 Output is a JSON array of run objects:
 
@@ -109,7 +109,8 @@ Output is a JSON array of run objects:
       "eval.relevance.score": 1,
       "eval.relevance.explanation": "Directly answers the question"
     }
-  }
+  },
+  { "id": "run_002", "example_id": "ex_002", "output": null, "error": "TimeoutError: ..." }
 ]
 ```
 
@@ -118,6 +119,7 @@ Where results appear in each run:
 - `annotations`: values written by `annotate-runs` (`null` when there are none)
 - `additional_properties["eval.<name>.label|score|explanation"]`: results from an evaluator task
 - With `--all`, annotations are flat keys too: `additional_properties["annotation.<name>.label|score|text"]`
+- `error`: present on failed runs (the task raised an exception), with `output: null`. Filter these out before scoring.
 
 ## Create Experiment: `ax experiments create`
 
@@ -154,7 +156,7 @@ Additional columns are passed through as `additionalProperties` on the run.
 
 > **`example_id` must be the Arize row id** — the top-level `id` field on each exported dataset example (`ex["id"]`). Do **not** use a value nested inside the example's input fields or `additional_properties`; a wrong value fails silently or attaches the run to the wrong example. Export the dataset and inspect the top-level `id` field before creating runs.
 
-> **⚠️ Inline evaluations in the create file do NOT attach as scores.** `create` only reads `example_id` and `output`; every other column — including an `evaluations` object — is stored as a passthrough additional field, **not** as an experiment evaluation, and will **not** appear as a score in the UI. This fails silently (no error). To attach scores/labels, create the experiment first, then run `ax experiments annotate-runs`.
+> **⚠️ Inline evaluations in the create file do NOT attach as scores.** `create` only reads `example_id` and `output`; every other column, including an `evaluations` object, is stored as a passthrough field and never appears as a score in the UI. This fails silently. Create the experiment first, then attach scores with `ax experiments annotate-runs`.
 
 ## Run a Task Locally: `ax experiments run`
 
@@ -180,15 +182,15 @@ def task(dataset_row):
 
 `--dry-run` tests against the first 10 examples without uploading, to validate the task before a full run. Flags: `ax experiments run --help`.
 
-> **Choose the run path based on where the logic lives.** Use `ax experiments run` when there's a local Python task to execute — it runs `task.py` on this machine and uploads the results; no AI integration is required. Use `ax tasks create-run-experiment` when the run should be hosted and recurring — it registers a platform-side `run_experiment` task that Arize executes on a schedule or on demand, driven by a JSON `--run-configuration` (model + messages + AI integration) instead of local code. Default to `ax experiments run` for local/ad-hoc runs and custom logic; use the task path for recurring, hosted runs — see the **arize-evaluator** skill for that route.
+> **Choose the run path based on where the logic lives.** Use `ax experiments run` for local, ad-hoc runs and custom logic: it runs `task.py` on this machine and uploads the results, with no AI integration required. Use `ax tasks create-run-experiment` for hosted, recurring runs: Arize executes a platform-side task on a schedule or on demand, driven by a JSON `--run-configuration` (model + messages + AI integration) — see the **arize-evaluator** skill.
 
 ## List Runs: `ax experiments list-runs`
 
-Paginated terminal view of an experiment's runs (vs. `export`, which downloads them to a file).
+Paginated table view for human browsing. For scripting or reading every run, use `ax experiments export`. `--filter` narrows runs server-side; supported fields are listed in `ax experiments list-runs --help`.
 
 ```bash
 ax experiments list-runs EXPERIMENT_NAME --dataset DATASET_NAME --space SPACE --limit 30
-ax experiments list-runs EXPERIMENT_ID
+ax experiments list-runs EXPERIMENT_ID --filter "eval.correctness.label = 'correct' AND eval.correctness.score >= 0.8"
 ```
 
 Flags: `ax experiments list-runs --help`.
@@ -197,7 +199,7 @@ Flags: `ax experiments list-runs --help`.
 
 ```bash
 ax experiments delete NAME_OR_ID
-ax experiments delete NAME_OR_ID --dataset DATASET_NAME --space SPACE   # required when using experiment name instead of ID
+ax experiments delete NAME_OR_ID --dataset DATASET_NAME --space SPACE   # same name resolution as get
 ax experiments delete NAME_OR_ID --force   # skip confirmation prompt
 ```
 
@@ -205,7 +207,7 @@ Flags: `ax experiments delete --help`.
 
 ## Annotate Runs: `ax experiments annotate-runs`
 
-**This is the required step to attach evaluation scores/labels to an experiment and make them show up in the UI.** Evaluations cannot be attached through `create`; see the warning under Create Experiment. You write them here, after the experiment exists. Upsert semantics — resubmitting the same annotation `name` for the same run overwrites the previous value. Up to 1000 runs per request; unmatched record IDs are silently ignored.
+**This is the only way to attach evaluation scores/labels so they show up in the UI**, after the experiment exists (see the warning under Create Experiment). Upsert semantics — resubmitting the same annotation `name` for the same run overwrites the previous value. Up to 1000 runs per request; unmatched record IDs are silently ignored.
 
 Each `name` must be an existing annotation config in the space (create it first; see the **arize-annotation** skill), and the value must fit its type: categorical → `label` (one of the config's values, no `score`), continuous → `score`, freeform → `text`.
 
@@ -259,19 +261,15 @@ Each run corresponds to one dataset example. **On `create`, only `example_id` an
 
 ### Run an experiment against a dataset
 
-1. Find or create a dataset:
+1. Find or create a dataset: `ax datasets list --space SPACE`.
+2. Export every example with `--all` (without it, `ax datasets export` returns one REST page and the experiment silently covers only part of the dataset):
    ```bash
-   ax datasets list --space SPACE
-   ax datasets export DATASET_NAME --space SPACE --stdout | jq 'length'
+   ax datasets export DATASET_NAME --space SPACE --all --stdout | jq 'length'
    ```
-2. Export the dataset examples:
-   ```bash
-   ax datasets export DATASET_NAME --space SPACE
-   ```
-3. Call the real model API for each example and collect outputs. Use `ax datasets export --stdout` to pipe examples directly into an inference script:
+3. Call the real model API for each example and collect outputs by piping the export into an inference script:
 
    ```bash
-   ax datasets export DATASET_NAME --space SPACE --stdout | python3 infer.py > runs.json
+   ax datasets export DATASET_NAME --space SPACE --all --stdout | python3 infer.py > runs.json
    ```
 
    Write `infer.py` to read examples from stdin, call the target model, and write runs JSON to stdout. Start from the template at `references/inference-template.py` — copy it, inspect the exported dataset JSON to confirm the input field name, then uncomment the provider block the user wants.
@@ -289,7 +287,7 @@ Each run corresponds to one dataset example. **On `create`, only `example_id` an
    ```
 6. Verify: `ax experiments get "gpt-4o-baseline" --dataset DATASET_NAME --space SPACE`
 
-   **Attach evaluation scores (required for scores to show in the UI).** Evaluations do **not** come from the create file — you attach them with `annotate-runs`, which keys on each run's `id` (assigned at create time), so you must export first to learn those IDs.
+   **Attach evaluation scores (required for scores to show in the UI)** with `annotate-runs`, which keys on each run's `id` (assigned at create time), so export first to learn those IDs.
 
 7. Export the experiment to structured data so you can read each run's `id` alongside its `example_id`. Confirm that the exported run records include both fields.
 8. Build the annotation file with structured JSON handling, keyed by `record_id` (the run `id`). Score/label each run via an LLM-as-judge, a code check, or human review; never fabricate scores. Create the annotation config first (here, categorical `correctness` with values `correct`/`incorrect`). Emit the shape in [Annotation file schema](#annotation-file-schema).
