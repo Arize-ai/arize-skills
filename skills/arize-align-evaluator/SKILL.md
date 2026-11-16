@@ -47,7 +47,7 @@ When there are no usable labels yet, the skill collects them first ([Collecting 
 | **Never quote percent agreement alone.** Report π next to it, plus recall on the failing labels. | Thakur; SOP rule 4 |
 | **Corrected production rates come only from random-stream labels.** | Angelopoulos; Chen; SOP rule 5 |
 | **Change nothing before approval.** Phases 0–4 are read-only: no evaluators, versions, tasks, runs, queues or annotations. Collecting labels creates its configs and queues only after the user approves the plan. | — |
-| **Keep labeling blind, and measure only on the random stream.** Hide evaluator output from annotators. Targeted records were chosen by the judge's labels, so their agreement is never the judge's accuracy. | Egami; SOP addendum A |
+| **Keep labeling blind, and measure only on the random stream.** Never show annotators the evaluator's output. Targeted records were chosen by the judge's labels, so their agreement is never the judge's accuracy. | Egami; SOP addendum A |
 | **Edit the evaluator in place, after approval.** An approved change is a new version of the evaluator itself; Arize keeps the version history, so the template can be rolled back. Write it with `write_version.py`, which saves the current version, reads the new one back, and requires the commit message that serves as the changelog. Never change an evaluator without the user naming the change. | Skill practice; [references/changing-evaluators.md](references/changing-evaluators.md) |
 | **Preserve human labels as given.** Never relabel, merge or coerce a label. `cannot_judge` is unscorable, never an evaluator class. Keep every annotator's original vote. | — |
 | **Never fabricate results.** If a command fails or a field is missing, say so. Never grade records yourself in place of the judge. | — |
@@ -108,7 +108,7 @@ Use this when there's no usable queue for the evaluator, a queue had too few usa
 
    It draws a uniform random stream (the calibration queue) and a quota per stored label (the gold queue), skips stale results, long sessions and already-queued sessions, runs the definition check, and writes `plan.md`, `plan.json` and the record sources. `discovery` (the default, about 30 random and 10 targeted) supports a complete alignment. `validation` is only for the optional measured run. See [references/sampling.md](references/sampling.md).
 4. **Present the plan and STOP.** Resolve every label the definition check flags before approval.
-5. **After approval, create** the configs and the two queues, with `SESSION` records for session evaluators. Ask the user to hide evaluator columns in each queue's Annotator Columns, then verify the records.
+5. **After approval, create** the configs and the two queues, with `SESSION` records for session evaluators, then verify the records.
 6. **Partway, check counts and top up** only on counts, never on agreement so far. A definition change gets a new queue pair, never an edit to a labeled queue.
 7. **Optional: continuous intake** reruns the plan on each new period with `--intake`.
 

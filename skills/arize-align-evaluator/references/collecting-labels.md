@@ -25,7 +25,7 @@ For plain queue mechanics (create, update, assign, delete), use **arize-annotati
 - **Do not create anything before approval.** Steps 1–3 are read-only. Do not create the annotation configs (direct-labeling ones included), the queues or their records until the user approves the plan in step 4. For continuous intake, the user approves the intake settings and schedule once (step 7); scheduled runs then add records without asking each time.
 - **Never label records yourself.** Never present model output or stored evaluator labels as human labels.
 - **Measure only on the random stream.** Targeted records were chosen by the evaluator's labels or other signals. Never quote their agreement as the evaluator's accuracy.
-- **Keep labeling blind.** Stored evaluator labels are used to *choose* records. Set each queue's Annotator Columns so evaluator output is hidden, and check it ([Keeping labelers blind](rubric-and-instructions.md#keeping-labelers-blind)). Never share the plan with annotators.
+- **Keep labeling blind.** Stored evaluator labels are used to *choose* records, never shown to annotators ([Keeping labelers blind](rubric-and-instructions.md#keeping-labelers-blind)). Never share the plan with annotators.
 - **No queue while a label is flagged.** The definition check (step 3) compares the draft instructions with the template. While it flags a label, don't create the queues: fix the instructions or the template first, or read both definitions with the user and confirm they state the same rule. Annotators and the judge applying different rules was the main reason a past alignment couldn't be read.
 - **One record per unit.** For a session evaluator, each session appears once across both queues, and sessions already in the user's other queues for this evaluator are excluded. The one exception is a re-grade queue the user asked for after a definition change.
 
@@ -109,7 +109,6 @@ Show the user:
 - the sizing mode and the expected gold per label; in discovery mode, say that the queues support a complete alignment, which normally ends in a criterion decision and template edits, and that a measured agreement number needs the optional validation-size run
 - the caveats:
   - Agreement comes from the calibration queue. Targeted records cover every label, and agreement within a stored label is only that label's precision. Without disagreements or signals, they barely test errors hidden inside a common label.
-  - Labelers must stay blind; the Annotator Columns step is manual.
 
 Then ask the user to approve or adjust. **Do not create anything in the same turn.**
 
@@ -141,8 +140,7 @@ Then ask the user to approve or adjust. **Do not create anything in the same tur
    For session evaluators, the source files hold `SESSION` records, so each record is the whole session the evaluator graded and labels land on the session. `ax` help lists only `SPAN` and `EXAMPLE`, but `ax` 0.38+ accepts `SESSION`. A span record opens on one turn, and annotators then judge that turn instead of the session.
 
    Instructions are limited to 5000 characters. Create queues one at a time; if a call fails part way, check what exists (`ax annotation-configs get`, `ax annotation-queues get`) before retrying, so nothing is created twice.
-4. **Hide evaluator output.** ax can't set a queue's Annotator Columns, so ask the user to set them in the Arize UI and check one record as an annotator: [Keeping labelers blind](rubric-and-instructions.md#keeping-labelers-blind).
-5. **Verify.** Run `ax annotation-queues list-records QUEUE --space SPACE --limit 100 -o json` for each queue. Confirm the record counts match the plan, every planned session ID (span ID for span evaluators) is present, and no session appears twice. If any are missing, report which ones. Re-run `add-records` with the plan's source file that holds them, or explain why they were dropped.
+4. **Verify.** Run `ax annotation-queues list-records QUEUE --space SPACE --limit 100 -o json` for each queue. Confirm the record counts match the plan, every planned session ID (span ID for span evaluators) is present, and no session appears twice. If any are missing, report which ones. Re-run `add-records` with the plan's source file that holds them, or explain why they were dropped.
 
 ## Step 6: Check partway, then top up
 
@@ -206,7 +204,6 @@ python3 SKILL_ROOT/scripts/plan_queue.py --space SPACE \
 | `Annotator email not found or does not have access` | The address isn't a user in this space. Look it up with `ax users list --email NAME`. |
 | Intake says "Nothing to take in" | The plan already covers up to the settle cutoff. Run later, or lower `--settle-hours`. |
 | Intake stops on "plan a new queue" | The evaluator has a new version. Plan new queues for it; don't mix versions in one queue. |
-| Annotators can see evaluator labels or scores | Edit the queue's Annotator Columns in the Arize UI to leave out the eval columns; ax can't set them. Labels made while evals were visible aren't blind. |
 | `--random` draws fewer than asked | The window has fewer scored units than requested. Widen `--days`, or accept a wider interval and say so. |
 | Labels land on spans instead of the session | The queue holds span records. Rebuild it from a current plan, which writes `SESSION` records for session evaluators. Labels made on a span record judged one turn, not the session. |
 | A direct label isn't where the instructions say | Labeling without a queue puts the value wherever the labeler clicked. Export the span (`ax spans export PROJECT --space SPACE --span-id ID --stdout`), find the annotation, and fix the instructions before labeling continues ([Where the label goes](direct-labeling.md#where-the-label-goes)). |

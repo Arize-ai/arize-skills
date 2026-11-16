@@ -35,7 +35,7 @@ Look for `annotation.<config name>.label`, or a session-level annotation on the 
 ## What these labels can and can't do
 
 Two things differ from a queue:
-- **Labelers aren't blind.** The trace and session views show evaluator results, and unlike a queue's Annotator Columns they can't be hidden.
+- **Labelers aren't blind.** The trace and session views show evaluator results next to the trace.
 - **The selection rate is unknown.** People label what they choose to open.
 
 So direct labels are good for:

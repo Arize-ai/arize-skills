@@ -34,12 +34,7 @@ ax annotation-configs create freeform --name "CRITIQUE_CONFIG_NAME" --space SPAC
 
 Annotators who see a model's label or score drift toward it. In one controlled study, pre-filled suggestions roughly doubled a judge's measured F1 against the resulting "gold" labels. Agreement between annotators also rises when everyone sees the same suggestion, which makes it meaningless.
 
-The instructions line is not enough, because the Arize record view can show eval results. Each queue has an **Annotator Columns** allowlist that sets which columns annotators see. ax can't set it, so after creating each queue:
-1. Open the queue in the Arize UI, edit it, and under Annotator Columns leave out every `eval.*`, `trace_eval.*` and `session_eval.*` column.
-2. Open one record as an annotator and confirm no evaluator label, score or explanation is visible.
-3. If the record view still shows them, say so in the report, so its results aren't presented as blind.
-
-In a test on 2026-10-16, a `SESSION` record's session view showed no evaluation results. Still check one record as in step 2.
+Session records in a queue don't show evaluation results, so no setup step is needed. The instructions still tell annotators not to look up evaluator output elsewhere.
 
 Never pre-fill or highlight a label. Showing the evaluator's reasoning after a human submits is untested as a way to improve labels; if it's used, keep the first label.
 
