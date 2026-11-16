@@ -19,6 +19,8 @@ Use a filter if the project is large; see **arize-trace** for the export filters
 
 `annotation.<name>.updated_by` identifies only the **last** annotator, not every annotator.
 
+**Direct-labeling configs** (`<evaluator> direct (YYYY-MM-DD)`, from **arize-align-queue-builder**) use the same label values as the queue config, so their labels join with queue labels. Labelers saw evaluator output and chose which traces to open, so these labels are train and dev only: disagreements to read, criterion questions, few-shot candidates. Never use them as the test batch, for a `measured` status, or for production rates. Report them apart from queue labels.
+
 ## Dataset label column
 
 Use this when a dataset holds a human label column (for example `expected_label`), and an experiment's runs have been scored by the evaluator.
