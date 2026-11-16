@@ -162,6 +162,7 @@ For interactive setup, `ax profiles create` also offers **Advanced → Single en
 | [arize-align-evaluator](skills/arize-align-evaluator/SKILL.md) | Align an LLM-as-judge evaluator with human labels from annotation queues: the judge's status (provisional or measured) with its blockers, test-split agreement and recall per label, queue-vs-judge label definitions, production rates, and an approval stop before any evaluator change. |
 | [arize-ai-provider-integration](skills/arize-ai-provider-integration/SKILL.md) | Create and manage LLM provider credentials (OpenAI, Anthropic, Azure, Bedrock, Vertex, and more). |
 | [arize-annotation](skills/arize-annotation/SKILL.md) | Create and manage annotation configs (categorical, continuous, freeform); bulk-annotate project spans via the Python SDK. |
+| [arize-align-queue-builder](skills/arize-align-queue-builder/SKILL.md) | Build annotation queues for aligning a specific evaluator: a random calibration queue to measure it and a targeted queue balanced across its labels, sized for expected exclusions, with blind annotator instructions and approval before creation. |
 | [arize-prompt-optimization](skills/arize-prompt-optimization/SKILL.md) | Optimize prompts using trace data, experiments, and meta-prompting. |
 | [arize-prompts](skills/arize-prompts/SKILL.md) | Manage Prompt Hub templates and versions with `ax prompts` (create, versions, labels). |
 | [arize-link](skills/arize-link/SKILL.md) | Generate deep links to traces, spans, and sessions in the Arize UI. |
