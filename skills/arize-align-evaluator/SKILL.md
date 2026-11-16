@@ -1,9 +1,9 @@
 ---
 name: arize-align-evaluator
-description: Aligns an Arize LLM-as-judge evaluator with human ground truth from annotation queues, span annotations, or dataset label columns. Reports the judge's status (provisional or measured) with blockers, agreement and recall per label on a test batch labeled after freezing, compares queue and judge label definitions, and stops for approval before any evaluator change. Use for align evaluator, calibrate LLM judge, evaluator vs human labels, judge agreement, gold labels, or inter-annotator agreement.
+description: Aligns an Arize LLM-as-judge evaluator with human labels, and collects them. Plans calibration and gold annotation queues (or a config for labeling traces directly), reports status, agreement and per-label recall, compares label definitions, and stops for approval before creating queues or changing the evaluator. Use for align evaluator, calibrate LLM judge, human labels or a labeling queue for an evaluator, evaluator vs human labels, judge or inter-annotator agreement, or gold labels.
 metadata:
   author: arize
-  version: "2.0"
+  version: "2.1"
 compatibility: Requires the ax CLI (≥ 0.38.0), Python 3.9+, and a configured Arize profile.
 ---
 
@@ -33,7 +33,7 @@ It also gives heuristic **warnings** with their basis, and the numbers with inte
 
 The status (`provisional` or `measured`) says how far the agreement number can be trusted, not whether the alignment worked. A discovery-size pass stays provisional by design: it improves the judge but can't prove the improvement with a number, because the fix was written from the same sessions. A measured number, and the ship gate, are optional. They need a batch labeled after the change, which the user starts only when they need to quote agreement or gate a release (Phase 5, step 5).
 
-For creating evaluators, tasks and runs in general, use **arize-evaluator**. For building the queues this skill measures, use **arize-align-queue-builder**.
+When there are no usable labels yet, the skill collects them first ([Collecting labels](#collecting-labels-when-there-are-none-yet)). For creating evaluators, tasks and runs in general, use **arize-evaluator**. For plain queue mechanics, use **arize-annotation**.
 
 ---
 
@@ -46,7 +46,8 @@ For creating evaluators, tasks and runs in general, use **arize-evaluator**. For
 | **Grade whole sessions, and reject stale results.** A result scored before its session ended graded fewer turns than exist. | SOP rule 3 |
 | **Never quote percent agreement alone.** Report π next to it, plus recall on the failing labels. | Thakur; SOP rule 4 |
 | **Corrected production rates come only from random-stream labels.** | Angelopoulos; Chen; SOP rule 5 |
-| **Change nothing before approval.** Phases 0–4 are read-only: no evaluators, versions, tasks, runs, queues or annotations. | — |
+| **Change nothing before approval.** Phases 0–4 are read-only: no evaluators, versions, tasks, runs, queues or annotations. Collecting labels creates its configs and queues only after the user approves the plan. | — |
+| **Keep labeling blind, and measure only on the random stream.** Hide evaluator output from annotators. Targeted records were chosen by the judge's labels, so their agreement is never the judge's accuracy. | Egami; SOP addendum A |
 | **Edit the evaluator in place, after approval.** An approved change is a new version of the evaluator itself; Arize keeps the version history, so the template can be rolled back. Write it with `write_version.py`, which saves the current version, reads the new one back, and requires the commit message that serves as the changelog. Never change an evaluator without the user naming the change. | Skill practice; [references/changing-evaluators.md](references/changing-evaluators.md) |
 | **Preserve human labels as given.** Never relabel, merge or coerce a label. `cannot_judge` is unscorable, never an evaluator class. Keep every annotator's original vote. | — |
 | **Never fabricate results.** If a command fails or a field is missing, say so. Never grade records yourself in place of the judge. | — |
@@ -64,7 +65,7 @@ If an `ax` command fails, troubleshoot based on the error:
 - Space unknown → see [Space](references/ax-profiles.md#space)
 - **Security:** Never read `.env` files or search the filesystem for credentials. Exception: the non-secret `ARIZE_SPACE_ID` line (see [Space](references/ax-profiles.md#space)). Use `ax profiles` for Arize credentials and `ax ai-integrations` for LLM provider keys. Never ask the user to paste secrets into chat.
 
-Two scripts, both standard library only unless noted. Run them by absolute path from the installed skill root, and write to a scratch directory.
+Three scripts, standard library only unless noted. `align_common.py` holds the definition check and staleness parse they share. Run them by absolute path from the installed skill root, and write to a scratch directory.
 
 | Script | Does |
 |---|---|
@@ -72,6 +73,7 @@ Two scripts, both standard library only unless noted. Run them by absolute path 
 | `align_report.py report` | Prints the alignment report (read-only) |
 | `align_report.py compare` | Before/after numbers, plus the ship gate (read-only) |
 | `align_report.py lint` | Flags revisions that patch specific records (read-only) |
+| [scripts/plan_queue.py](scripts/plan_queue.py) | Plans the queues' records (read-only), and adds records in `--intake --execute` |
 | [scripts/write_version.py](scripts/write_version.py) | Writes a new template version. Dry run unless `--execute`, which needs the arize SDK that ships with `ax`. |
 
 ---
@@ -83,12 +85,36 @@ Two scripts, both standard library only unless noted. Run them by absolute path 
    - `data_granularity`, `classification_choices` and `template`
    - `version.id`, `created_at` and `commit_message`. The commit message carries the rubric version; see [Changelog](references/changing-evaluators.md#changelog).
 2. **Its task and admission filter.** Run `ax tasks list` and `ax tasks get`. The filter is part of the judge version.
-3. **The ground truth.** The best source is the two queues from **arize-align-queue-builder**, plus their `plan.json`:
+3. **The ground truth.** The best source is the two queues built by [Collecting labels](#collecting-labels-when-there-are-none-yet), plus their `plan.json`:
    - the **calibration** queue measures
    - the **gold** queue fills train and dev, and finds disagreements
 
-   For span annotations or dataset label columns, see [references/other-ground-truth.md](references/other-ground-truth.md). If no usable queue exists, build one with **arize-align-queue-builder**.
+   For span annotations, direct-labeling configs or dataset label columns, see [references/other-ground-truth.md](references/other-ground-truth.md). If no usable queue exists, collect labels first (next section).
 4. **Which labels are failing**, for example `wrong` or `no_answer_produced`. Ask the user if it isn't obvious; they're passed as `--fail-label`.
+
+## Collecting labels (when there are none yet)
+
+Use this when there's no usable queue for the evaluator, a queue had too few usable labels, or a queue should keep taking in new records. Every step and option is in [references/collecting-labels.md](references/collecting-labels.md); read it before planning.
+
+1. **Understand the evaluator** (Phase 0), plus its other provider copies, its existing queues (their sessions are excluded), whether anyone has done error analysis, and any judge-independent signals such as thumbs-down feedback. If no task runs the evaluator, hand off to **arize-align-history-backfill**.
+2. **Design the label config and instructions.** The values are the evaluator's choices spelled exactly, plus `not_applicable` and `cannot_judge`. The instructions define each label in the template's terms, say which unit to judge, and tell annotators not to look at evaluator output. See [references/rubric-and-instructions.md](references/rubric-and-instructions.md).
+3. **Plan the records:**
+
+   ```bash
+   python3 SKILL_ROOT/scripts/plan_queue.py --space SPACE --project PROJECT --evaluator EVALUATOR \
+     --root-filter "ROOT_SPAN_FILTER" --mode discovery|validation \
+     --instructions-file WORK_DIR/instructions.txt --exclude-queue EXISTING_QUEUE --out-dir WORK_DIR
+   ```
+
+   It draws a uniform random stream (the calibration queue) and a quota per stored label (the gold queue), skips stale results, long sessions and already-queued sessions, runs the definition check, and writes `plan.md`, `plan.json` and the record sources. `discovery` (the default, about 30 random and 10 targeted) supports a complete alignment. `validation` is only for the optional measured run. See [references/sampling.md](references/sampling.md).
+4. **Present the plan and STOP.** Resolve every label the definition check flags before approval.
+5. **After approval, create** the configs and the two queues, with `SESSION` records for session evaluators. Ask the user to hide evaluator columns in each queue's Annotator Columns, then verify the records.
+6. **Partway, check counts and top up** only on counts, never on agreement so far. A definition change gets a new queue pair, never an edit to a labeled queue.
+7. **Optional: continuous intake** reruns the plan on each new period with `--intake`.
+
+**Labeling straight from traces.** If the user would rather label production traces as they browse, or as well as queues, create a direct-labeling config: its own dated name, with the same label values as the queue config, so the labels can be pooled when aligning. Those labels aren't blind and have no known selection rate, so they serve error analysis, criterion questions and dev, never the test batch or a `measured` status. See [references/direct-labeling.md](references/direct-labeling.md).
+
+When labeling is complete, continue with Phase 1.
 
 ## Phase 1: Settle the criterion (SOP step 1)
 
@@ -96,7 +122,7 @@ Read the template's definition of each label, and its scope rule, next to the qu
 
 - **If the two sides define a label differently, it's a criterion question.** The human and the judge are applying different rules, and agreement can't be read until it's settled. Frame it for the user: quote both definitions, give the options, and recommend one. A decision closes this report; it stays provisional. Then:
   - bump the rubric version, and write the template change as a new evaluator version (Phase 5, steps 1–2)
-  - tell the user this alignment ends here. The old queues' labels stay the record under the old rubric. Measuring the new version needs labels collected under the new rule: a later, separate labeling and alignment run that the user starts when they choose (**arize-align-queue-builder**, then this skill). Don't start it.
+  - tell the user this alignment ends here. The old queues' labels stay the record under the old rubric. Measuring the new version needs labels collected under the new rule: a later, separate run of collecting labels and aligning that the user starts when they choose. Don't start it.
   - tell the user that re-grading the old sessions under the new rule would be a good next step (Shankar §8.1), and leave the choice to them. Re-graded labels serve dev and few-shot examples, never the reported agreement.
 - **Draft both sides of the new rule:** the template wording and the matching queue instructions, so humans and the judge apply the same rule. The queue instructions are a draft for that later run, with its window starting at the switch time and the old queues excluded.
 - **Keep applicability rules (when a session is in scope) apart from grading rules.** A scope disagreement needs a scope rule.
@@ -163,7 +189,7 @@ Meanings and sources are in [references/measurement.md](references/measurement.m
 **Present the report and STOP.** Use [references/report-template.md](references/report-template.md). Propose exactly one of these:
 
 - **A criterion decision** for the user
-- **A queue or label fix:** re-score stale sessions, top up a label, or adjudicate. Queue changes such as top-ups go to **arize-align-queue-builder**.
+- **A queue or label fix:** re-score stale sessions, top up a label, or adjudicate. Queue changes such as top-ups follow [Collecting labels](references/collecting-labels.md#step-6-check-partway-then-top-up).
 - **One batch of template edits,** quoting the exact current wording, the exact replacement and the records behind each. Only when no criterion question is open.
 
 Ask the user to approve, edit or reject. **Do not continue in the same turn.**
@@ -203,7 +229,7 @@ Every step and the meta-prompt for drafting revisions are in [references/revisio
 
 ## Phase 6: Production rates (SOP step 8)
 
-With `--plan` and at least 100 random-stream labels (the queue builder's validation size; an Arize heuristic), the calibration queue's report gives each label's production rate:
+With `--plan` and at least 100 random-stream labels (the validation size of `plan_queue.py`; an Arize heuristic), the calibration queue's report gives each label's production rate:
 
 - **judge-only,** which is biased
 - **corrected with PPI++** from random-stream labels
@@ -224,7 +250,7 @@ Below 100 it prints "not computed: N random labels; needs about 100". Use the na
 | "rubric version: not in the commit message" | The version was written without the changelog format. Write the next version with `write_version.py`, and say in the report which rubric the template follows. |
 | `write_version.py --execute` can't import the SDK | Run it with the Python that runs `ax`: `"$(head -1 "$(command -v ax)" \| sed 's/^#!//')" write_version.py ...` |
 | Labels from other queues appear on records | Expected: a session can be in several queues. Pass `--config`. |
-| Span-level labels are ignored on session records | Expected. They were made from one turn. Label sessions in a session queue (**arize-align-queue-builder**). |
+| Span-level labels are ignored on session records | Expected. They were made from one turn. Label sessions in a session queue ([Collecting labels](references/collecting-labels.md)). |
 | Agreement looks high but π is near 0 | One label dominates. Read AC1, balanced accuracy and failing-label recall. |
 | Agreement is 0% | Label spellings differ, or the wrong column was joined. Check the fit section. |
 | `Turn data mode requires a Turn Definition` when creating a version | See [references/changing-evaluators.md](references/changing-evaluators.md#turn-data-templates). |
@@ -233,7 +259,6 @@ Below 100 it prints "not computed: N random labels; needs about 100". Use the na
 
 ## Related Skills
 
-- **arize-align-queue-builder**: build the calibration and gold queues this skill measures
 - **arize-align-history-backfill**: score sessions the evaluator never scored, for a new evaluator or a short history
 - **arize-annotation**: plain queue mechanics, such as assigning a second annotator
 - **arize-evaluator**: evaluator, task and run mechanics

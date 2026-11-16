@@ -59,7 +59,9 @@ import time
 from collections import Counter, defaultdict
 from datetime import datetime, timedelta, timezone
 
-GRANULARITY_PREFIX = {"SPAN": "eval", "TRACE": "trace_eval", "SESSION": "session_eval"}
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from align_common import GRANULARITY_PREFIX, LAST_TURN_MARKER, definition_diff, last_turn_seen  # noqa: E402
+
 UNSCORABLE = ["cannot_judge"]
 
 # Sizing modes. "discovery" is enough for a complete alignment: error analysis on the random stream (30+
@@ -96,12 +98,6 @@ CARRIED = ("root_filter", "eval_name", "compare_eval", "max_disagreement_share",
            "max_turns", "keep_stale")
 SETTLE_HOURS = 2  # leave time for evaluator tasks to score the newest units before an intake counts them
 INSTRUCTIONS_MAX = 5000  # annotation queue instructions length
-
-# Templates that ask the judge to name the highest turn it saw, e.g. "LAST_TURN_CHECK: Turn 7". Without the
-# marker, a "Turn N" in an explanation is only the decisive turn, so staleness can't be read from it.
-# Kept in sync with arize-align-evaluator's align_report.py (LAST_TURN_MARKER, last_turn_seen).
-LAST_TURN_MARKER = "LAST_TURN_CHECK"
-
 
 class ColumnMissing(Exception):
     """An eval column the filter references has no values in the requested period (or is not indexed yet)."""
@@ -143,60 +139,6 @@ def parse_time(v):
 
 def z(t):
     return t.isoformat().replace("+00:00", "Z")
-
-
-def last_turn_seen(explanation):
-    """The highest turn the judge says it saw, or None when the explanation doesn't say."""
-    m = re.search(LAST_TURN_MARKER + r"\D{0,40}?(\d+)", explanation or "", re.I)
-    return int(m.group(1)) if m else None
-
-
-# The definition check is a copy of arize-align-evaluator's align_report.py (DEF_LINE, SECTION, IDENT,
-# label_definitions, definition_diff), so the queue builder flags before labeling what the alignment report
-# would flag after it. Change both together.
-DEF_LINE = re.compile(r"^\s*[-*]\s*`?([A-Za-z0-9_]+)`?\s*:\s*(.*)$")
-SECTION = re.compile(r"^\s*[A-Z][A-Za-z ]{0,30}:")  # "Evidence:", "Labels:" start a new section
-IDENT = re.compile(r"`?\b([a-z]+(?:_[a-z0-9]+)+)\b`?")
-
-
-def label_definitions(text, labels):
-    """Each label's definition from `- label: text` lines, with indented or unbulleted continuation lines."""
-    out, current = {}, None
-    for line in (text or "").splitlines():
-        m = DEF_LINE.match(line)
-        if m:
-            current = m.group(1) if m.group(1) in labels else None
-            if current:
-                out[current] = m.group(2).strip()
-        elif not line.strip() or SECTION.match(line):
-            current = None
-        elif current and not line.lstrip().startswith(("-", "*", "#")):
-            out[current] += " " + line.strip()
-    return out
-
-
-def definition_diff(instructions, template, labels):
-    """Put the queue's and the template's definition of each label side by side, and flag candidates where they
-    differ: text that is mostly different, or a tool or field name that one side's definition uses and the other
-    side's doesn't. The script only points at candidates; reading both decides."""
-    from difflib import SequenceMatcher
-    q, t = label_definitions(instructions, labels), label_definitions(template, labels)
-    rows, flagged = [], []
-    for lbl in labels:
-        a, b = q.get(lbl), t.get(lbl)
-        if not (a and b):
-            rows.append({"label": lbl, "queue": a, "template": b, "similarity": None, "only_one_side": []})
-            continue
-        ids = lambda s: {x for x in IDENT.findall(s) if x not in labels}
-        one_side = sorted(ids(a) ^ ids(b))
-        sim = SequenceMatcher(None, a.lower(), b.lower()).ratio()
-        rows.append({"label": lbl, "queue": a, "template": b, "similarity": sim, "only_one_side": one_side})
-        if sim < 0.6 or one_side:
-            flagged.append(lbl)
-    # A tool or field name both documents mention outside the label lines is a rule both sides state;
-    # list it so both rules can be checked to agree.
-    shared = sorted({x for x in IDENT.findall(instructions or "")} & {x for x in IDENT.findall(template or "")} - set(labels))
-    return {"rows": rows, "flagged": flagged, "shared_terms": shared}
 
 
 def definition_check_md(check):
@@ -424,8 +366,9 @@ def main():
     p.add_argument("--max-disagreement-share", type=float, default=0.4,
                    help="Cap on the share of each label's picks taken from provider disagreements")
     p.add_argument("--mode", choices=sorted(SIZING) + sorted(MODE_ALIASES), default="discovery",
-                   help="discovery: enough to start (error analysis, a first alignment pass); "
-                        "validation: 30 gold per label in each of dev and test, and a 100-record random stream")
+                   help="discovery: a complete alignment (error analysis, criterion decisions, template fixes); "
+                        "validation: about 36 scored gold per label (30 in the 85%% dev split) and 100 random, "
+                        "for the optional measured run; build it again after the change for the test batch")
     p.add_argument("--random", type=int,
                    help="Records in the random measurement stream (default: 30 discovery, 100 validation; "
                         "intake: 0 unless --random-queue is set). 0 turns it off")

@@ -1,4 +1,4 @@
-"""Behavioral tests for the arize-align-queue-builder planner; no live services or ax CLI.
+"""Behavioral tests for the arize-align-evaluator label planner (plan_queue.py); no live services or ax CLI.
 
 Run: pytest --noconftest -c /dev/null -p no:cacheprovider tests/test_align_plan_queue.py -q
 """
@@ -15,7 +15,7 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
-SCRIPT = ROOT / "skills" / "arize-align-queue-builder" / "scripts" / "plan_queue.py"
+SCRIPT = ROOT / "skills" / "arize-align-evaluator" / "scripts" / "plan_queue.py"
 spec = importlib.util.spec_from_file_location("plan_queue", SCRIPT)
 plan = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(plan)

@@ -34,4 +34,4 @@ Adjudication follows [measurement.md](measurement.md#adjudication). For human-vs
 2. Prepare a proposed adjudications file (`{"RECORD_ID": "label"}`) covering only the evaluator-favored records, marked as proposed.
 3. The named adjudicator, usually the person who labeled, decides each row. Never write the final labels yourself, and never present the evaluator's label as the human's.
 4. Note the bias: the adjudicator has now seen the evaluator's label. The worksheet's evidence column is what the decision should rest on.
-5. Re-run `report --adjudications FILE`. The report keeps the original votes. If the size blocker remains because a label has too few examples, adjudication can't fix it: top up the queue with **arize-align-queue-builder**.
+5. Re-run `report --adjudications FILE`. The report keeps the original votes. If the size blocker remains because a label has too few examples, adjudication can't fix it: top up the queue ([collecting labels](collecting-labels.md), step 6).

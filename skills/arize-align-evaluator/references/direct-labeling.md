@@ -40,11 +40,11 @@ Two things differ from a queue:
 
 So direct labels are good for:
 - error analysis, and finding criterion questions
-- dev records, disagreements to read, and few-shot candidates in **arize-align-evaluator**
+- dev records, disagreements to read, and few-shot candidates in the alignment phases
 
 They can't give:
 - the reported agreement or a `measured` status
 - a test batch
 - weighted estimates or production rates
 
-Those still need the calibration queue, a uniform random sample labeled blind. Tell the user this before creating the config. **arize-align-evaluator** reads span annotations by a hand join ("Ground truth outside annotation queues" in its references).
+Those still need the calibration queue, a uniform random sample labeled blind. Tell the user this before creating the config. The alignment phases read span annotations by a hand join ([Span annotations](other-ground-truth.md#span-annotations)).

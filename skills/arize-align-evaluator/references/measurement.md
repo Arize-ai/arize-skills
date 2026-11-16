@@ -54,7 +54,7 @@ Every rate is shown with a count, a percentage and a 95% Wilson interval. π get
 ## Which queue measures
 
 - **Calibration queue** (a random sample): its numbers are measurement estimates, and production rates come from it ([production-rates.md](production-rates.md)).
-- **Gold queue** (targeted, a quota per stored label): it fills train and dev, and finds disagreements. Its production-weighted figures are a **secondary** estimate. They're valid only if each stratum was sampled uniformly with a known rate (Egami; Zrnic & Candès). The queue builder rotates across entry points inside a label without recording it, so treat them as approximate.
+- **Gold queue** (targeted, a quota per stored label): it fills train and dev, and finds disagreements. Its production-weighted figures are a **secondary** estimate. They're valid only if each stratum was sampled uniformly with a known rate (Egami; Zrnic & Candès). `plan_queue.py` rotates across entry points inside a label without recording it, so treat them as approximate.
 
 ## Fit: the label-definition diff
 

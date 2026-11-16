@@ -19,7 +19,7 @@ Use a filter if the project is large; see **arize-trace** for the export filters
 
 `annotation.<name>.updated_by` identifies only the **last** annotator, not every annotator.
 
-**Direct-labeling configs** (`<evaluator> direct (YYYY-MM-DD)`, from **arize-align-queue-builder**) use the same label values as the queue config, so their labels join with queue labels. Labelers saw evaluator output and chose which traces to open, so these labels are train and dev only: disagreements to read, criterion questions, few-shot candidates. Never use them as the test batch, for a `measured` status, or for production rates. Report them apart from queue labels.
+**Direct-labeling configs** (`<evaluator> direct (YYYY-MM-DD)`, from [direct labeling](direct-labeling.md)) use the same label values as the queue config, so their labels join with queue labels. Labelers saw evaluator output and chose which traces to open, so these labels are train and dev only: disagreements to read, criterion questions, few-shot candidates. Never use them as the test batch, for a `measured` status, or for production rates. Report them apart from queue labels.
 
 ## Dataset label column
 
@@ -42,4 +42,4 @@ To re-score after a change in Phase 5, write the new evaluator version, then a d
 
 ## No ground truth yet
 
-Do not label records yourself and present the result as human ground truth. Use **arize-align-queue-builder** to design a queue for this evaluator: a label config matching its choices, balanced records across its labels, and instructions. When labeling is complete, run the main workflow from Phase 1.
+Do not label records yourself and present the result as human ground truth. Follow [collecting labels](collecting-labels.md) to design a queue for this evaluator: a label config matching its choices, balanced records across its labels, and instructions. When labeling is complete, run the main workflow from Phase 1.

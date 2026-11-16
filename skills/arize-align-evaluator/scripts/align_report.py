@@ -42,7 +42,9 @@ from collections import Counter, defaultdict
 from datetime import datetime, timedelta, timezone
 from itertools import combinations
 
-GRANULARITY_PREFIX = {"SPAN": "eval", "TRACE": "trace_eval", "SESSION": "session_eval"}
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from align_common import GRANULARITY_PREFIX, LAST_TURN_MARKER, definition_diff, last_turn_seen  # noqa: E402
+
 DEFAULT_NOT_APPLICABLE = ["not_applicable"]
 DEFAULT_UNSCORABLE = ["cannot_judge", "unclear"]
 
@@ -65,7 +67,7 @@ TRAIN_SHARE = 0.15  # of the tuning batch; the rest is dev. Test is only a batch
 # and dev scorings beyond the budget make dev agreement optimistic. Neither has a published small-n value.
 MAX_DEV_TEST_GAP = 0.10
 LOOK_BUDGET = 5
-# Corrected production rates need a validation-size random stream: the queue builder's validation mode draws 100
+# Corrected production rates need a validation-size random stream: plan_queue.py's validation mode draws 100
 # random records. An Arize heuristic; below it the intervals are too wide to act on.
 MIN_RANDOM_FOR_RATES = 100
 # The version's commit message is the changelog: "Rubric v3, 2026-10-19 (criterion change): what changed".
@@ -144,16 +146,7 @@ def cmd_fetch(a):
         print(f"Counted turns for {len(turns)} sessions (turns.json)")
 
 
-# Templates that ask the judge to name the highest turn it saw, e.g. "LAST_TURN_CHECK: Turn 7". Without the
-# marker, a "Turn N" in an explanation is only the decisive turn, so staleness can't be read from it.
-LAST_TURN_MARKER = "LAST_TURN_CHECK"
 SESSIONS_PER_EXPORT = 50
-
-
-def last_turn_seen(explanation):
-    """The highest turn the judge says it saw, or None when the explanation doesn't say."""
-    m = re.search(LAST_TURN_MARKER + r"\D{0,40}?(\d+)", explanation or "", re.I)
-    return int(m.group(1)) if m else None
 
 
 def count_turns(a, records):
@@ -748,53 +741,8 @@ def plan_index(plan):
     return PlanIndex(plan)
 
 
-DEF_LINE = re.compile(r"^\s*[-*]\s*`?([A-Za-z0-9_]+)`?\s*:\s*(.*)$")
-SECTION = re.compile(r"^\s*[A-Z][A-Za-z ]{0,30}:")  # "Evidence:", "Labels:" start a new section
-IDENT = re.compile(r"`?\b([a-z]+(?:_[a-z0-9]+)+)\b`?")
-
-
-def label_definitions(text, labels):
-    """Each label's definition from `- label: text` lines, with indented or unbulleted continuation lines."""
-    out, current = {}, None
-    for line in (text or "").splitlines():
-        m = DEF_LINE.match(line)
-        if m:
-            current = m.group(1) if m.group(1) in labels else None
-            if current:
-                out[current] = m.group(2).strip()
-        elif not line.strip() or SECTION.match(line):
-            current = None
-        elif current and not line.lstrip().startswith(("-", "*", "#")):
-            out[current] += " " + line.strip()
-    return out
-
-
-def definition_diff(instructions, template, labels):
-    """Put the queue's and the template's definition of each label side by side, and flag candidates where they
-    differ: text that is mostly different, or a tool or field name that one side's definition uses and the other
-    side's doesn't. The script only points at candidates; the agent decides by reading both (phase 1)."""
-    from difflib import SequenceMatcher
-    q, t = label_definitions(instructions, labels), label_definitions(template, labels)
-    rows, flagged = [], []
-    for lbl in labels:
-        a, b = q.get(lbl), t.get(lbl)
-        if not (a and b):
-            rows.append({"label": lbl, "queue": a, "template": b, "similarity": None, "only_one_side": []})
-            continue
-        ids = lambda s: {x for x in IDENT.findall(s) if x not in labels}
-        one_side = sorted(ids(a) ^ ids(b))
-        sim = SequenceMatcher(None, a.lower(), b.lower()).ratio()
-        rows.append({"label": lbl, "queue": a, "template": b, "similarity": sim, "only_one_side": one_side})
-        if sim < 0.6 or one_side:
-            flagged.append(lbl)
-    # A tool or field name both documents mention outside the label lines is a rule both sides state;
-    # list it so the agent can check the two rules agree.
-    shared = sorted({x for x in IDENT.findall(instructions or "")} & {x for x in IDENT.findall(template or "")} - set(labels))
-    return {"rows": rows, "flagged": flagged, "shared_terms": shared}
-
-
 def weight_by_plan(plan, gold_scored):
-    """Production-weighted agreement and per-label recall, from the queue builder's strata.
+    """Production-weighted agreement and per-label recall, from plan_queue.py's strata.
 
     The queue oversamples rare stored labels and provider disagreements, so raw agreement on it is
     not a production rate. Each stratum's gold records stand in for its production units (strata
@@ -1101,7 +1049,7 @@ def render(r):
     w("## Production estimates\n")
     if not r["planned"]:
         w("No `--plan`: these records' selection probabilities are unknown, so nothing here is a production rate. "
-          "Corrected rates need random-stream labels from **arize-align-queue-builder** (SOP rule 5).\n")
+          "Corrected rates need random-stream labels from a plan_queue.py calibration queue (SOP rule 5).\n")
     if wt:
         if wt.get("error"):
             w(f"Weighted estimates not computed: {wt['error']}.\n")
@@ -1111,7 +1059,7 @@ def render(r):
         else:
             w("These records were targeted, so these weighted figures are a **secondary** estimate; take "
               "measurement from the calibration queue. Each stratum is weighted by its production count. This "
-              "assumes uniform sampling within a stratum; the queue builder rotates across entry points inside a "
+              "assumes uniform sampling within a stratum; plan_queue.py rotates across entry points inside a "
               "label without recording it, so treat these as approximate.\n"
               + (f"{wt['streams']['random']} gold records here are from the random stream.\n"
                  if wt["streams"].get("random") else ""))
@@ -1389,7 +1337,7 @@ def main():
     r.add_argument("--unscorable", nargs="*", default=DEFAULT_UNSCORABLE)
     r.add_argument("--adjudications", help='JSON file mapping record_id to the adjudicated label')
     r.add_argument("--json-out", help="Also write per-record results as JSON")
-    r.add_argument("--plan", help="plan.json from arize-align-queue-builder; adds production-weighted estimates "
+    r.add_argument("--plan", help="plan.json from plan_queue.py; adds production-weighted estimates "
                                   "and PPI++ production rates from its random stream")
     r.add_argument("--test-from", metavar="ISO_TIME",
                    help="Make every gold session that started at or after this time the test split: a later batch "
