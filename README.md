@@ -169,7 +169,6 @@ For interactive setup, `ax profiles create` also offers **Advanced → Single en
 | [arize-dataset](skills/arize-dataset/SKILL.md) | Create, manage, and download datasets and examples. |
 | [arize-experiment](skills/arize-experiment/SKILL.md) | Run and analyze experiments against datasets. |
 | [arize-evaluator](skills/arize-evaluator/SKILL.md) | Create LLM-as-judge evaluators, run evaluation tasks, and set up continuous monitoring. |
-| [arize-evaluator-templates](skills/arize-evaluator-templates/SKILL.md) | Find Arize's built-in LLM-as-judge evaluator templates and create a template evaluator from one. |
 | [arize-ai-provider-integration](skills/arize-ai-provider-integration/SKILL.md) | Create and manage LLM provider credentials (OpenAI, Anthropic, Azure, Bedrock, Vertex, and more). |
 | [arize-integrations](skills/arize-integrations/SKILL.md) | Manage LLM and agent integrations with `ax integrations` (list, get, create, update, delete). |
 | [arize-annotation](skills/arize-annotation/SKILL.md) | Create and manage annotation configs (categorical, continuous, freeform); bulk-annotate project spans via the Python SDK. |

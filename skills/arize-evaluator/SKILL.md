@@ -53,7 +53,7 @@ Evaluators are **versioned** — every prompt or model change creates a new immu
 
 **Decision Judge evaluators** ask typed questions about each span and must be enabled for the account. Create with `ax evaluators create-evaluator decision-judge` and run with a `DECISION_JUDGE_EVALUATION` task on a project (datasets are rejected). `ax evaluators list` and `ax tasks list` show them only with `--type decision_judge` / `--task-type DECISION_JUDGE_EVALUATION`. A new `create-evaluator-version decision-judge` replaces every question, so pass all of them. Run each command's `--help` for flags.
 
-For a built-in judge prompt to start from, follow **arize-evaluator-templates** (`ax evaluators list-templates`).
+For a built-in judge prompt to start from, see [Starting from a built-in template](references/builtin-templates.md).
 
 ### What is a Task?
 
@@ -150,6 +150,8 @@ If a suitable integration exists, note its ID. If not, create one using the **ar
 ### Step 4: Create the evaluator
 
 Use the template design best practices below. Keep the evaluator name and variables **generic** — the task (Step 6) handles project-specific wiring via `column_mappings`.
+
+When the user wants a standard judge (hallucination, correctness) and supplied no prompt, start from a built-in template: see [references/builtin-templates.md](references/builtin-templates.md).
 
 ```bash
 ax evaluators create-evaluator template \
