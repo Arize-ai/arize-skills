@@ -59,7 +59,7 @@ ax ai-integrations list --space SPACE --limit 20 -o json
 ax ai-integrations list --space SPACE --limit 20 --cursor CURSOR_TOKEN -o json
 ```
 
-Run `ax ai-integrations list --help` for flags. When the integration name or ID is known, use `ax ai-integrations get` (below) instead of paging the list; `list` is for browsing.
+Filter by provider with `--provider`; `TYPE_SAFE_AI`, `PERPLEXITY` and `CLOUDFLARE` integrations appear in `list` only when `--provider` names them. Run `ax ai-integrations list --help` for flags. When the integration name or ID is known, use `ax ai-integrations get` (below) instead of paging the list; `list` is for browsing.
 
 **Response fields:**
 
@@ -114,7 +114,7 @@ For a provider's full example and notes (Bedrock/Vertex metadata, base URLs, fla
 
 ### Supported Providers
 
-The table covers providers with provider-specific flags or notes. Run `ax ai-integrations create --help` for the full `--provider` enum.
+The table covers providers with provider-specific flags or notes. Run `ax ai-integrations create --help` for the full `--provider` enum. `TYPE_SAFE_AI` and `PERPLEXITY` are also in the enum; create them with the shape above and read `create --help` for their flags.
 
 | Provider | Required extra flags ("model source" = `--enable-default-models` or `--model-name`) | Key env var | Details |
 |----------|---------------------|-------------|---------|
@@ -130,6 +130,7 @@ The table covers providers with provider-specific flags or notes. Run `ax ai-int
 | `FIREWORKS` | `--api-key <key>` only — no `--base-url` or `--headers` | `$FIREWORKS_API_KEY` | [provider-fireworks.md](references/provider-fireworks.md) |
 | `TOGETHER_AI` | `--api-key <key>` only — no `--base-url` or `--headers` | `$TOGETHER_API_KEY` | [provider-together-ai.md](references/provider-together-ai.md) |
 | `DEEP_SEEK` | `--api-key <key>` only — no `--base-url` or `--headers` | `$DEEPSEEK_API_KEY` | [provider-deepseek.md](references/provider-deepseek.md) |
+| `CLOUDFLARE` | `--provider-metadata '{"account_id": "<32-character-account-id>"}'` | — | — |
 
 Run `ax ai-integrations create --help` for optional flags. Pair `--headers` with `--auth-type PROXY_WITH_HEADERS` when the provider sits behind a proxy.
 
@@ -206,7 +207,7 @@ Omit `--force` to get a confirmation prompt instead of deleting immediately.
 | `Integration not found` | Check the name or ID with `ax ai-integrations get NAME_OR_ID --space SPACE`; use `ax ai-integrations list --space SPACE --name TEXT` only to browse for the right name |
 | `has_api_key: false` after create | Credentials were not saved — re-run `update` with the correct `--api-key` or `--provider-metadata` |
 | Evaluator runs fail with LLM errors | Check integration credentials with `ax ai-integrations get INT_ID`; rotate the API key if needed |
-| `Invalid value for '--provider'` with `FIREWORKS`, `TOGETHER_AI` or `DEEP_SEEK` | The installed ax CLI predates these providers — upgrade the ax CLI (see [references/ax-setup.md](references/ax-setup.md)) |
+| `Invalid value for '--provider'` with `FIREWORKS`, `TOGETHER_AI`, `DEEP_SEEK`, `TYPE_SAFE_AI`, `PERPLEXITY` or `CLOUDFLARE` | The installed ax CLI predates these providers — upgrade the ax CLI (see [references/ax-setup.md](references/ax-setup.md)) |
 | `An integration must have at least one model available` | Add `--enable-default-models` or at least one `--model-name` (required for every provider except LiteLLM, Fireworks AI, Together AI and DeepSeek) |
 | Integration has the wrong `provider` | `ax ai-integrations update NAME_OR_ID --provider NEW_PROVIDER` changes it, but other fields are kept as-is — pass the new provider's required flags (API key, base URL, model source) in the same call. When the two providers need very different settings, deleting and recreating is cleaner |
 
