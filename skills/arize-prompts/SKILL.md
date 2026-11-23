@@ -35,7 +35,7 @@ A **prompt** in Prompt Hub is a named, versioned template stored in a space — 
 Each prompt includes:
 
 - **Messages** — an ordered chat transcript (system, user, assistant, tool roles) as stored JSON. Typically a system message for behavior and a user message as the template that receives dataset or runtime variables.
-- **Template variables** — **must** be written with **single curly braces** around each name: `{` + identifier + `}` (same shape as `{}` with the variable name inside), e.g. `{question}`, `{context}`. Filled at runtime by experiments or your app. Always use `--input-variable-format F_STRING` for this style. **Do not ask the user which variable format to use** — default to `F_STRING` unless the template clearly uses Mustache `{{...}}` (use `MUSTACHE`) or you need `NONE` for literal braces with no substitution.
+- **Template variables** — **must** be written with **single curly braces** around each name: `{` + identifier + `}` (same shape as `{}` with the variable name inside), e.g. `{question}`, `{context}`. Filled at runtime by experiments or your app. `--input-variable-format` is required on `create` and `create-version`; pass `F_STRING` for this style without asking the user. Use `MUSTACHE` only when the template uses `{{name}}`, and `NONE` for literal braces with no substitution.
 - **Provider and model** — the vendor and model this version targets. `--provider` is required by the CLI on every `create` and `create-version`. `--model` must always appear in commands this skill proposes — pick an explicit model string, propose a sensible default if unknown, and confirm before running.
 - **Invocation parameters** — optional model settings like temperature and max tokens (Params in the UI). On `create` / `create-version`, pass `--invocation-params` (JSON file or inline JSON); see `ax prompts create --help`.
 - **Version history** — every material change creates a new immutable version. Labels like `production` and `staging` are mutable pointers to specific versions so your app code never needs to change when you promote a new version.
@@ -65,8 +65,6 @@ Prefer resolving gaps with `ax` instead of pausing: when the prompt name is know
 1. **I found the arize-prompts skill in this repo**
 2. **A few clarifying questions before I invoke it:**
 3. Ask minimal numbered questions — only what blocks the next `ax prompts` command.
-
-**Do not ask about `--input-variable-format`** — always default to `F_STRING` for `{variable}` templates.
 
 ---
 
@@ -106,8 +104,6 @@ Format-only example (not a default to paste — see Eliciting the prompt templat
 
 **Model** (`--model`): Always pass an explicit model. If unknown, propose a provider-appropriate default and confirm before running.
 
-**Variable format:** Placeholders **must** use **single** braces `{name}`. Always pass `--input-variable-format F_STRING` for that shape. Only use `MUSTACHE` for `{{name}}` or `NONE` for no interpolation — do not ask the user unless they stated a non-default requirement.
-
 ---
 
 ## Recommended order
@@ -130,14 +126,16 @@ Follow the Eliciting the prompt template section above. Ask for exact system and
 
 Once you have their template, propose the following in one block:
 
-| Hub field | CLI flag | Notes |
-|-----------|----------|-------|
-| Prompt name | `--name` | Infer from context or ask |
-| Description | `--description` | Optional, one sentence |
-| Version description | `--commit-message` | Default: "Initial version" |
-| Tags | Hub UI | Suggest tags in prose; the user adds them in Hub after create |
-| Provider | `--provider` | Infer from their stack or ask |
-| Model | `--model` | Propose a sensible default e.g. `gpt-4o` |
+| Hub field | Notes |
+|-----------|-------|
+| Prompt name | Unique within the space; infer from context or ask |
+| Description | Optional, one sentence |
+| Version description | The commit message; "Initial version" for the first save |
+| Tags | Set in the Hub UI after create; suggest values in prose |
+| Provider | Infer from the user's stack or ask |
+| Model | Propose a sensible default, e.g. `gpt-4o` |
+
+For the matching flags, run `ax prompts create --help`.
 
 Then: **Use these as-is, or tell me what to change.**
 
@@ -203,36 +201,14 @@ Once you have candidate message text from Step 1, pause and ask (do not run `cre
 > 1. **Save as a new prompt** — create a new entry in Hub with a name
 > 2. **Save as a new version** of an existing prompt — add to one you already have in Hub"
 
-If option 2, list existing prompts to find the right one:
-```bash
-ax prompts list --space SPACE
-```
+If option 2, confirm the target directly with `ax prompts get NAME --space SPACE`. `ax prompts list --space SPACE --name SUBSTRING` is for human browsing when the name is unknown.
 
 ### Step 3: Save to Hub
 
-**New prompt:**
-```bash
-ax prompts create \
-  --name "your-prompt-name" \
-  --space SPACE \
-  --provider OPEN_AI \
-  --model gpt-4o \
-  --input-variable-format F_STRING \
-  --messages '[{"role":"SYSTEM","content":"Your system text."},{"role":"USER","content":"{question}"}]' \
-  --description "What this prompt does" \
-  --commit-message "Initial version"
-```
+- **New prompt:** run `ax prompts create` as in **Workflow A** Step 3.
+- **New version:** run `ax prompts create-version` as in **Workflow A** Step 4.
 
-**New version on existing prompt** (include `--space` when `PROMPT_NAME_OR_ID` is a **name**, not only an ID):
-```bash
-ax prompts create-version PROMPT_NAME_OR_ID \
-  --space SPACE \
-  --provider OPEN_AI \
-  --model gpt-4o \
-  --input-variable-format F_STRING \
-  --messages '[{"role":"SYSTEM","content":"Updated system text."},{"role":"USER","content":"{question}"}]' \
-  --commit-message "Describe what changed"
-```
+`--messages` accepts a JSON file path or inline JSON.
 
 Note the returned prompt ID (`pr_...`) and version ID (`prv_...`) for future commands.
 
@@ -312,23 +288,13 @@ ax prompts update NAME_OR_ID --description "Updated description" --space SPACE
 
 ### Step 4b: Change messages, model, or provider
 
-Use a **new version** (immutable history). Propose `--commit-message` (version description) and confirm **`--provider`** + **`--model`** + `--messages` before running.
-
-```bash
-ax prompts create-version PROMPT_NAME_OR_ID \
-  --space SPACE \
-  --provider OPEN_AI \
-  --model gpt-4o \
-  --input-variable-format F_STRING \
-  --messages ./updated_messages.json \
-  --commit-message "What changed and why"
-```
+Use a **new version** (immutable history): run `ax prompts create-version` as in **Workflow A** Step 4. Propose `--commit-message` (version description) and confirm **`--provider`** + **`--model`** + `--messages` before running.
 
 ### Step 4c: Delete prompt (all versions)
 
 Irreversible. Confirm **space** and **name or `pr_...` ID** with the user.
 
-1. Optional: `ax prompts list --space SPACE` or `ax prompts get NAME_OR_ID --space SPACE` to verify.
+1. Verify the target with `ax prompts get NAME_OR_ID --space SPACE`.
 2. Run delete when they explicitly confirm removal:
 
 ```bash
@@ -349,27 +315,15 @@ ax prompts get "source-prompt" --space SPACE -o json
 
 2. From the JSON, take **messages**, **provider**, **model**, and **input variable format** (`F_STRING` / `MUSTACHE` / `NONE`).
 
-3. **Create** a new prompt with a new `--name` and the copied payload:
+3. **Create** a new prompt as in **Workflow A** Step 3, with a new `--name` and the copied messages, provider, model, and format. Confirm the new name and space first.
 
-```bash
-ax prompts create \
-  --name "source-prompt-copy" \
-  --space SPACE \
-  --provider PROVIDER_FROM_SOURCE \
-  --model MODEL_FROM_SOURCE \
-  --input-variable-format F_STRING \
-  --messages ./messages_extracted.json \
-  --description "Copy of source-prompt" \
-  --commit-message "Initial version (duplicated)"
-```
-
-Confirm the new name and space before `create`. Labels are **not** copied — use **Workflow C** on the new prompt if needed.
+Labels stay on the source prompt; apply them to the copy with **Workflow C** if needed.
 
 ---
 
 ## CLI quick reference
 
-Run `ax prompts --help` for the command list and `ax prompts <sub> --help` for flags. To duplicate a prompt, use `ax prompts get -o json` then `ax prompts create` with a new `--name` (**Workflow D** step 4d).
+Run `ax prompts --help` for the command list and `ax prompts <sub> --help` for flags.
 
 ---
 

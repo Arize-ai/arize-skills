@@ -9,7 +9,7 @@ compatibility: Requires the ax CLI and a configured Arize profile with an AI int
 
 # Arize Evaluator Skill
 
-> **`SPACE`** — `--space` flags accept a space **name** (e.g., `my-workspace`) or a base64 space **ID** (e.g., `U3BhY2U6...`). Find yours with `ax spaces list`.
+> **`SPACE`** — `--space` flags accept a space **name** (e.g., `my-workspace`) or a base64 space **ID** (e.g., `U3BhY2U6...`). Resolve a known one with `ax spaces get NAME_OR_ID`; `ax spaces list` is for human browsing.
 
 This skill covers designing, creating, and running **evaluators** on Arize — both **LLM-as-judge (template)** evaluators and **code evaluators** (deterministic, no LLM required). An evaluator defines the judge; a **task** is how you run it against real data.
 
@@ -49,7 +49,11 @@ Evaluators are **versioned** — every prompt or model change creates a new immu
 
 **Code evaluators** are the deterministic alternative — no AI integration or model, just Python. They run as a class subclassing `CodeEvaluator`, not a bare function, and have their own strict import-path and `evaluate()`-signature contract. Getting either wrong makes a run cancel silently at `0/0/0`. See "Custom Python code evaluators" in [references/cli-reference.md](references/cli-reference.md) before writing one.
 
-**Remote evaluators** call a customer-hosted HTTP endpoint and are created with `ax evaluators create-evaluator remote --integration-id INT_ID`, where `INT_ID` is an existing `EVALUATOR` integration; find one with `ax integrations list --type EVALUATOR`. Run `ax evaluators create-evaluator remote --help` and `ax integrations create --help` to check the current flags and which integration types the CLI can create.
+**Remote evaluators** call a customer-hosted HTTP endpoint and require an Enterprise account. Create one with `ax evaluators create-evaluator remote --integration-id INT_ID`, where `INT_ID` comes from `ax integrations list --type EVALUATOR`. `ax integrations create` makes only `llm` and `agent` integrations, so when that list is empty, tell the user no `EVALUATOR` integration exists and stop.
+
+**Decision Judge evaluators** ask typed questions about each span and must be enabled for the account. Create with `ax evaluators create-evaluator decision-judge` and run with a `DECISION_JUDGE_EVALUATION` task on a project (datasets are rejected). `ax evaluators list` and `ax tasks list` show them only with `--type decision_judge` / `--task-type DECISION_JUDGE_EVALUATION`. A new `create-evaluator-version decision-judge` replaces every question, so pass all of them. Run each command's `--help` for flags.
+
+For a built-in judge prompt to start from, run `ax evaluators list-templates`.
 
 ### What is a Task?
 
@@ -97,7 +101,7 @@ A task can contain evaluators at different granularities. At runtime the system 
 
 ## Basic CRUD
 
-Full command reference for **AI integrations**, **evaluators** (template and code), and **tasks** — every flag, with examples — is in [references/cli-reference.md](references/cli-reference.md). The workflows below include the commands you need inline.
+Commands beyond the workflows below (evaluator versions, code evaluators, task update/delete/monitoring) are in [references/cli-reference.md](references/cli-reference.md). Run `ax <command> --help` for flags.
 
 ---
 
@@ -169,7 +173,7 @@ Respond with exactly one of these labels: hallucinated, factual'
 
 ### Step 5: Ask — backfill, continuous, or both?
 
-**Recommended approach:** Always start with a small backfill (~100 historical spans) to validate the evaluator before turning on continuous monitoring. This lets you catch column mapping errors, wrong span kinds, and template issues on known data before scoring all future production spans. Only enable continuous after a backfill confirms correct scoring.
+**Recommended approach:** Start with a small backfill (~100 historical spans) to catch column mapping errors, wrong span kinds, and template issues on known data. Enable continuous only after the backfill scores correctly.
 
 Before creating the task, ask:
 
@@ -229,23 +233,13 @@ ax tasks create-evaluation \
   --no-continuous
 ```
 
-**Continuous only (b):**
-```bash
-ax tasks create-evaluation \
-  --name "Hallucination Monitor" \
-  --task-type TEMPLATE_EVALUATION \
-  --project PROJECT --space SPACE \
-  --evaluators '[{"evaluator_id": "EVAL_ID", "column_mappings": {"input": "attributes.input.value", "output": "attributes.output.value"}}]' \
-  --query-filter "attributes.openinference.span.kind = 'LLM'" \
-  --is-continuous \
-  --sampling-rate 0.1
-```
+**Continuous only (b):** Same command as (a), with `--is-continuous --sampling-rate 0.1` in place of `--no-continuous`.
 
 **Both (c):** Use `--is-continuous` on create, then also trigger a backfill run in Step 8.
 
 ### Step 8: Trigger a backfill run (if requested)
 
-> **Eval index lag:** The eval index is built asynchronously from the primary trace store and can lag **1–2 hours**. For your first test run, use a time window ending at least 2 hours in the past. If you set `--data-end-time` to "now" on spans ingested in the last hour, the run will complete successfully but score 0 spans.
+> **Eval index lag:** The eval index is built asynchronously from the trace store and lags **1–2 hours**. End the first test window at least 2 hours in the past; a `--data-end-time` of "now" on spans ingested in the last hour completes but scores 0 spans.
 
 First find what time range has data:
 ```bash
@@ -279,11 +273,11 @@ If yes, use the **arize-experiment** skill to create one, then return here.
 ### Step 1: Find the dataset and experiment names
 
 ```bash
-ax datasets list --space SPACE
+ax datasets get DATASET_NAME --space SPACE -o json   # `ax datasets list --space SPACE` is for human browsing
 ax experiments list --dataset DATASET_NAME --space SPACE -o json
 ```
 
-Note the dataset name and the experiment name(s) to score. These accept names or IDs in subsequent commands — names are preferred.
+Note the dataset and experiment name(s) to score; later commands accept names (preferred) or IDs.
 
 ### Step 2: Understand what to evaluate
 
@@ -307,11 +301,7 @@ Same as Workflow A, Step 4. Keep variables generic.
 
 ### Step 5: Determine column mappings from real run data
 
-Run data shape differs from span data. Inspect:
-
-```bash
-ax experiments export EXPERIMENT_NAME --dataset DATASET_NAME --space SPACE --stdout | python3 -c "import sys,json; runs=json.load(sys.stdin); print(json.dumps(runs[0], indent=2))"
-```
+Run data shape differs from span data. Inspect the run JSON from the Step 2 export; run that export first if Step 2 was skipped.
 
 Common mapping for experiment runs:
 - `output` → `"output"` (top-level field on each run)
@@ -353,16 +343,13 @@ ax tasks get-run RUN_ID
 
 ### 1. Use generic, portable variable names
 
-Use `{input}`, `{output}`, and `{context}` — not names tied to a specific project or span attribute (e.g. do not use `{attributes_input_value}`). The evaluator itself stays abstract; the **task's `column_mappings`** is where you wire it to the actual fields in a specific project or experiment. This lets the same evaluator run across multiple projects and experiments without modification.
+Use `{input}`, `{output}`, and `{context}` — not names tied to a specific project or span attribute (e.g. do not use `{attributes_input_value}`). The evaluator itself stays abstract; the **task's `column_mappings`** is where you wire it to the actual fields in a specific project or experiment. The same evaluator then runs across projects and experiments unchanged.
 
 ### 2. Default to binary labels
 
-Use exactly two clear string labels (e.g. `hallucinated` / `factual`, `correct` / `incorrect`, `pass` / `fail`). Binary labels are:
-- Easiest for the judge model to produce consistently
-- Most common in the industry
-- Simplest to interpret in dashboards
+Use exactly two clear string labels (e.g. `hallucinated` / `factual`, `correct` / `incorrect`, `pass` / `fail`). Binary labels are the most consistent for the judge model and simplest to interpret in dashboards.
 
-If the user insists on more than two choices, that's fine — but recommend binary first and explain the tradeoff (more labels → more ambiguity → lower inter-rater reliability).
+When the user asks for more than two choices, recommend binary first and explain the tradeoff (more labels → more ambiguity → lower inter-rater reliability).
 
 ### 3. Be explicit about what the model must return
 
@@ -384,11 +371,11 @@ Pass `--invocation-params '{"temperature": 0}'` for reproducible scoring. Higher
 
 ### 5. Use `--include-explanations` for debugging
 
-During initial setup, always include explanations so you can verify the judge is reasoning correctly before trusting the labels at scale.
+During initial setup, include explanations to verify the judge's reasoning before trusting labels at scale.
 
 ### 6. Pass the template in single quotes in bash
 
-Single quotes prevent the shell from interpolating `{variable}` placeholders. Double quotes will cause issues:
+Single quotes keep the shell from interpolating `{variable}` placeholders:
 
 ```bash
 # Correct

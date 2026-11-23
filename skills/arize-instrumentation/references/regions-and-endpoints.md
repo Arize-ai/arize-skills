@@ -40,7 +40,7 @@ See [go.md](go.md) for Go setup order, provider wiring, and shutdown rules.
 
 ## CLI profile region
 
-`ax profiles create --region ...` and `ax profiles update --region ...` configure CLI/API routing for `ax` commands. They do not configure the running app's trace exporter. During verification, compare the app exporter endpoint/space/project against the active `ax` profile before declaring traces missing.
+`ax profiles create --region <US|EU|CA>` and `ax profiles update --region <US|EU|CA>` configure CLI/API routing for `ax` commands. They do not configure the running app's trace exporter. During verification, compare the app exporter endpoint/space/project against the active `ax` profile before declaring traces missing.
 
 See [ax-profiles.md](ax-profiles.md) for profile setup.
 

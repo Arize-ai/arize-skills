@@ -32,27 +32,15 @@ Collect from the user, context (exported trace data or parsed URLs), or the `ax`
 
 ### Discover organization and project IDs
 
-Prefer the CLI over asking the user for IDs that it can provide:
+Prefer the CLI over asking the user for IDs that it can provide. When a name is known, resolve it directly with `get`:
 
 ```bash
-ax organizations list --output json
+ax organizations get "{org_name_or_id}" --output json
+ax projects get "{project_name}" --space "{space_name_or_id}" --output json
+ax experiments get "{experiment_name}" --dataset "{dataset_name_or_id}" --space "{space_name_or_id}" --output json
 ```
 
-Use `.organizations[].id` for the organization ID. If more than one organization is returned, match the user-provided organization name or ask them to choose.
-
-To discover a project ID, list projects in the relevant space:
-
-```bash
-ax projects list --space "{space_name_or_id}" --limit 100 --output json
-```
-
-Use the matching project's `id`; its `space_id` supplies the space ID required in the URL. The command accepts a space name or ID; if no space is known, run `ax projects list --limit 100 --output json` and select the matching project.
-
-To discover experiment IDs, list the experiments on the dataset; each has an `id` and a `dataset_id`:
-
-```bash
-ax experiments list --dataset "{dataset_name_or_id}" --space "{space_name_or_id}" --output json
-```
+Use the returned `id`; a project's `space_id` supplies the space ID and an experiment's `dataset_id` supplies the dataset ID. When no name is known, `ax organizations list`, `ax projects list --space …`, and `ax experiments list --dataset … --space …` are for human browsing: present the matches and ask the user to choose.
 
 **All path IDs must be base64-encoded** (characters: `A-Za-z0-9+/=`). A raw numeric ID produces a valid-looking URL that 404s. If the user provides a number, ask them to copy the ID directly from their Arize browser URL (`https://app.arize.com/organizations/{org_id}/spaces/{space_id}/…`). If you have a raw internal ID (e.g. `Organization:1:abC1`), base64-encode it before inserting into the URL.
 
@@ -123,7 +111,7 @@ Prefer tight windows; 90-day windows load slowly.
 
 ## Instructions
 
-1. Gather IDs from user, exported data, URL context, or the CLI. Use `ax organizations list --output json` to obtain `org_id`; use `ax projects list` to obtain `project_id` when needed.
+1. Gather IDs from user, exported data, URL context, or the CLI. Resolve `org_id`, `project_id`, and `experiment_id` with the `get` commands above.
 2. Verify all path IDs are base64-encoded.
 3. Determine `startA`/`endA` using the priority order above for trace, span, and session links.
 4. Substitute into the appropriate template and present as a clickable markdown link.
@@ -133,14 +121,10 @@ Prefer tight windows; 90-day windows load slowly.
 | Problem | Solution |
 |---|---|
 | "No data" / empty view | Trace outside time window — widen `startA`/`endA` (±1h → ±1d → 90d). |
-| 404 | ID wrong or not base64. Re-check `org_id` with `ax organizations list --output json`, `project_id` with `ax projects list`, and `space_id` from the browser URL. |
+| 404 | ID wrong or not base64. Re-check `org_id` and `project_id` with the `get` commands above, and `space_id` from the browser URL. |
 | Span not highlighted | `span_id` may belong to a different trace. Verify against exported span data. |
-| `org_id` unknown | Run `ax organizations list --output json` and use `.organizations[].id`. If the CLI cannot access the organization, ask the user to copy it from their Arize browser URL. |
+| `org_id` unknown | Run `ax organizations get "{org_name}" --output json`, or `ax organizations list` for human browsing. If the CLI cannot access the organization, ask the user to copy it from their Arize browser URL. |
 
 ## Related Skills
 
 - **arize-trace**: Export spans to get `trace_id`, `span_id`, and `start_time`.
-
-## Examples
-
-See [references/EXAMPLES.md](references/EXAMPLES.md) for a complete set of concrete URLs for every link type.

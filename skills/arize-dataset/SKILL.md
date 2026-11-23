@@ -9,7 +9,7 @@ compatibility: Requires the ax CLI (≥ 0.39.0) and a configured Arize profile.
 
 # Arize Dataset Skill
 
-> **`SPACE`** — `--space` flags accept a space **name** (e.g., `my-workspace`) or a base64 space **ID** (e.g., `U3BhY2U6...`). Find yours with `ax spaces list`.
+> **`SPACE`** — `--space` flags accept a space **name** (e.g., `my-workspace`) or a base64 space **ID** (e.g., `U3BhY2U6...`). Resolve a known space with `ax spaces get NAME_OR_ID`; `ax spaces list` is for human browsing.
 
 ## Concepts
 

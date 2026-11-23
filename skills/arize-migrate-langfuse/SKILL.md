@@ -80,17 +80,17 @@ Target AX space + destination project name. Confirm Langfuse host/region.
 
 ### Step 1 — Preflight
 
-- `ax projects list --space SPACE` (or create destination project)
+- `ax projects get DEST_PROJECT --space SPACE` (create it if missing)
 - Smoke-test Langfuse auth (see [Langfuse export recipes](references/langfuse-export.md))
 
 ### Step 2 — Import historical traces
 
-Locate this installed skill's root and run its bundled commands by absolute path, so they work from any workspace. Check the chosen interpreter is Python 3.10 or later. Create an isolated environment if needed; see [helper dependencies](scripts/requirements.txt) (Langfuse uses the public REST API, so extra packages are optional).
+Run bundled commands by absolute path (`<SKILL_DIR>` = this installed skill's root) so they work from any workspace. Check the chosen interpreter is Python 3.10 or later. Create an isolated environment if needed; see [helper dependencies](scripts/requirements.txt) (Langfuse uses the public REST API, so extra packages are optional).
 
 ```bash
 export ARIZE_API_KEY=... ARIZE_SPACE_ID=...
 export LANGFUSE_PUBLIC_KEY=... LANGFUSE_SECRET_KEY=... LANGFUSE_BASE_URL=...
-python scripts/migrate_vendor_traces.py \
+python <SKILL_DIR>/scripts/migrate_vendor_traces.py \
   --vendor langfuse \
   --arize-project DEST_PROJECT \
   --limit 200
@@ -100,6 +100,8 @@ Optional filters:
 
 - `--tag TAG` — only observations belonging to traces with that Langfuse tag (useful when the project also has unrelated experiment traffic)
 - `--dry-run` — preview mapping without ingest
+
+For EU or CA accounts, set `ARIZE_OTLP_ENDPOINT` to that region's OTLP traces endpoint (default: US, `https://otlp.arize.com/v1/traces`).
 
 Verify:
 

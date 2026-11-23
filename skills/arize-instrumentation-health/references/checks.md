@@ -61,30 +61,30 @@ Key attributes by span kind:
 - **Guardrail:** skip or downgrade when the root is infrastructure-only, a background/maintenance job, intentionally redacted, partially exported, failed before producing output, or when a child span is intentionally the semantic entrypoint.
 - **Fix direction:** set end-to-end user input and final response on the semantic root span, or make the semantic entrypoint explicit so infrastructure parent spans are not treated as missing payloads.
 
-### 5b. Missing input/output on semantic spans
+### 6. Missing input/output on semantic spans
 - **Trigger:** any confidently-classified, inspectable AI/workflow span is missing a meaningful `input.value` or `output.value`; report the affected kinds and share of spans. Include `LLM`, `CHAIN`, `AGENT`, `TOOL`, `RETRIEVER`, and other semantic operation spans, not only roots.
 - **Guardrail:** do not require payload fields on raw HTTP/REST, DB, queue, exporter, or other infrastructure spans solely because they exist in the trace. For unclassified REST/HTTP spans, use span name, instrumentation scope, attributes, and tree position to determine whether the span is transport detail or the app's user-facing request boundary. Do not label intent as certain when the evidence is ambiguous.
 - **Fix direction:** for AI/workflow spans, enrich the span or report an instrumentor limitation. For transport-only spans, filter them from the Arize pipeline when supported. For a user-facing REST boundary, add safe request input and final response output or create an explicit semantic CHAIN/AGENT span; ask the user to choose a safe representation when payloads are sensitive or unavailable. Never fabricate I/O or advise capturing secrets/irrelevant headers.
 
-### 6. Root status unset
+### 7. Root status unset
 - **Trigger:** more than 80% of root spans are null/`UNSET` **and** there is impact evidence (child `ERROR` spans, or status-based eval/filter usage).
 - **Guardrail:** if no impact signal exists, report as **advisory**.
 - **Fix direction:** set root status to the final request outcome (`OK` or `ERROR`).
 - **Child status hygiene:** also inspect completed semantic child spans (`LLM`, `TOOL`, `CHAIN`, `RETRIEVER`, `RERANKER`, `GUARDRAIL`, `EVALUATOR`). When more than 80% of completed child spans remain null/`UNSET`, report an **advisory** if the roots are correct, or a **warning** if child errors, eval/filter usage, or failed tool/LLM operations make the missing child status materially misleading.
-- **Child-status-only output:** when only the child-status hygiene sub-trigger fires and the root trigger does not, emit a separate finding labelled **Check 6b — child span status unset** rather than omitting it.
+- **Child-status-only output:** when only the child-status hygiene sub-trigger fires and the root trigger does not, emit a separate finding labelled **Check 7b — child span status unset** rather than omitting it.
 - **Child status fix direction:** set `OK` for successful completed operations and `ERROR` with error details for failed operations. For manually-authored spans, set status before ending the span; for provider/framework instrumentors, preserve emitted status instead of overwriting or dropping it.
 
-### 7. Missing token counts
+### 8. Missing token counts
 - **Trigger:** more than 70% of confidently-classified LLM spans have null or zero `llm.token_count.total`.
 - **Guardrail:** requires confident LLM-span classification (check 3 precedence).
 - **Fix direction:** preserve provider usage, configure streaming usage collection, or set counts manually.
 
-### 8. Missing child spans / likely payload truncation
+### 9. Missing child spans / likely payload truncation
 - **Trigger:** P10 span count ≤ 2 and P90 span count ≥ 8, plus supporting evidence.
 - **Guardrail:** without dropped-span counters, oversized-attribute evidence, exporter timeout patterns, or repeated same-shape traces losing children, report as **possible**, not confirmed.
 - **Fix direction:** tune `BatchSpanProcessor`/export settings and truncate oversized attributes before export.
 
-### 9. Duplicate spans
+### 10. Duplicate spans
 - **Trigger:** more than 20% of LLM spans, or more than 20% of traces with LLM activity, appear duplicated by model, timestamp proximity, distinct span IDs, and matching semantic payload.
 - **LLM candidate evidence:** for this check, treat a span as an LLM candidate when it has `openinference.span.kind = LLM`, common LLM attributes such as `llm.model_name`, `llm.input_messages`, `llm.output_messages`, `llm.token_count.*`, or a provider span name such as `openai.chat.completions`. Do not skip duplicate detection just because check 3 also found missing span kinds.
 - **High-confidence duplicate pattern:** sibling spans in the same trace with the same parent (or both attached to the same semantic root), same span name, same model, near-identical start/end times, and identical normalized request/response payloads. Normalize both OpenInference keys (`input.value`, `output.value`, `llm.input_messages`, `llm.output_messages`) and common ad-hoc keys (`prompt`, `completion`, `messages`, `response`) before comparing.

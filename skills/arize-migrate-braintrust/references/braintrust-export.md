@@ -38,8 +38,8 @@ Paginate with cursors when the response includes a `cursor` field. Raise limits 
 
 ### Historical logs → Arize AX
 
-Preferred path for AX UI history: from this installed skill's root run
-`python scripts/migrate_vendor_traces.py --vendor braintrust --source-project PROJECT --arize-project DEST`.
+Preferred path for AX UI history: run
+`python <SKILL_DIR>/scripts/migrate_vendor_traces.py --vendor braintrust --source-project PROJECT --arize-project DEST`.
 The script uses BTQL (`span_parents`, `metadata`, etc.), maps `output` → `output.value`,
 splits conversations into **one AX trace per turn**, and sets `session.id` from Braintrust metadata.
 
@@ -76,5 +76,5 @@ Map `prompt_data` messages into AX Prompt Hub via `ax prompts create` / `ax prom
 
 1. Flatten `input` / `expected` / `metadata`
 2. Drop Braintrust ids and system columns from create payloads
-3. Batch ≤1000 for create; append remainder
-4. Write `manifest.json` with source project/dataset ids and AX dataset id
+3. Batch ≤1000 for create; add the rest with `ax datasets append`
+4. Save source project/dataset ids and the AX dataset id to `.arize-tmp-migrate/braintrust/manifest.json` (no bundled tool writes it)

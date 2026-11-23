@@ -59,8 +59,8 @@ Map Langfuse `text` / `chat` prompts into AX messages, then `ax prompts create` 
 
 ## Historical observations → Arize AX
 
-Preferred path for AX UI history: from this installed skill's root run
-`python scripts/migrate_vendor_traces.py --vendor langfuse --arize-project DEST`.
+Preferred path for AX UI history: run
+`python <SKILL_DIR>/scripts/migrate_vendor_traces.py --vendor langfuse --arize-project DEST`.
 Optional `--tag TAG` limits import to traces with that Langfuse tag.
 The script maps observation I/O → `input.value` / `output.value`, parents, and
 trace `sessionId` / `userId` → `session.id` / `user.id`.
@@ -77,5 +77,5 @@ for new traffic.
 1. Flatten `input` / `expectedOutput` into example fields
 2. Drop Langfuse `id`, timestamps, and empty objects
 3. Ensure every example has at least one property
-4. Cap batches at 1000 for create; use append for the rest
+4. Cap batches at 1000 for create; add the rest with `ax datasets append`
 5. Keep a `manifest.json` with source dataset name, item count, and AX dataset id after import

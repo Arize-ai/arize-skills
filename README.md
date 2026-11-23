@@ -116,7 +116,7 @@ ax profiles create staging --api-key YOUR_STAGING_KEY
 
 # Update an existing profile (patches only what you specify)
 ax profiles update --api-key NEW_API_KEY
-ax profiles update --region us-east-1b
+ax profiles update --region EU
 
 # Other profile management
 ax profiles list
@@ -170,6 +170,7 @@ For interactive setup, `ax profiles create` also offers **Advanced → Single en
 | [arize-experiment](skills/arize-experiment/SKILL.md) | Run and analyze experiments against datasets. |
 | [arize-evaluator](skills/arize-evaluator/SKILL.md) | Create LLM-as-judge evaluators, run evaluation tasks, and set up continuous monitoring. |
 | [arize-ai-provider-integration](skills/arize-ai-provider-integration/SKILL.md) | Create and manage LLM provider credentials (OpenAI, Anthropic, Azure, Bedrock, Vertex, and more). |
+| [arize-integrations](skills/arize-integrations/SKILL.md) | Manage LLM and agent integrations with `ax integrations` (list, get, create, update, delete). |
 | [arize-annotation](skills/arize-annotation/SKILL.md) | Create and manage annotation configs (categorical, continuous, freeform); bulk-annotate project spans via the Python SDK. |
 | [arize-prompt-optimization](skills/arize-prompt-optimization/SKILL.md) | Optimize prompts using trace data, experiments, and meta-prompting. |
 | [arize-prompts](skills/arize-prompts/SKILL.md) | Manage Prompt Hub templates and versions with `ax prompts` (create, versions, labels). |

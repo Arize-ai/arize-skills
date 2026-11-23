@@ -80,23 +80,23 @@ Target AX space + destination project name. Confirm Braintrust source project na
 
 ### Step 1 — Preflight
 
-- `ax projects list --space SPACE` (or create destination project)
+- `ax projects get DEST_PROJECT --space SPACE` (create it if missing)
 - Confirm `BRAINTRUST_API_KEY` and that project logs exist
 
 ### Step 2 — Import historical traces
 
-Locate this installed skill's root and run its bundled commands by absolute path, so they work from any workspace. Check the chosen interpreter is Python 3.10 or later. Create an isolated environment if needed; see [helper dependencies](scripts/requirements.txt) (Braintrust uses the public REST API, so extra packages are optional).
+Run bundled commands by absolute path (`<SKILL_DIR>` = this installed skill's root) so they work from any workspace. Check the chosen interpreter is Python 3.10 or later. Create an isolated environment if needed; see [helper dependencies](scripts/requirements.txt) (Braintrust uses the public REST API, so extra packages are optional).
 
 ```bash
 export ARIZE_API_KEY=... ARIZE_SPACE_ID=... BRAINTRUST_API_KEY=...
-python scripts/migrate_vendor_traces.py \
+python <SKILL_DIR>/scripts/migrate_vendor_traces.py \
   --vendor braintrust \
   --source-project SOURCE_PROJECT \
   --arize-project DEST_PROJECT \
   --limit 200
 ```
 
-Optional: `--dry-run` to preview mapping without ingest.
+Optional: `--dry-run` to preview mapping without ingest. For EU or CA accounts, set `ARIZE_OTLP_ENDPOINT` to that region's OTLP traces endpoint (default: US, `https://otlp.arize.com/v1/traces`).
 
 Verify:
 
@@ -133,7 +133,7 @@ Summarize spans imported, trace/session counts, sample `output.value`, prompts/v
 
 ## Working directory
 
-`.arize-tmp-migrate/braintrust/` for raw exports. Add `.arize-tmp-migrate/` to the user project's `.gitignore` before writing exports.
+The importer writes no files. Save manual exports under `.arize-tmp-migrate/braintrust/`; add `.arize-tmp-migrate/` to the user project's `.gitignore` first.
 
 ## Related skills
 

@@ -70,7 +70,7 @@ If an `ax` command fails, troubleshoot based on the error:
 
 Still prefer `ax` lookups over open-ended questions: confirm a known name with `ax projects get NAME --space SPACE` or `ax datasets get NAME --space SPACE` (`list` is for human browsing). If you still cannot proceed (e.g. multiple projects match the name the user gave, unclear trace vs experiment path, or destructive scope), **do not** jump straight into questions — use the same explicit framing as **arize-instrumentation** when it stops for scope or confirmation:
 
-1. Acknowledge the skill, e.g.: **I found the arize-prompt-optimization skill in this repo** (you may add `skills/arize-prompt-optimization/SKILL.md` if helpful).
+1. Acknowledge the skill, e.g.: **I found the arize-prompt-optimization skill in this repo**
 2. Then a clear pause line, e.g.: **A few clarifying questions before I invoke it:**
 3. Ask **minimal** numbered or short bullet questions — only what blocks the next `ax` step in this skill.
 

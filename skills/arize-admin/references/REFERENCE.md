@@ -52,7 +52,7 @@ ax roles list --is-custom -o json
 ax roles get "Data Scientist" -o json
 ```
 
-Use the `id` field (base64 string like `Um9sZTo1...`) in your SAML `values.yaml` or IdP attribute mapping. These IDs are stable and do not change unless the role is deleted and recreated.
+Use the `id` field (base64 string like `Um9sZTo1...`) in the SAML `values.yaml` or IdP attribute mapping. These IDs are stable and do not change unless the role is deleted and recreated.
 
 ## Workflow 3: Restrict a Project to Specific Users
 
@@ -93,7 +93,7 @@ ax roles get "Data Scientist" -o json
 ax role-bindings list --resource-type SPACE -l 100 -o json
 ax role-bindings list --resource-type PROJECT -l 100 -o json
 
-# List your own active API keys
+# List the authenticated user's active API keys
 ax api-keys list --status ACTIVE -o json
 ```
 
@@ -116,7 +116,7 @@ ax users get jane@example.com -o json
 ax users delete --id USER_ID --force
 ```
 
-If you also need to deactivate the user in your IdP (to prevent SSO re-login), do that separately in Okta/Azure AD/etc. For real-time automated key invalidation on IdP deactivation, configure SCIM 2.0 provisioning.
+To block SSO re-login, deactivate the user separately in the IdP (Okta, Azure AD, etc.). For real-time automated key invalidation on IdP deactivation, configure SCIM 2.0 provisioning.
 
 ## Workflow 6: Multi-Tenant Service Key Management
 
