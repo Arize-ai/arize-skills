@@ -113,7 +113,7 @@ Resolve it once per session; first match wins:
 
 1. The space the user named; resolve it directly with `ax spaces get NAME`.
 1. `ARIZE_SPACE_ID` (the tracing space; not a secret): `echo "$ARIZE_SPACE_ID"`, else `grep -E '^ARIZE_SPACE_ID=' .env` — read only that line.
-1. `ax spaces list -o json` (human browsing; paginates): use the only space, otherwise ask the user to pick a name.
+1. `ax spaces list -o json`: use the only space, otherwise ask the user to pick a name.
 
 Tell the user which space you used and why.
 

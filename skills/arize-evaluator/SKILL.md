@@ -9,7 +9,7 @@ compatibility: Requires the ax CLI and a configured Arize profile with an AI int
 
 # Arize Evaluator Skill
 
-> **`SPACE`** — `--space` flags accept a space **name** (e.g., `my-workspace`) or a base64 space **ID** (e.g., `U3BhY2U6...`). Resolve a known one with `ax spaces get NAME_OR_ID`; `ax spaces list` is for human browsing.
+> **`SPACE`** — `--space` flags accept a space **name** (e.g., `my-workspace`) or a base64 space **ID** (e.g., `U3BhY2U6...`). Find yours with `ax spaces list`.
 
 This skill covers designing, creating, and running **evaluators** on Arize — both **LLM-as-judge (template)** evaluators and **code evaluators** (deterministic, no LLM required). An evaluator defines the judge; a **task** is how you run it against real data.
 
@@ -53,7 +53,7 @@ Evaluators are **versioned** — every prompt or model change creates a new immu
 
 **Decision Judge evaluators** ask typed questions about each span and must be enabled for the account. Create with `ax evaluators create-evaluator decision-judge` and run with a `DECISION_JUDGE_EVALUATION` task on a project (datasets are rejected). `ax evaluators list` and `ax tasks list` show them only with `--type decision_judge` / `--task-type DECISION_JUDGE_EVALUATION`. A new `create-evaluator-version decision-judge` replaces every question, so pass all of them. Run each command's `--help` for flags.
 
-For a built-in judge prompt to start from, run `ax evaluators list-templates`.
+For a built-in judge prompt to start from, follow **arize-evaluator-templates** (`ax evaluators list-templates`).
 
 ### What is a Task?
 
