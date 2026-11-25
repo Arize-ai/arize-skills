@@ -34,7 +34,7 @@ Compare the exported JSON paths against the task's `column_mappings`. For each t
 - Mapping `input` to `attributes.input.value` on a CHAIN span when the actual path is `attributes.llm.input_messages`
 - Mapping `context` to a path that doesn't exist on the span kind being filtered
 
-**4. Check that `data_start_time` is not epoch**
+**4. Check that `--data-start-time` is not epoch**
 
 If `trigger-run` used a start time of `0`, `1970-01-01`, or an empty string, the time window is invalid. Always derive from real span timestamps:
 ```bash

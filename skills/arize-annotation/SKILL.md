@@ -1,6 +1,6 @@
 ---
 name: arize-annotation
-description: Creates and manages annotation configs (categorical, continuous, freeform label schemas) and annotation queues (human review workflows) on Arize. Applies human annotations to project spans via the Python SDK. Use when the user mentions annotation config, annotation queue, label schema, human feedback, bulk annotate spans, update_annotations, labeling queue, annotate record, or human review.
+description: Creates and manages annotation configs (categorical, continuous, freeform label schemas) and annotation queues (human review workflows) on Arize. Applies human annotations to spans, dataset examples, and experiment runs via the ax CLI or Python SDK. Use when the user mentions annotation config, annotation queue, label schema, human feedback, bulk annotate spans, update_annotations, labeling queue, annotate record, or human review.
 metadata:
   author: arize
   version: "1.0"
@@ -9,11 +9,9 @@ compatibility: Requires the ax CLI (≥ 0.39.0) and a configured Arize profile.
 
 # Arize Annotation Skill
 
-> **`SPACE`** — `--space` flags accept a space **name** (e.g., `my-workspace`) or a base64 space **ID** (e.g., `U3BhY2U6...`). Resolve a known name with `ax spaces get NAME`; `ax spaces list` is for human browsing.
+> **`SPACE`** — `--space` flags accept a space **name** (e.g., `my-workspace`) or a base64 space **ID** (e.g., `U3BhY2U6...`). Resolve a known space with `ax spaces get NAME_OR_ID`; `ax spaces list` is for human browsing.
 
-This skill covers **annotation configs** (the label schema) and **annotation queues** (human review workflows), as well as programmatically annotating project spans via the Python SDK.
-
-**Direction:** Human labeling in Arize attaches values defined by configs to **spans**, **dataset examples**, **experiment-related records**, and **queue items** in the product UI. This skill covers: `ax annotation-configs`, `ax annotation-queues`, and bulk span updates with `ArizeClient.spans.update_annotations`.
+Labels attach values defined by **annotation configs** (the label schema) to **spans**, **dataset examples**, **experiment runs**, and **annotation queue items** (human review workflows). This skill covers `ax annotation-configs`, `ax annotation-queues`, batch CLI annotation, and `ArizeClient.spans.update_annotations`.
 
 ---
 
@@ -45,10 +43,10 @@ An **annotation config** defines the schema for a single type of human feedback 
 
 | Surface | Typical path |
 |---------|----------------|
-| **Project spans** | Python SDK `spans.update_annotations` (below) and/or the Arize UI |
-| **Dataset examples** | Arize UI (human labeling flows); configs must exist in the space |
-| **Experiment outputs** | Often reviewed alongside datasets or traces in the UI — see arize-experiment, arize-dataset |
-| **Annotation queue items** | `ax annotation-queues` CLI (below) and/or the Arize UI; configs must exist |
+| **Project spans** | `ax spans annotate` ([Batch Annotate via CLI](#batch-annotate-via-cli)) or Python SDK `spans.update_annotations` (below) |
+| **Dataset examples** | `ax datasets annotate-examples` ([Batch Annotate via CLI](#batch-annotate-via-cli)) |
+| **Experiment runs** | `ax experiments annotate-runs` ([Batch Annotate via CLI](#batch-annotate-via-cli)) |
+| **Annotation queue items** | `ax annotation-queues annotate-record` (below) |
 
 Always ensure the relevant **annotation config** exists in the space before expecting labels to persist.
 

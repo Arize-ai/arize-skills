@@ -55,7 +55,7 @@ Ask before running any commands:
 ### Inviting users (standalone)
 Ask before running any commands:
 - **Name and email** — for each user to invite
-- **Role** — `ADMIN`, `MEMBER`, or `ANNOTATOR` (present as options; account-level user creation has no `READ_ONLY` role)
+- **Role** — `ADMIN`, `MEMBER`, or `ANNOTATOR` (present as options; `READ_ONLY` applies only to org/space membership)
 - **Invite mode** — `EMAIL_LINK`, `TEMPORARY_PASSWORD`, or `NONE` (`--invite-mode` is required)
 
 ### Revoking or rotating an API key
@@ -93,12 +93,12 @@ If an `ax` command fails:
 A user must exist in the account before they can be added to an org or space. **Account-level roles:** `ADMIN`, `MEMBER`, `ANNOTATOR`
 
 ```bash
-ax users list                                  # all users
+ax users get USER_ID_OR_EMAIL -o json         # direct path when the ID or email is known
+
+ax users list                                  # human browsing
 ax users list --email "jane"                   # substring filter
 ax users list --status ACTIVE                  # ACTIVE or INVITED
-ax users list -l 100 -o json                   # paginate, get global IDs
-
-ax users get USER_ID_OR_EMAIL                   # direct lookup; list is for browsing
+ax users list -l 100 -o json                   # paginate
 
 ax users create \
   --full-name "Jane Doe" \
@@ -239,8 +239,7 @@ ax resource-restrictions list --limit 50 --cursor PAGINATION_CURSOR    # fetch n
 ax resource-restrictions restrict --resource-id RESOURCE_GLOBAL_ID     # idempotent
 ax resource-restrictions unrestrict --resource-id RESOURCE_GLOBAL_ID --force   # ⚠ confirm first
 
-# Finding a project ID
-ax projects get NAME --space "my-workspace" -o json
+# Finding a project ID: see `ax projects get` under Projects below
 ```
 
 ---
@@ -271,7 +270,7 @@ ax api-keys refresh KEY_ID --grace-period-seconds 3600
 ax api-keys refresh KEY_ID --expires-at "2028-01-01T00:00:00"
 ```
 
-> **The raw key is displayed once.** Save it immediately in your secrets manager. It cannot be retrieved again.
+> **The raw key is displayed once.** Tell the user to store it in a secrets manager immediately; it cannot be retrieved again.
 
 Scope `create-service-key` entirely through `--assignments`; run `ax api-keys create-service-key --help` for the assignment JSON shape, role defaults, and `--account-role`. Pass `--env-file PATH` to write the new key to `ARIZE_API_KEY` in a dotenv or .envrc file, so the key lands in a file rather than the conversation.
 
@@ -282,11 +281,10 @@ Scope `create-service-key` entirely through `--assignments`; run `ax api-keys cr
 Projects live inside spaces and contain traces, datasets, and experiments.
 
 ```bash
-ax projects list --space SPACE
-ax projects list --space SPACE --name "playground"   # substring filter
-ax projects list --space SPACE -l 100 -o json        # get base64 IDs
+ax projects get NAME_OR_ID --space SPACE -o json     # direct path; `id` is the base64 ID
 
-ax projects get NAME_OR_ID --space SPACE
+ax projects list --space SPACE                       # human browsing
+ax projects list --space SPACE --name "playground"   # substring filter
 
 ax projects create --name "my-project" --space SPACE
 
@@ -295,7 +293,7 @@ ax projects update NAME_OR_ID --name "new-project-name" --space SPACE
 ax projects delete NAME_OR_ID --space SPACE --force   # ⚠ confirm first — deletes all traces and datasets
 ```
 
-> **Note:** Project IDs (base64 strings) are used by `ax spans export`, `ax traces export`, and `ax resource-restrictions`. If commands reject a project name, take the `id` field from `ax projects get NAME --space SPACE -o json`; `ax projects list` is for browsing.
+> **Note:** Project IDs (base64 strings) are used by `ax spans export`, `ax traces export`, and `ax resource-restrictions`. If commands reject a project name, pass the `id` from `ax projects get`.
 
 ---
 

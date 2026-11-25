@@ -1,13 +1,11 @@
 # Arize Evaluator — CLI Command Reference
 
-Full CRUD reference for AI integrations, evaluators (template and code), and tasks. Referenced from `SKILL.md`.
+Commands not shown in the `SKILL.md` workflows: evaluator versions and CRUD, code evaluators, and task management. Run `ax <command> --help` for flags.
 
 
 ### AI Integrations
 
-AI integrations store the LLM provider credentials the evaluator uses. Check for an existing integration first with `ax ai-integrations list --space SPACE`. If none exists, use the **arize-ai-provider-integration** skill to create one for the needed provider (OpenAI, Anthropic, Azure, Bedrock, Vertex, Gemini, NVIDIA NIM, LiteLLM, Fireworks AI, Together AI, DeepSeek, or custom).
-
-Copy the returned integration ID — it is required for `ax evaluators create-evaluator template --ai-integration-id`.
+Find or create the judge's AI integration as in Workflow A, Step 3 of `SKILL.md`; its ID is the `--ai-integration-id` for template evaluators.
 
 ### Evaluators
 
@@ -30,21 +28,9 @@ ax evaluators delete NAME_OR_ID --space SPACE --force
 
 #### Template evaluators (LLM-as-judge)
 
-```bash
-# Create a template evaluator (LLM-as-judge)
-ax evaluators create-evaluator template \
-  --name "Answer Correctness" \
-  --space SPACE \
-  --description "Judges if the model answer is correct" \
-  --template-name "correctness" \
-  --commit-message "Initial version" \
-  --ai-integration-id INT_ID \
-  --model-name "gpt-4o" \
-  --include-explanations \
-  --use-function-calling \
-  --classification-choices '{"correct": 1, "incorrect": 0}' \
-  --template 'Judge if the response answers the question. Question: {input} Response: {output} Labels: correct, incorrect'
+Create a template evaluator as in Workflow A, Step 4 of `SKILL.md`.
 
+```bash
 # Create a new template version (for prompt or model changes — versions are immutable)
 ax evaluators create-evaluator-version template NAME_OR_ID \
   --space SPACE \
@@ -268,40 +254,11 @@ Run `ax evaluators create-evaluator code --help` for the full flag list.
 
 > `PROJECT_NAME`, `DATASET_NAME`, and `evaluator_id` all accept a name or base64 ID.
 
+Creating evaluation tasks and triggering runs are covered in `SKILL.md` (Workflow A Steps 7–8, Workflow B Steps 6–7).
+
 ```bash
-# List / Get
-ax tasks list --space SPACE
-ax tasks list --project PROJECT_NAME --space SPACE
-ax tasks list --dataset DATASET_NAME --space SPACE
-ax tasks list --task-type TEMPLATE_EVALUATION   # accepted types: see `ax tasks list --help`
 ax tasks get TASK_ID
-
-# Create evaluation task (project — continuous)
-ax tasks create-evaluation \
-  --name "Correctness Monitor" \
-  --task-type TEMPLATE_EVALUATION \
-  --project PROJECT_NAME --space SPACE \
-  --evaluators '[{"evaluator_id": "EVAL_ID", "column_mappings": {"input": "attributes.input.value", "output": "attributes.output.value"}}]' \
-  --is-continuous \
-  --sampling-rate 0.1
-
-# Create evaluation task (project — one-time / backfill)
-ax tasks create-evaluation \
-  --name "Correctness Backfill" \
-  --task-type TEMPLATE_EVALUATION \
-  --project PROJECT_NAME --space SPACE \
-  --evaluators '[{"evaluator_id": "EVAL_ID", "column_mappings": {"input": "attributes.input.value", "output": "attributes.output.value"}}]' \
-  --no-continuous
-
-# Create evaluation task (experiment / dataset)
-# --experiment-ids takes base64 IDs from `ax experiments list --space SPACE -o json`
-ax tasks create-evaluation \
-  --name "Experiment Scoring" \
-  --task-type TEMPLATE_EVALUATION \
-  --dataset DATASET_NAME --space SPACE \
-  --experiment-ids "EXP_ID_1,EXP_ID_2" \
-  --evaluators '[{"evaluator_id": "EVAL_ID", "column_mappings": {"output": "output"}}]' \
-  --no-continuous
+ax tasks list --space SPACE   # human browsing; run `ax tasks list --help` for filters
 
 # Create run-experiment task (runs an experiment via a task)
 ax tasks create-run-experiment \
@@ -321,36 +278,13 @@ ax tasks update TASK \
 # Delete a task (irreversible)
 ax tasks delete TASK --force
 
-# Trigger a run (project task — use data window)
-ax tasks trigger-run TASK_ID \
-  --data-start-time "2026-03-20T00:00:00" \
-  --data-end-time "2026-03-21T23:59:59" \
-  --wait
-
-# Trigger a run (experiment task — use experiment IDs)
-# --experiment-ids takes the base64 ID from `ax experiments list --space SPACE -o json`
-ax tasks trigger-run TASK_ID \
-  --experiment-ids "EXP_ID_1" \
-  --wait
-
 # Monitor
-ax tasks list-runs TASK_ID
-ax tasks get-run RUN_ID
 ax tasks wait-for-run RUN_ID --timeout 300
 ax tasks cancel-run RUN_ID --force
 ```
 
 > **Note:** `ax tasks create` (generic) also works and dispatches by `--task-type`. `create-evaluation` and `create-run-experiment` are dedicated shortcuts with clearer flag validation.
 
-**Time format for trigger-run:** `2026-03-21T09:00:00` — no trailing `Z`.
-
 Run `ax tasks trigger-run --help` for the remaining flags (`--max-spans`, `--override-evaluations`, `--timeout`). For `run_experiment` tasks it also lists the experiment-only flags; `--experiment-name` is required for that task type.
 
-**Run status guide:**
-
-| Status | Meaning |
-|--------|---------|
-| `completed`, 0 spans | The eval index lags 1–2 hours — spans ingested recently may not be indexed yet. Shift the window to data at least 2 hours old, or widen the time range to cover more historical data. |
-| `cancelled` ~1s | Integration credentials invalid |
-| `cancelled` ~3min | Found spans but LLM call failed — check model name or key |
-| `completed`, N > 0 | Success — check scores in UI |
+For run statuses (`completed` with 0 spans, `cancelled` ~1s / ~3min), see the Troubleshooting table in `SKILL.md` and [troubleshooting.md](troubleshooting.md).

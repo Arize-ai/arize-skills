@@ -10,7 +10,7 @@ compatibility: Requires the ax CLI and a configured Arize profile.
 # Arize AI Integration Skill
 
 > **`SPACE`** — `--space` flags accept a space **name** (e.g., `my-workspace`) or a base64 space **ID** (e.g., `U3BhY2U6...`). Resolve a known name with `ax spaces get NAME`; `ax spaces list` is for browsing when the name is unknown.
-> **Note:** `ai-integrations create` does **not** accept `--space` — AI integrations are account-scoped. Use `--space` only with `list`, `get`, `update`, and `delete`.
+> **Note:** AI integrations are account-scoped: run `ai-integrations create` without `--space`, and pass `--space` to `list`, `get`, `update`, and `delete`.
 
 ## Concepts
 
@@ -121,15 +121,17 @@ The table covers providers with provider-specific flags or notes. Run `ax ai-int
 | `OPEN_AI` | `--api-key <key>`, model source | `$OPENAI_API_KEY` | [provider-openai.md](references/provider-openai.md) |
 | `ANTHROPIC` | `--api-key <key>`, model source | `$ANTHROPIC_API_KEY` | [provider-anthropic.md](references/provider-anthropic.md) |
 | `AZURE_OPEN_AI` | `--api-key <key>`, `--base-url <azure-endpoint>`, `--model-name <deployment>` | `$AZURE_OPENAI_API_KEY` | [provider-azure-openai.md](references/provider-azure-openai.md) |
-| `AWS_BEDROCK` | `--provider-metadata '{"role_arn": "<arn>"}'` (no API key), model source | — | [provider-aws-bedrock.md](references/provider-aws-bedrock.md) |
-| `VERTEX_AI` | `--provider-metadata '{"project_id": "<gcp-project>", "location": "<region>", "project_access_label": "<label>"}'` (no API key), model source | — | [provider-vertex-ai.md](references/provider-vertex-ai.md) |
+| `AWS_BEDROCK` | `--provider-metadata '{"role_arn": "<arn>"}'` instead of an API key, model source | — | [provider-aws-bedrock.md](references/provider-aws-bedrock.md) |
+| `VERTEX_AI` | `--provider-metadata '{"project_id": "<gcp-project>", "location": "<region>", "project_access_label": "<label>"}'` instead of an API key, model source | — | [provider-vertex-ai.md](references/provider-vertex-ai.md) |
 | `GEMINI` | `--api-key <key>`, model source | `$GEMINI_API_KEY` | [provider-gemini.md](references/provider-gemini.md) |
 | `NVIDIA_NIM` | model source; `--api-key` and `--base-url` optional (default: NVIDIA hosted) | `$NVIDIA_API_KEY` | [provider-nvidia-nim.md](references/provider-nvidia-nim.md) |
 | `CUSTOM` | `--base-url <endpoint>`, model source | `$CUSTOM_LLM_API_KEY` | [provider-custom.md](references/provider-custom.md) |
 | `LITELLM` | `--base-url <endpoint>`, `--api-key <key>` | `$LITELLM_API_KEY` | [provider-litellm.md](references/provider-litellm.md) |
-| `FIREWORKS` | `--api-key <key>` only — no `--base-url` or `--headers` | `$FIREWORKS_API_KEY` | [provider-fireworks.md](references/provider-fireworks.md) |
-| `TOGETHER_AI` | `--api-key <key>` only — no `--base-url` or `--headers` | `$TOGETHER_API_KEY` | [provider-together-ai.md](references/provider-together-ai.md) |
-| `DEEP_SEEK` | `--api-key <key>` only — no `--base-url` or `--headers` | `$DEEPSEEK_API_KEY` | [provider-deepseek.md](references/provider-deepseek.md) |
+| `FIREWORKS` | `--api-key <key>` alone | `$FIREWORKS_API_KEY` | [provider-fireworks.md](references/provider-fireworks.md) |
+| `TOGETHER_AI` | `--api-key <key>` alone | `$TOGETHER_API_KEY` | [provider-together-ai.md](references/provider-together-ai.md) |
+| `DEEP_SEEK` | `--api-key <key>` alone | `$DEEPSEEK_API_KEY` | [provider-deepseek.md](references/provider-deepseek.md) |
+| `TYPE_SAFE_AI`, `PERPLEXITY` | `--api-key <key>`; Decision Judge only | — | — |
+| `CLOUDFLARE` | `--api-key <api-token>`, `--provider-metadata '{"account_id": "<32 chars>"}'` (`--account-id` on `ax integrations create llm`); Decision Judge only | — | — |
 
 Run `ax ai-integrations create --help` for optional flags. Pair `--headers` with `--auth-type PROXY_WITH_HEADERS` when the provider sits behind a proxy.
 
@@ -188,7 +190,7 @@ Omit `--force` to get a confirmation prompt instead of deleting immediately.
 
 `ax integrations` manages LLM and agent integrations in one group (`list`, `get`, `delete`, `create llm|agent`, `update llm|agent`). Run `ax integrations <sub> --help` for flags.
 
-- **Choosing a create command:** use `ax ai-integrations create` (the examples above) for `AZURE_OPEN_AI` or when `--auth-type` is needed; `ax integrations create llm` accepts neither. Use `ax integrations create llm` when scopings must be set at create time (`--scopings`).
+- **Choosing a create command:** use `ax ai-integrations create` (the examples above) for `AZURE_OPEN_AI` or when `--auth-type` is needed; both are available only there. Use `ax integrations create llm` when scopings must be set at create time (`--scopings`).
 - **`create llm` provider flags differ** from `ax ai-integrations create`: Bedrock and Vertex AI take dedicated flags instead of `--provider-metadata`. Run `ax integrations create llm --help` for the per-provider list.
 - **Agent endpoints:** use `ax integrations create agent` to register an agent endpoint; run its `--help` for flags.
 - **Provider is immutable** in `ax integrations update llm`; delete and recreate to change it.

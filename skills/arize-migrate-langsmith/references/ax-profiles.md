@@ -2,8 +2,6 @@
 
 Consult this when authentication fails (401, missing profile, missing API key). Do NOT run these checks proactively.
 
-Use this when there is no profile, or a profile has incorrect settings (wrong API key, wrong region, etc.).
-
 ## 1. Inspect the current state
 
 ```bash
@@ -27,10 +25,10 @@ If a profile exists but one or more settings are wrong, patch only what's broken
 ax profiles update --api-key $ARIZE_API_KEY
 
 # Fix the region (no secret involved — safe to run directly)
-ax profiles update --region us-east-1b
+ax profiles update --region EU
 
 # Fix both at once
-ax profiles update --api-key $ARIZE_API_KEY --region us-east-1b
+ax profiles update --api-key $ARIZE_API_KEY --region EU
 ```
 
 `update` only changes the fields you specify — all other settings are preserved. If no profile name is given, the active profile is updated.
@@ -46,10 +44,10 @@ If no profile exists, or if the existing profile needs to point to a completely 
 ax profiles create --api-key $ARIZE_API_KEY
 
 # Create with a region
-ax profiles create --api-key $ARIZE_API_KEY --region us-east-1b
+ax profiles create --api-key $ARIZE_API_KEY --region EU
 
 # Create a named profile
-ax profiles create work --api-key $ARIZE_API_KEY --region us-east-1b
+ax profiles create work --api-key $ARIZE_API_KEY --region EU
 ```
 
 To use a named profile, switch to it first with `ax profiles use NAME`.

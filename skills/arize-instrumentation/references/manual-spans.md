@@ -2,8 +2,6 @@
 
 Consult this when you need spans an auto-instrumentor won't create — tool executions and the agent/chain boundary in a tool loop, or RAG / reranker / guardrail / eval steps — so they appear in the trace with input/output.
 
-> **The OpenAI and Anthropic SDK auto-instrumentors capture the LLM API call — including the model's tool-call *request* (the tool name + arguments it wants) and the tool *definitions* you passed — but NOT the tool's *execution*, its *return value*, or the agent-loop/chain boundary.** So if a raw OpenAI- or Anthropic-SDK app runs tools (parses the `tool_use` / tool-call, executes it, feeds the result back on the next call), you **must** add a TOOL span per execution (to capture the actual result) and a CHAIN span to group the turn — otherwise you get only a flat series of LLM spans with no tool results and no grouping. *Framework* instrumentors (LangChain, LangGraph, CrewAI, OpenAI Agents SDK, …) *typically* capture tools and chains — verify in the matched integration doc before skipping manual spans.
-
 ## Why auto-instrumentors miss it
 
 Provider instrumentors wrap only the LLM *client* — they capture each API call's request (messages, tools) and response (text, `tool_use` blocks), but not what your code does next: running `run_tool(...)`, the tool's return value, or the fact that several API calls form one logical turn. Those are application-level, so the TOOL and CHAIN spans are yours to add (a *framework* instrumentor like LangChain/LangGraph adds them for you). Manual spans use the same TracerProvider, so they land in the same trace.
@@ -97,7 +95,7 @@ def run_agent(user_message: str) -> str:
 
 **Context-manager alternative** — only for the fallbacks above: a tool with no decoratable Python function, or a kind with no decorator. If a tool must carry a framework decorator you can't stack `@tracer.tool` on (e.g. Anthropic's `@beta_tool`), move its body into a `@tracer.tool`-decorated helper the tool calls — the helper still gets automatic status and metadata, so you avoid a hand-rolled span entirely. (For `session.id`, use `using_session` — see [session-tracking.md](session-tracking.md) — not a wrapper span.)
 
-**The single most-forgotten line: `span.set_status(Status(StatusCode.OK))`.** `start_as_current_span` records a raised exception as `ERROR` for you, but it **never sets `OK`** — so a span that just sets its attributes and returns exports `UNSET`, which fails trace-quality scoring even when every attribute is present. On every manual span, set the status on the success path, alongside the kind, `input.value`/`output.value`, and — for a TOOL span — `tool.name` **and** `tool.description` **and** `tool.parameters` (all three, not just the name):
+**The single most-forgotten line: `span.set_status(Status(StatusCode.OK))`.** `start_as_current_span` records a raised exception as `ERROR` for you, but it **never sets `OK`** — so a span that just sets its attributes and returns exports `UNSET`, which fails trace-quality scoring even when every attribute is present. On every manual span, set it on the success path, alongside the attributes listed under *Adding manual spans*:
 
 ```python
 from opentelemetry.trace import Status, StatusCode

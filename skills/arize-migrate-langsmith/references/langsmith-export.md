@@ -38,8 +38,8 @@ Query runs (sample only): `POST /api/v2/runs/query` or SDK `list_runs` with a sh
 
 ## Historical runs → Arize AX
 
-Preferred path for AX UI history: from this installed skill's root run
-`python scripts/migrate_vendor_traces.py --vendor langsmith --source-project PROJECT --arize-project DEST`.
+Preferred path for AX UI history: run
+`python <SKILL_DIR>/scripts/migrate_vendor_traces.py --vendor langsmith --source-project PROJECT --arize-project DEST`.
 That exports the most recent root runs (plus their children) via the LangSmith API/SDK and ingests OpenInference spans over OTLP
 (with `output.value`, `session.id`, and parent links mapped). Install [helper dependencies](../scripts/requirements.txt) first.
 
@@ -63,5 +63,5 @@ Chat manifests → AX `messages` with roles `SYSTEM` / `USER` / `ASSISTANT` / `T
 
 1. Flatten `inputs` / `outputs` into example fields
 1. Drop LangSmith example UUIDs and system timestamps from create payloads
-1. Batch ≤1000 for `ax datasets create`; append the rest
+1. Batch ≤1000 for `ax datasets create`; add the rest with `ax datasets append`
 1. Record a `manifest.json` (source id/name, counts, AX dataset id)

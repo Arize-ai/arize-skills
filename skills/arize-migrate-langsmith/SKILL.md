@@ -81,25 +81,25 @@ Target AX space + **destination project name** (create with `ax projects create`
 
 ### Step 1 — Preflight
 
-- `ax projects list --space SPACE` (or create destination project)
+- `ax projects get DEST_PROJECT --space SPACE` (create it if missing)
 - Confirm `LANGSMITH_API_KEY` and that runs exist for the source project
 
 ### Step 2 — Import historical traces (required for trace migration)
 
-Locate this installed skill's root and run its bundled commands by absolute path, so they work from any workspace. Check the chosen interpreter is Python 3.10 or later. Create an isolated environment if needed and install the [helper dependencies](scripts/requirements.txt) (`langsmith`).
+Run bundled commands by absolute path (`<SKILL_DIR>` = this installed skill's root) so they work from any workspace. Check the chosen interpreter is Python 3.10 or later. Create an isolated environment if needed and install the [helper dependencies](scripts/requirements.txt) (`langsmith`).
 
 `--limit` is the number of **root runs** (newest first). The importer over-fetches and includes each selected root's children so `--limit` does not split a tree. If a parent still falls outside the fetched window, the script warns on stderr and promotes that span to a root — raise `--limit` (default 200) instead of treating the orphan as a real root.
 
 ```bash
 export ARIZE_API_KEY=... ARIZE_SPACE_ID=... LANGSMITH_API_KEY=...
-python scripts/migrate_vendor_traces.py \
+python <SKILL_DIR>/scripts/migrate_vendor_traces.py \
   --vendor langsmith \
   --source-project SOURCE_PROJECT \
   --arize-project DEST_PROJECT \
   --limit 200
 ```
 
-Optional: `--dry-run` to preview mapping without ingest.
+Optional: `--dry-run` to preview mapping without ingest. For EU or CA accounts, set `ARIZE_OTLP_ENDPOINT` to that region's OTLP traces endpoint (default: US, `https://otlp.arize.com/v1/traces`).
 
 Then verify:
 

@@ -20,9 +20,7 @@ Look at the output to understand what's configured:
 
 If a profile exists but one or more settings are wrong, patch only what's broken.
 
-Profile region controls API and Flight routing for `ax` commands. Prefer `--region` over hard-coding SaaS hosts; examples include `us-central-1a`, `us-east-1b`, `eu-west-1a`, and `ca-central-1a`. It does not configure where a separately running app exports traces.
-
-For EU and Canada, `--region eu-west-1a` and `--region ca-central-1a` automatically set `flight_host` to `flight.eu-west-1a.arize.com` or `flight.ca-central-1a.arize.com` and `flight_port` to `443`. Do not set those fields separately for standard SaaS profiles. Set them directly only for custom/private routing, using interactive profile setup or a complete `--from-file` profile; keep `flight_host` hostname-only (no `:443`) and set `flight_port` separately.
+Profile region controls API and Flight routing for `ax` commands. Set it with `--region US`, `EU`, or `CA` (US is the default) rather than hard-coding SaaS hosts. It does not configure where a separately running app exports traces. For custom or private routing, use `--single-host`/`--single-port`, interactive profile setup, or a complete `--from-file` profile.
 
 **Never pass a raw API key value as a flag.** Always reference it via the `ARIZE_API_KEY` environment variable. If the variable is not already set in the shell, instruct the user to set it first, then run the command:
 
@@ -31,10 +29,10 @@ For EU and Canada, `--region eu-west-1a` and `--region ca-central-1a` automatica
 ax profiles update --api-key $ARIZE_API_KEY
 
 # Fix the region (no secret involved — safe to run directly)
-ax profiles update --region us-east-1b
+ax profiles update --region EU
 
 # Fix both at once
-ax profiles update --api-key $ARIZE_API_KEY --region us-east-1b
+ax profiles update --api-key $ARIZE_API_KEY --region EU
 ```
 
 `update` only changes the fields you specify — all other settings are preserved. If no profile name is given, the active profile is updated.
@@ -50,10 +48,10 @@ If no profile exists, or if the existing profile needs to point to a completely 
 ax profiles create --api-key $ARIZE_API_KEY
 
 # Create with a region
-ax profiles create --api-key $ARIZE_API_KEY --region us-east-1b
+ax profiles create --api-key $ARIZE_API_KEY --region EU
 
 # Create a named profile
-ax profiles create work --api-key $ARIZE_API_KEY --region us-east-1b
+ax profiles create work --api-key $ARIZE_API_KEY --region EU
 ```
 
 To use a named profile, switch to it first with `ax profiles use NAME` (see **Managing Multiple Profiles** below).
@@ -101,7 +99,7 @@ Switch to a different profile:
 ax profiles use work
 ```
 
-Delete a profile. You cannot delete the currently active profile; switch to another first if needed.
+Delete a profile. Only an inactive profile can be deleted; to delete the active one, first switch to another with `ax profiles use NAME`.
 
 ```bash
 ax profiles delete staging --force
@@ -109,11 +107,11 @@ ax profiles delete staging --force
 
 ## Space
 
-The CLI has no default space. Pass `-s`/`--space` (name or base64 ID) whenever a resource is given by **name**, or it fails with `project '...' not found. Provide 'space'`.
+Pass `-s`/`--space` (name or base64 ID) whenever a resource is given by **name**, or it fails with `project '...' not found. Provide 'space'`.
 
 Resolve it once per session; first match wins:
 
-1. The space the user named.
+1. The space the user named; resolve it directly with `ax spaces get NAME`.
 1. `ARIZE_SPACE_ID` (the tracing space; not a secret): `echo "$ARIZE_SPACE_ID"`, else `grep -E '^ARIZE_SPACE_ID=' .env` — read only that line.
 1. `ax spaces list -o json`: use the only space, otherwise ask the user to pick a name.
 
@@ -131,7 +129,7 @@ At the **end of the session**, if the user manually provided any credentials dur
 - The API key was already loaded from an existing profile or `ARIZE_API_KEY` env var
 - The user only used base64 project/space IDs and never needed to persist a space
 
-**How to offer:** Use **AskQuestion**: *"Would you like to save your Arize credentials so you don't have to enter them next time?"* with options `"Yes, save them"` / `"No thanks"`.
+**How to offer:** Ask the user: *"Would you like to save your Arize credentials so you don't have to enter them next time?"* with options `"Yes, save them"` / `"No thanks"`.
 
 **If the user says yes:**
 
