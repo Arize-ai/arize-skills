@@ -303,7 +303,11 @@ Same as Workflow A, Step 4. Keep variables generic.
 
 ### Step 5: Determine column mappings from real run data
 
-Run data shape differs from span data. Inspect the run JSON from the Step 2 export; run that export first if Step 2 was skipped.
+Run data shape differs from span data. Inspect a real run before choosing paths:
+
+```bash
+ax experiments export EXPERIMENT_NAME --dataset DATASET_NAME --space SPACE --stdout | python3 -c "import sys,json; runs=json.load(sys.stdin); print(json.dumps(runs[0], indent=2))"
+```
 
 Common mapping for experiment runs:
 - `output` → `"output"` (top-level field on each run)
