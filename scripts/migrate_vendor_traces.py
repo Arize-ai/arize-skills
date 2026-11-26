@@ -235,7 +235,7 @@ def build_otlp_span(
     return span
 
 
-def post_otlp(spans: list[dict[str, Any]], project: str) -> None:
+def post_otlp(spans: list[dict[str, Any]], project: str) -> int:
     _require(["ARIZE_API_KEY", "ARIZE_SPACE_ID"])
     endpoint = os.environ.get("ARIZE_OTLP_ENDPOINT", "https://otlp.arize.com/v1/traces")
     body = {
@@ -274,10 +274,30 @@ def post_otlp(spans: list[dict[str, Any]], project: str) -> None:
     )
     try:
         with urllib.request.urlopen(req, timeout=120) as resp:
-            resp.read()
-            print(f"OTLP ingest OK ({len(spans)} spans) -> project={project}")
+            body = resp.read()
     except urllib.error.HTTPError as exc:
         raise SystemExit(f"OTLP ingest failed: {exc.code} {exc.read()[:500]}") from exc
+
+    try:
+        result = json.loads(body or b"{}")
+    except ValueError:
+        result = {}
+
+    partial = result.get("partialSuccess") if isinstance(result, dict) else None
+    partial = partial or {}
+    rejected = int(partial.get("rejectedSpans") or 0)
+    message = partial.get("errorMessage")
+    if rejected:
+        detail = f": {message}" if message else ""
+        print(
+            f"OTLP ingest partial success ({rejected} of {len(spans)} spans rejected){detail}",
+            file=sys.stderr,
+        )
+    else:
+        if message:
+            print(f"OTLP ingest warning: {message}", file=sys.stderr)
+        print(f"OTLP ingest OK ({len(spans)} spans) -> project={project}")
+    return rejected
 
 
 # ----- LangSmith -----
@@ -838,9 +858,10 @@ def main() -> int:
 
     # Batch to avoid huge payloads
     batch_size = 50
+    rejected = 0
     for i in range(0, len(spans), batch_size):
-        post_otlp(spans[i : i + batch_size], args.arize_project)
-    return 0
+        rejected += post_otlp(spans[i : i + batch_size], args.arize_project)
+    return 1 if rejected else 0
 
 
 if __name__ == "__main__":
